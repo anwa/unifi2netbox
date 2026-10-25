@@ -19,6 +19,10 @@ Its versioned native window and first-run dialog pass the opt-in startup/shutdow
 test. Source GUI checks cover both connection areas and UniFi settings. No live
 UniFi access, Linux build or target-PC package acceptance is claimed.
 
+Version 0.1.4 was rebuilt on 2026-10-25 and passed the native startup/shutdown
+test with the single first-run Settings dialog. The package now exposes the same
+NetBox/UniFi tabs and common Check Connections action as the source application.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." src/unifi2netbox/__main__.py

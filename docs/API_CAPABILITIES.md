@@ -6,7 +6,10 @@ Target installation: UDM Pro Max OS 5.1.33, Network 10.6.100. The public
 10.6.100 documentation URL returned 404 on 2026-10-25. The official
 [10.6.106 OpenAPI](https://developer.ui.com/network/v10.6.106/openapi.json)
 was inspected as a reference, not as proof of installed-version compatibility.
-Live validation on the target PC is pending.
+The user reported the preceding M2 online tests passed on 2026-10-25. No detailed
+capture or exact tested environment was supplied; this is user-reported evidence,
+not an assistant-executed live check. The 0.1.4 GUI consolidation does not change
+these API requests and still needs targeted GUI confirmation.
 
 | Local GET endpoint | Purpose | Required result |
 | --- | --- | --- |

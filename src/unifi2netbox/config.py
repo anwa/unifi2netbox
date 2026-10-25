@@ -134,14 +134,18 @@ def _load_section[Config: NetBoxConfig](
 
 
 def save_config(path: Path, config: NetBoxConfig) -> None:
-    _save_section(path, "netbox", config)
+    _save_sections(path, {"netbox": config})
 
 
 def save_unifi_config(path: Path, config: UniFiConfig) -> None:
-    _save_section(path, "unifi_network", config)
+    _save_sections(path, {"unifi_network": config})
 
 
-def _save_section(path: Path, name: str, config: NetBoxConfig) -> None:
+def save_connections(path: Path, netbox: NetBoxConfig, unifi: UniFiConfig) -> None:
+    _save_sections(path, {"netbox": netbox, "unifi_network": unifi})
+
+
+def _save_sections(path: Path, configs: dict[str, NetBoxConfig]) -> None:
     temporary: Path | None = None
     try:
         document = (
@@ -153,14 +157,15 @@ def _save_section(path: Path, name: str, config: NetBoxConfig) -> None:
         if type(schema_version) is not int or schema_version != 1:
             raise ConfigError("Unsupported configuration schema version.")
         document["schema_version"] = 1
-        section = document.get(name)
-        if section is None:
-            section = tomlkit.table()
-            document[name] = section
-        if not isinstance(section, dict):
-            raise ConfigError(f"The {name} configuration must be a TOML table.")
-        for item in fields(config):
-            section[item.name] = getattr(config, item.name)
+        for name, config in configs.items():
+            section = document.get(name)
+            if section is None:
+                section = tomlkit.table()
+                document[name] = section
+            if not isinstance(section, dict):
+                raise ConfigError(f"The {name} configuration must be a TOML table.")
+            for item in fields(config):
+                section[item.name] = getattr(config, item.name)
         path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, filename = tempfile.mkstemp(dir=path.parent, prefix=".config-")
         temporary = Path(filename)

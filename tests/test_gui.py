@@ -2,7 +2,7 @@ from threading import Event
 
 import pytest
 from PySide6.QtCore import QThreadPool, QTimer
-from PySide6.QtWidgets import QDialog, QLineEdit
+from PySide6.QtWidgets import QDialog, QLineEdit, QToolBar
 
 from unifi2netbox.config import (
     NetBoxConfig,
@@ -40,11 +40,11 @@ def dialog(qtbot, tmp_path, pool, checker=online):
 
 def test_settings_save_masks_and_roundtrips_token(qtbot, tmp_path, pool):
     widget = dialog(qtbot, tmp_path, pool)
-    assert widget.token.echoMode() == QLineEdit.EchoMode.Password
-    widget.url.setText("https://netbox.invalid/")
-    widget.token.setText("synthetic-token")
-    widget.verify_tls.setChecked(False)
-    assert "disabled" in widget.warning.text()
+    assert widget.netbox.token.echoMode() == QLineEdit.EchoMode.Password
+    widget.netbox.url.setText("https://netbox.invalid/")
+    widget.netbox.token.setText("synthetic-token")
+    widget.netbox.verify_tls.setChecked(False)
+    assert "disabled" in widget.netbox.warning.text()
     widget.save()
     assert widget.result() == QDialog.DialogCode.Accepted
     assert load_config(widget.path) == widget.saved_config
@@ -57,7 +57,7 @@ def test_settings_save_masks_and_roundtrips_token(qtbot, tmp_path, pool):
 
 def test_cancel_does_not_save(qtbot, tmp_path, pool):
     widget = dialog(qtbot, tmp_path, pool)
-    widget.token.setText("unsaved-token")
+    widget.netbox.token.setText("unsaved-token")
     widget.reject()
     assert not widget.path.exists()
 
@@ -74,26 +74,26 @@ def test_first_run_opens_settings(qtbot, tmp_path, pool, monkeypatch):
 
 def test_show_token_toggle(qtbot, tmp_path, pool):
     widget = dialog(qtbot, tmp_path, pool)
-    widget.show_token.setChecked(True)
-    assert widget.token.echoMode() == QLineEdit.EchoMode.Normal
-    widget.show_token.setChecked(False)
-    assert widget.token.echoMode() == QLineEdit.EchoMode.Password
+    widget.netbox.show_token.setChecked(True)
+    assert widget.netbox.token.echoMode() == QLineEdit.EchoMode.Normal
+    widget.netbox.show_token.setChecked(False)
+    assert widget.netbox.token.echoMode() == QLineEdit.EchoMode.Password
 
 
 def test_validation_and_save_errors_stay_in_dialog(qtbot, tmp_path, pool, monkeypatch):
     widget = dialog(qtbot, tmp_path, pool)
-    widget.url.setText("invalid")
+    widget.netbox.url.setText("invalid")
     widget.save()
     assert "explicit" in widget.outcome.text()
     assert widget.saved_config is None
-    widget.url.setText("https://netbox.invalid")
+    widget.netbox.url.setText("https://netbox.invalid")
 
     def fail(*args):
         from unifi2netbox.config import ConfigError
 
         raise ConfigError("Cannot save configuration.")
 
-    monkeypatch.setattr("unifi2netbox.gui.save_config", fail)
+    monkeypatch.setattr("unifi2netbox.gui.save_connections", fail)
     widget.save()
     assert "Cannot save" in widget.outcome.text()
     assert widget.isVisible()
@@ -107,10 +107,10 @@ def test_test_connection_uses_unsaved_values(qtbot, tmp_path, pool):
         return online(config)
 
     widget = dialog(qtbot, tmp_path, pool, checker)
-    widget.url.setText("https://netbox.invalid")
-    widget.token.setText("unsaved-token")
-    with qtbot.waitSignal(widget.runner.finished):
-        widget.test_connection()
+    widget.netbox.url.setText("https://netbox.invalid")
+    widget.netbox.token.setText("unsaved-token")
+    widget.test_connections()
+    qtbot.waitUntil(lambda: not widget.busy)
     assert received[0].token == "unsaved-token"
     assert "Online" in widget.outcome.text()
     assert widget.test_button.isEnabled()
@@ -219,7 +219,7 @@ def test_dialog_close_waits_for_worker(qtbot, tmp_path, pool):
 
     widget = dialog(qtbot, tmp_path, pool, blocked)
     try:
-        widget.test_connection()
+        widget.test_connections()
         qtbot.waitUntil(running.is_set)
         widget.reject()
         assert widget.isVisible()
@@ -239,12 +239,19 @@ def test_unifi_settings_save_preserves_netbox(qtbot, tmp_path, pool):
     path = tmp_path / "config.toml"
     netbox = NetBoxConfig("https://netbox.invalid", "netbox-synthetic")
     save_config(path, netbox)
-    widget = SettingsDialog(path, UniFiConfig(), pool, unifi_online, unifi=True)
+    widget = SettingsDialog(
+        path,
+        netbox,
+        pool,
+        online,
+        unifi_config=UniFiConfig(),
+        unifi_checker=unifi_online,
+    )
     qtbot.addWidget(widget)
-    widget.url.setText("https://console.invalid")
-    widget.token.setText("unifi-synthetic")
-    widget.verify_tls.setChecked(False)
-    widget.site.setEditText("default")
+    widget.unifi.url.setText("https://console.invalid")
+    widget.unifi.token.setText("unifi-synthetic")
+    widget.unifi.verify_tls.setChecked(False)
+    widget.unifi.site.setEditText("default")
     widget.save()
     assert widget.result() == QDialog.DialogCode.Accepted
     assert load_config(path) == netbox
@@ -264,14 +271,16 @@ def test_unifi_site_discovery_then_selection(qtbot, tmp_path, pool):
 
     path = tmp_path / "config.toml"
     config = UniFiConfig("https://console.invalid", "synthetic-key")
-    widget = SettingsDialog(path, config, pool, discover, unifi=True)
+    widget = SettingsDialog(
+        path, NetBoxConfig(), pool, online, unifi_config=config, unifi_checker=discover
+    )
     qtbot.addWidget(widget)
-    with qtbot.waitSignal(widget.runner.finished):
-        widget.test_connection()
+    widget.test_connections()
+    qtbot.waitUntil(lambda: not widget.busy)
     assert not path.exists()
-    assert widget.site.count() == 3
-    assert widget.token.echoMode() == QLineEdit.EchoMode.Password
-    widget.site.setCurrentIndex(widget.site.findData("site-two"))
+    assert widget.unifi.site.count() == 3
+    assert widget.unifi.token.echoMode() == QLineEdit.EchoMode.Password
+    widget.unifi.site.setCurrentIndex(widget.unifi.site.findData("site-two"))
     widget.save()
     assert load_unifi_config(path).site == "site-two"
 
@@ -290,8 +299,7 @@ def test_services_have_independent_startup_statuses(qtbot, tmp_path, pool):
     qtbot.waitUntil(lambda: window.unifi.state.text() == "Online")
     assert window.unifi.server_version.text() == "10.6.100"
     assert window.unifi.selected_site.text() == "Default"
-    assert window.netbox.check_action.isEnabled()
-    assert window.unifi.check_action.isEnabled()
+    assert window.check_action.isEnabled()
 
 
 def test_invalid_netbox_section_does_not_block_unifi(qtbot, tmp_path, pool):
@@ -308,9 +316,16 @@ def test_unifi_settings_cancel_preserves_saved_values(qtbot, tmp_path, pool):
     path = tmp_path / "config.toml"
     config = UniFiConfig("https://console.invalid", "original-synthetic")
     save_unifi_config(path, config)
-    widget = SettingsDialog(path, config, pool, unifi_online, unifi=True)
+    widget = SettingsDialog(
+        path,
+        NetBoxConfig(),
+        pool,
+        online,
+        unifi_config=config,
+        unifi_checker=unifi_online,
+    )
     qtbot.addWidget(widget)
-    widget.token.setText("unsaved-synthetic")
+    widget.unifi.token.setText("unsaved-synthetic")
     widget.reject()
     assert load_unifi_config(path) == config
 
@@ -381,3 +396,190 @@ def test_close_waits_for_both_connection_workers(qtbot, tmp_path, pool):
         release_netbox.set()
         release_unifi.set()
     qtbot.waitUntil(lambda: not window.isVisible())
+
+
+def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
+    checked = []
+
+    def netbox_check(config):
+        checked.append("netbox")
+        return online(config)
+
+    def unifi_check(config):
+        checked.append("unifi")
+        return unifi_online(config)
+
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        netbox_check,
+        open_first_run=False,
+        unifi_checker=unifi_check,
+    )
+    qtbot.addWidget(window)
+    toolbar = window.findChild(QToolBar)
+    assert [action.text() for action in toolbar.actions()] == [
+        "Check Connections",
+        "Settings",
+    ]
+    window.check_action.trigger()
+    assert not window.check_action.isEnabled()
+    qtbot.waitUntil(lambda: window.check_action.isEnabled())
+    assert sorted(checked) == ["netbox", "unifi"]
+
+
+def test_unified_settings_action_saves_and_rechecks_both(
+    qtbot, tmp_path, pool, monkeypatch
+):
+    path = tmp_path / "config.toml"
+    checked = []
+
+    def checker(config):
+        checked.append(config)
+        return (
+            unifi_online(config) if isinstance(config, UniFiConfig) else online(config)
+        )
+
+    class AcceptedSettings(SettingsDialog):
+        def exec(self):
+            self.netbox.url.setText("https://netbox.invalid")
+            self.netbox.token.setText("new-netbox-synthetic")
+            self.unifi.url.setText("https://console.invalid")
+            self.unifi.token.setText("new-unifi-synthetic")
+            self.save()
+            return self.result()
+
+    monkeypatch.setattr("unifi2netbox.gui.SettingsDialog", AcceptedSettings)
+    window = MainWindow(
+        path, pool, checker, open_first_run=False, unifi_checker=checker
+    )
+    qtbot.addWidget(window)
+    window.settings_action.trigger()
+    qtbot.waitUntil(lambda: len(checked) == 2 and window.check_action.isEnabled())
+    assert load_config(path).token == "new-netbox-synthetic"
+    assert load_unifi_config(path).token == "new-unifi-synthetic"
+    assert window.netbox.state.text() == "Online"
+    assert window.unifi.state.text() == "Online"
+
+
+def test_unified_settings_checks_both_unsaved_values(qtbot, tmp_path, pool):
+    received = []
+
+    def netbox_check(config):
+        received.append(config)
+        return ConnectionResult(ConnectionState.OFFLINE, "Synthetic failure.")
+
+    def unifi_check(config):
+        received.append(config)
+        return unifi_online(config)
+
+    path = tmp_path / "config.toml"
+    widget = SettingsDialog(
+        path, NetBoxConfig(), pool, netbox_check, unifi_checker=unifi_check
+    )
+    qtbot.addWidget(widget)
+    widget.netbox.url.setText("https://netbox.invalid")
+    widget.netbox.token.setText("unsaved-netbox-synthetic")
+    widget.unifi.url.setText("https://console.invalid")
+    widget.unifi.token.setText("unsaved-unifi-synthetic")
+    widget.test_button.click()
+    qtbot.waitUntil(lambda: not widget.busy)
+    assert {config.token for config in received} == {
+        "unsaved-netbox-synthetic",
+        "unsaved-unifi-synthetic",
+    }
+    assert "NetBox: Offline" in widget.outcome.text()
+    assert "UniFi Network: Online" in widget.outcome.text()
+    assert not path.exists()
+
+
+def test_invalid_unifi_settings_prevent_either_section_from_saving(
+    qtbot, tmp_path, pool
+):
+    path = tmp_path / "config.toml"
+    netbox = NetBoxConfig("https://netbox.invalid", "old-netbox-synthetic")
+    unifi = UniFiConfig("https://console.invalid", "old-unifi-synthetic")
+    save_config(path, netbox)
+    save_unifi_config(path, unifi)
+    previous = path.read_bytes()
+    widget = SettingsDialog(
+        path, netbox, pool, online, unifi_config=unifi, unifi_checker=unifi_online
+    )
+    qtbot.addWidget(widget)
+    widget.netbox.token.setText("replacement-netbox-synthetic")
+    widget.unifi.url.setText("invalid")
+    widget.save()
+    assert widget.saved_config is None
+    assert widget.saved_unifi_config is None
+    assert "explicit" in widget.outcome.text()
+    assert path.read_bytes() == previous
+
+
+def test_settings_validation_failure_does_not_skip_other_check(qtbot, tmp_path, pool):
+    called = []
+
+    def netbox_check(config):
+        called.append("netbox")
+        return online(config)
+
+    def unifi_check(config):
+        called.append("unifi")
+        return unifi_online(config)
+
+    widget = SettingsDialog(
+        tmp_path / "config.toml",
+        NetBoxConfig(),
+        pool,
+        netbox_check,
+        unifi_checker=unifi_check,
+    )
+    qtbot.addWidget(widget)
+    widget.netbox.url.setText("invalid")
+    widget.unifi.url.setText("https://console.invalid")
+    widget.unifi.token.setText("synthetic-unifi")
+    widget.test_connections()
+    qtbot.waitUntil(lambda: not widget.busy)
+    assert called == ["unifi"]
+    assert "NetBox: Error" in widget.outcome.text()
+    assert "UniFi Network: Online" in widget.outcome.text()
+
+
+def test_unified_settings_close_waits_for_both_checks(qtbot, tmp_path, pool):
+    release_netbox = Event()
+    release_unifi = Event()
+    started_netbox = Event()
+    started_unifi = Event()
+
+    def netbox_check(config):
+        started_netbox.set()
+        assert release_netbox.wait(5)
+        return online(config)
+
+    def unifi_check(config):
+        started_unifi.set()
+        assert release_unifi.wait(5)
+        return unifi_online(config)
+
+    widget = SettingsDialog(
+        tmp_path / "config.toml",
+        NetBoxConfig(),
+        pool,
+        netbox_check,
+        unifi_checker=unifi_check,
+    )
+    qtbot.addWidget(widget)
+    widget.show()
+    try:
+        widget.test_connections()
+        qtbot.waitUntil(lambda: started_netbox.is_set() and started_unifi.is_set())
+        assert not widget.buttons.isEnabled()
+        assert not widget.tabs.isEnabled()
+        widget.reject()
+        release_netbox.set()
+        qtbot.waitUntil(lambda: not widget.netbox.runner.busy)
+        assert widget.isVisible()
+        assert not widget.buttons.isEnabled()
+    finally:
+        release_netbox.set()
+        release_unifi.set()
+    qtbot.waitUntil(lambda: not widget.isVisible())

@@ -54,11 +54,11 @@ def test_packaged_window_startup_and_shutdown(qtbot, tmp_path):
         if process.poll() is not None:
             raise RuntimeError("Packaged application exited before showing its window.")
         user32.EnumWindows(find_window, 0)
-        return expected_title in windows and "NetBox Settings" in windows
+        return expected_title in windows and "Settings" in windows
 
     try:
         qtbot.waitUntil(started, timeout=60000)
-        settings_handle = windows["NetBox Settings"]
+        settings_handle = windows["Settings"]
         assert user32.PostMessageW(settings_handle, 0x0010, 0, 0)
         qtbot.waitUntil(lambda: not user32.IsWindow(settings_handle), timeout=5000)
         assert user32.PostMessageW(windows[expected_title], 0x0010, 0, 0)

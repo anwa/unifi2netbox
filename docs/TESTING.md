@@ -12,7 +12,30 @@ info, site-list and device-list requests. Tests cover API-key headers, read-only
 methods, site pagination/selection, missing endpoints, invalid responses, denied
 permissions, TLS/CA selection and timeouts. Published 10.6.106 schemas are used
 as a reference; this is not live evidence for installed Network 10.6.100.
-UniFi target-PC acceptance remains pending; the M2 GUI is now available.
+On 2026-10-25, the user reported the preceding M2 online tests passed. Exact
+tested commit, execution form, Python/OS build and TLS mode were not supplied;
+this is user feedback, not assistant-executed live evidence. Version 0.1.4 changes
+the GUI only and needs the targeted confirmation below; the API adapter is unchanged.
+
+## Unified Settings Confirmation
+
+Local 0.1.4 checks passed on 2026-10-25: 109 offline tests, Ruff lint/format,
+editor diagnostics and the separately enabled fresh Windows EXE startup/shutdown
+test. The optional package test is skipped in the default offline suite. Both tabs
+and the compact layout were inspected with synthetic results; no live API was
+contacted during these development checks.
+
+1. Start 0.1.4 with the existing configuration. Confirm only one Check Connections
+	action and one Settings action appear in the main toolbar.
+2. Open Settings. Confirm NetBox and UniFi Network are tabs of the same dialog,
+	with both saved tokens masked and independent TLS/site settings retained.
+3. Change values in both tabs and use the shared Check Connections button.
+	Confirm both services report a result without saving or blocking the GUI.
+4. Cancel. Reopen Settings and confirm neither tab's saved settings changed.
+5. Enter valid values in both tabs and Save. Confirm both connections recheck and
+	the values survive restart. Invalid values in either tab must prevent all saving.
+6. Close during a shared check; confirm the application/dialog finishes both
+	checks safely. Do not share real tokens or raw responses in the result report.
 
 ## UniFi Target PC Acceptance
 
@@ -20,7 +43,7 @@ Use the exact `feature/unifi-network-connection` commit, reinstall requirements
 in `.venv`, and record `python -m unifi2netbox --version` before starting.
 
 1. Confirm the previously configured NetBox connection still works unchanged.
-2. Open File > UniFi Network Settings. Enter the local UDM console base URL and
+2. Open File > Settings, then the UniFi Network tab. Enter the local UDM base URL and
 	local integration API key. Never use a cloud key or put a key in a report.
 3. Configure TLS validation independently. Prefer the appropriate CA file; if
 	explicitly disabled, verify the visible warning. Test before saving.
@@ -66,10 +89,10 @@ permission. A web page or status endpoint alone is not proof of connectivity.
 No live write test is part of this milestone; the application only permits GET.
 
 1. Run `python -m unifi2netbox --version` and record the version/commit.
-2. Run `python -m unifi2netbox`; first start must open NetBox Settings.
+2. Run `python -m unifi2netbox`; first start must open Settings with both service tabs.
 3. Enter your NetBox base URL including its actual HTTP/HTTPS scheme and token.
 	If necessary, choose the private CA file or explicitly disable TLS validation.
-4. Use Test Connection before Save; it must not create/update the TOML file.
+4. Use Check Connections before Save; it must not create/update the TOML file.
 5. Save; the main window must show Online and 4.7.3 after a successful read.
 6. Restart; the token remains masked and a startup check runs automatically.
 7. Test a deliberately invalid token: expect Unauthorized, not Online. Restore

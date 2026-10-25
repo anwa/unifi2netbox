@@ -5,8 +5,9 @@
 The independent `[unifi_network]` TOML section stores a console base URL, local
 API key in `token`, optional site ID/name, TLS verification, private CA path and
 request timeout. Omitted UniFi settings leave NetBox-only configuration working.
-Each service's save preserves the other service and unrelated tables/comments.
-Version 0.1.3 includes GUI editing and read-only local API checks. See
+The shared Settings dialog writes both services in a single atomic operation and
+preserves unrelated tables/comments. Version 0.1.4 includes the unified GUI and
+read-only local API checks. See
 [the capability matrix](API_CAPABILITIES.md) for endpoints and reference versions.
 
 The first milestone supports NetBox 4.7.x through pynetbox 7.9.0. It performs
@@ -50,15 +51,23 @@ them; Windows ACLs still depend on the user's profile configuration.
 ## GUI Lifecycle
 
 First run opens settings; saved connections are checked automatically at startup.
-The settings test uses its current unsaved values without touching the file.
-Save persists validated settings atomically, clears the old status and requests a
-fresh check. Results for superseded settings cannot replace the current result.
+One Settings dialog contains NetBox and UniFi Network tabs, one Check Connections
+command and shared Save/Cancel buttons. The command tests both tabs' unsaved values
+without touching the file. Both results appear in a summary and their respective
+tabs. Invalid settings in one tab do not skip a valid other connection's check.
+Save validates both tabs before replacing the file once; failures leave both
+sections unchanged. Cancel discards both tabs' edits. Successful Save requests
+fresh checks for both services. Superseded results cannot replace current results.
+
+The main window has one Check Connections action and one Settings action. Status
+areas remain separate. The shared check action is disabled until both main checks
+finish; network failures remain service-specific.
 
 A bounded pool runs at most two network jobs concurrently across NetBox, UniFi
 and the active settings dialog; at most one job per runner is submitted. Main
 window runners coalesce one requested recheck while busy. Settings fields and Save/Cancel are
 disabled during a settings test; a window-close/Escape request is deferred until
-the worker finishes. Closing the main window also waits asynchronously rather
+both settings workers finish. Closing the main window also waits asynchronously rather
 than destroying running Qt objects. No force termination of a network worker is
 attempted. The UI stays responsive, but shutdown is not an immediate cancellation
 of an in-flight socket request. See the timeout limitations above.
@@ -68,7 +77,7 @@ An invalid section affects that connection only (invalid whole-file TOML affects
 both). Saving either section preserves the other. Results for previous settings
 cannot overwrite newer connection states. Closing waits for both main runners.
 
-The UniFi settings dialog discovers sites through Test Connection. Its editable
+The UniFi tab discovers sites through the shared Check Connections command. Its editable
 menu permits a site ID, name or internal reference; selecting a discovered item
 persists its ID. Discovery does not save settings or initiate inventory writes.
 

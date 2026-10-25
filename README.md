@@ -3,9 +3,10 @@
 Latest main release: **v0.1.0**, the NetBox connection milestone.
 
 M2 development on `feature/unifi-network-connection` adds UniFi Network in small
-patches. Version **0.1.3** provides independent NetBox and UniFi Network status,
-GUI settings and a read-only local Network API adapter. UniFi live acceptance
-on the target PC is pending; no M2 merge or v0.2.0 release is authorized yet.
+patches. Version **0.1.4** provides one settings dialog and one Check Connections
+action for both services, with separate status results and a read-only local
+Network API adapter. The user reported the preceding M2 online tests passed;
+the unified GUI needs targeted confirmation. No M2 merge or v0.2.0 release is authorized.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
@@ -41,7 +42,7 @@ file content and personal access records are excluded. All UI/code/docs are Engl
 | Client | pynetbox 7.9.0 |
 | Windows | Windows 11 25H2/26H2 acceptance targets |
 | Linux | Ubuntu/Kubuntu 26.04 LTS/26.10; not yet tested |
-| Network | UDM Pro Max OS 5.1.33 / Network 10.6.100 target; local API checks implemented, live acceptance pending |
+| Network | UDM Pro Max OS 5.1.33 / Network 10.6.100 target; preceding M2 online tests reported passed by the user |
 | Protect | UNVR 6.0.11 / Protect 7.3.70; later milestone |
 | Access | 4.3.22; later milestone |
 | Drive | UNAS Pro 6.0.11 / Drive 4.4.20; later capability gate |
@@ -93,19 +94,21 @@ an explicit local TOML file. `python -m unifi2netbox --version` prints the insta
 version. Reinstall requirements after checking out a new commit so package metadata
 and the displayed version stay current.
 
-First start opens **NetBox Settings**. Enter the explicit base URL and token,
-choose TLS/CA settings and timeout, then use **Test Connection** or **Save**.
-Testing does not save changes; Cancel preserves the previous settings. Tokens
-are masked by default and can be shown explicitly. Save triggers a new main-window
-check. Saved connections are checked automatically on the next startup.
+First start opens **Settings**, containing **NetBox** and **UniFi Network** tabs.
+Enter each service's URL and token/key and choose its independent TLS/CA options.
+**Check Connections** tests both tabs' current unsaved values; it does not save.
+**Save** validates both tabs and atomically writes both sections together, then
+rechecks both saved connections. If validation or saving fails, neither section
+is written. **Cancel** discards changes in both tabs. Tokens remain masked by default.
 
 The main window displays separate NetBox and UniFi Network status, endpoint,
-version, last check and security warnings. Each connection has its own toolbar
-actions (identified by tooltips) and **File** menu settings entry. One failing
-connection does not hide or change the other connection's result.
+version, last check and security warnings. The toolbar has one **Check Connections**
+action and one **Settings** action (identified by tooltips). **File > Settings**
+opens the same dialog. A shared check runs both services independently; the action
+is disabled until both finish. One failing service does not hide the other's result.
 
-Open **File > UniFi Network Settings**, enter the console base URL and a local
-integration API key, and select independent TLS/CA options. Use **Test Connection**
+Open **File > Settings > UniFi Network**, enter the console base URL and a local
+integration API key, and select independent TLS/CA options. Use **Check Connections**
 without saving. If the key exposes one site, Automatic selects it. Otherwise,
 choose a discovered site from the editable Site menu or enter its unique ID/name/
 internal reference, then test again and Save. Selecting a discovered entry saves
@@ -123,8 +126,9 @@ Default local TOML configuration, outside the repository:
 NetBox uses `[netbox]`; UniFi Network uses `[unifi_network]` with its own `url`,
 `token` (local API key), `site`, `verify_tls`, `ca_bundle` and `timeout`. An absent
 UniFi section is unconfigured and does not affect an existing NetBox connection.
-Saving one service preserves the other section. A blank site permits discovery
-of a single accessible site; multiple sites will require explicit selection.
+The dialog saves both sections together and preserves unrelated settings/comments.
+A blank site permits discovery of a single accessible site; multiple sites require
+explicit selection.
 
 - Windows: `%LOCALAPPDATA%\unifi2netbox\config.toml`.
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/unifi2netbox/config.toml`.

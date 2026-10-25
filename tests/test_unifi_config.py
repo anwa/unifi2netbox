@@ -7,6 +7,7 @@ from unifi2netbox.config import (
     load_config,
     load_unifi_config,
     save_config,
+    save_connections,
     save_unifi_config,
 )
 
@@ -75,3 +76,47 @@ def test_save_rejects_invalid_schema_without_overwriting(tmp_path):
     with pytest.raises(ConfigError):
         save_unifi_config(path, UniFiConfig())
     assert path.read_bytes() == original
+
+
+def test_combined_save_replaces_file_once_and_preserves_unrelated_data(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "config.toml"
+    path.write_text("# preserve\n[future]\nenabled = true\n", encoding="utf-8")
+    netbox = NetBoxConfig("https://netbox.invalid", "synthetic-netbox")
+    unifi = UniFiConfig("https://console.invalid", "synthetic-unifi")
+    import os
+
+    original_replace = os.replace
+    replaced = []
+
+    def replace(source, target):
+        replaced.append(target)
+        original_replace(source, target)
+
+    monkeypatch.setattr("unifi2netbox.config.os.replace", replace)
+    save_connections(path, netbox, unifi)
+    assert replaced == [path]
+    assert load_config(path) == netbox
+    assert load_unifi_config(path) == unifi
+    assert "# preserve" in path.read_text(encoding="utf-8")
+    assert "[future]" in path.read_text(encoding="utf-8")
+
+
+def test_combined_save_failure_preserves_both_connections(tmp_path, monkeypatch):
+    path = tmp_path / "config.toml"
+    save_connections(path, NetBoxConfig(), UniFiConfig())
+    previous = path.read_bytes()
+
+    def fail(*args):
+        raise PermissionError("synthetic failure")
+
+    monkeypatch.setattr("unifi2netbox.config.os.replace", fail)
+    with pytest.raises(ConfigError):
+        save_connections(
+            path,
+            NetBoxConfig("https://netbox.invalid", "synthetic-netbox"),
+            UniFiConfig("https://console.invalid", "synthetic-unifi"),
+        )
+    assert path.read_bytes() == previous
+    assert not list(tmp_path.glob(".config-*"))

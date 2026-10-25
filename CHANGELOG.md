@@ -6,6 +6,32 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.1.4
+
+### Changed
+
+- Replace separate service dialogs with one Settings dialog and NetBox/UniFi tabs.
+- Use one Check Connections action in the main window and one shared test command
+	in Settings; both test all connections while reporting separate results.
+- Validate both tabs before a single atomic save; Cancel preserves both sections.
+- Wait for both settings checks before enabling controls or completing a close.
+
+### Documentation
+
+- Record user-reported success of the preceding M2 online tests on 2026-10-25.
+- Update the unified-settings workflow and targeted confirmation checklist.
+
+### Validation
+
+- 109 offline tests pass; the optional native package test is skipped by default.
+- Fresh Windows standalone 0.1.4 passes its separately enabled startup/shutdown test.
+- Ruff lint/format and editor diagnostics pass; both tabs and compact layout reviewed.
+
+### Compatibility
+
+- Existing TOML files need no migration; API endpoints and authentication are unchanged.
+- Linux and the revised GUI's target-PC acceptance remain unverified. No merge/tag.
+
 ## v0.1.3
 
 ### Added
@@ -26,7 +52,8 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ### Compatibility
 
-- UniFi live API and Linux verification remain pending. M2 is not merged or tagged.
+- The user subsequently reported the M2 online tests passed on 2026-10-25.
+- Linux remains unverified; M2 is not merged or tagged.
 
 ## v0.1.2
 
