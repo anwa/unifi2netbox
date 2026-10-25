@@ -1,0 +1,8 @@
+schema_version = 1
+
+[netbox]
+url = "https://netbox.example.invalid"
+token = ""
+verify_tls = true
+ca_bundle = ""
+timeout = 10.0
