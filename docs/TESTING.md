@@ -1,5 +1,14 @@
 # Testing
 
+## UniFi Adapter Contracts
+
+M2 uses synthetic `httpx.MockTransport` responses to exercise the official local
+info, site-list and device-list requests. Tests cover API-key headers, read-only
+methods, site pagination/selection, missing endpoints, invalid responses, denied
+permissions, TLS/CA selection and timeouts. Published 10.6.106 schemas are used
+as a reference; this is not live evidence for installed Network 10.6.100.
+UniFi target-PC acceptance remains pending until the M2 GUI is available.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

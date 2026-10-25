@@ -4,8 +4,10 @@ Release: **v0.1.0**, the first NetBox connection milestone. UniFi connectivity a
 inventory synchronization remain later milestones.
 
 M2 development on `feature/unifi-network-connection` adds UniFi Network in small
-patches. Version 0.1.1 introduces independent configuration storage; the UniFi
-GUI and API checks follow in the next patch.
+patches. Version 0.1.2 includes independent configuration and a read-only local
+Network API adapter. UniFi GUI integration follows in the next patch.
+See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
+version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. This branch implements the first milestone:

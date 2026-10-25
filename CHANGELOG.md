@@ -6,6 +6,24 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.1.2
+
+### Added
+
+- Read-only local UniFi Network API checks for version, sites and device access.
+- Bounded site discovery, explicit multi-site selection and endpoint capability errors.
+- Independent TLS/timeout handling and synthetic HTTP contract tests; no login fallback.
+
+### Validation
+
+- 94 offline tests pass, including both API adapters; optional package test skipped.
+- TLS configuration, private CA, pagination limits and sanitized failures covered.
+
+### Compatibility
+
+- Target Network 10.6 with live 10.6.100 verification still pending. Public 10.6.106
+	schemas are a reference only. GUI integration follows in the next patch.
+
 ## v0.1.1
 
 ### Added

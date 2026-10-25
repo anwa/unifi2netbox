@@ -100,7 +100,8 @@ Branch: `feature/unifi-network-connection`; depends on M1.
 - [x] Add independent UniFi TOML storage without changing existing NetBox settings
   (v0.1.1: 62 offline tests pass, optional package test skipped).
 - [ ] Add Network host/key/site/TLS settings and independent status checks.
-- [ ] Detect installed application version and authenticated endpoint capability.
+- [x] Detect installed application version and authenticated endpoint capability
+  (v0.1.2: local API adapter, 94 offline tests pass; live confirmation pending).
 - [ ] Use controller-specific documentation for 10.6.100; published 10.6.106
   documentation does not establish installed endpoint coverage.
 - [ ] Test independent failures, startup checks and read-only request behavior.
