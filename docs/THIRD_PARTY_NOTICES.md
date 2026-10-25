@@ -8,6 +8,9 @@ the application's MIT license does not relicense Qt or other components.
   Qt GUI and Qt Core, with shared libraries in the standalone directory.
 - [pynetbox](https://github.com/netbox-community/pynetbox): Apache-2.0.
 - [Requests](https://github.com/psf/requests): Apache-2.0.
+- [HTTPX](https://github.com/encode/httpx) and
+  [httpcore](https://github.com/encode/httpcore): BSD-3-Clause.
+- [AnyIO](https://github.com/agronholm/anyio): MIT.
 - [Packaging](https://github.com/pypa/packaging): Apache-2.0 / BSD-2-Clause.
 - [TOML Kit](https://github.com/python-poetry/tomlkit): MIT.
 - [platformdirs](https://github.com/tox-dev/platformdirs): MIT.

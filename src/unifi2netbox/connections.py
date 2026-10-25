@@ -2,10 +2,17 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
-from unifi2netbox.config import NetBoxConfig
+from unifi2netbox.config import NetBoxConfig, UniFiConfig
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
+from unifi2netbox.unifi import check_connection as check_network_connection
 
 type Checker = Callable[[NetBoxConfig], ConnectionResult]
+
+
+def check_unifi_connection(config: NetBoxConfig) -> ConnectionResult:
+    if not isinstance(config, UniFiConfig):
+        raise TypeError("UniFi checks require UniFi connection settings.")
+    return check_network_connection(config)
 
 
 class JobSignals(QObject):

@@ -6,6 +6,28 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.1.3
+
+### Added
+
+- Independent NetBox/UniFi status areas, startup checks and settings actions.
+- UniFi API-key masking, independent TLS/CA settings and editable discovered-site selection.
+- Shared status workflow with stale-result rejection and shutdown of both workers.
+
+### Documentation
+
+- Document both GUI workflows and the UniFi target-PC acceptance checklist.
+
+### Validation
+
+- 101 offline tests pass; the optional native package test is skipped by default.
+- A fresh Windows standalone 0.1.3 build passes its separately enabled startup/shutdown test.
+- Ruff lint/format and editor diagnostics pass; normal/compact Qt screenshots reviewed.
+
+### Compatibility
+
+- UniFi live API and Linux verification remain pending. M2 is not merged or tagged.
+
 ## v0.1.2
 
 ### Added

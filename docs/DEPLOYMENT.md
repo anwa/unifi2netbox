@@ -14,6 +14,11 @@ Release 0.1.0 was rebuilt with the same pinned tools and passed the separately
 enabled native startup/shutdown test on 2026-10-25. This verifies the versioned
 release window, not a repeat of the user's live NetBox acceptance.
 
+M2 development version 0.1.3 was rebuilt with the same tools on 2026-10-25.
+Its versioned native window and first-run dialog pass the opt-in startup/shutdown
+test. Source GUI checks cover both connection areas and UniFi settings. No live
+UniFi access, Linux build or target-PC package acceptance is claimed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." src/unifi2netbox/__main__.py

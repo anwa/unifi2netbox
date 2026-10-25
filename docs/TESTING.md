@@ -2,12 +2,44 @@
 
 ## UniFi Adapter Contracts
 
+Local M2 evidence (2026-10-25, version 0.1.3): 101 offline tests passed, one opt-in
+package test skipped by default. The separately enabled fresh Windows standalone
+startup/shutdown test passed. Ruff lint/format and editor diagnostics passed.
+Normal and compact Qt screenshots were checked using synthetic status results.
+
 M2 uses synthetic `httpx.MockTransport` responses to exercise the official local
 info, site-list and device-list requests. Tests cover API-key headers, read-only
 methods, site pagination/selection, missing endpoints, invalid responses, denied
 permissions, TLS/CA selection and timeouts. Published 10.6.106 schemas are used
 as a reference; this is not live evidence for installed Network 10.6.100.
-UniFi target-PC acceptance remains pending until the M2 GUI is available.
+UniFi target-PC acceptance remains pending; the M2 GUI is now available.
+
+## UniFi Target PC Acceptance
+
+Use the exact `feature/unifi-network-connection` commit, reinstall requirements
+in `.venv`, and record `python -m unifi2netbox --version` before starting.
+
+1. Confirm the previously configured NetBox connection still works unchanged.
+2. Open File > UniFi Network Settings. Enter the local UDM console base URL and
+	local integration API key. Never use a cloud key or put a key in a report.
+3. Configure TLS validation independently. Prefer the appropriate CA file; if
+	explicitly disabled, verify the visible warning. Test before saving.
+4. Confirm Network version 10.6.100 and successful site/device-read access. One
+	accessible site works with Automatic; multiple sites require a unique choice.
+5. Select a discovered site if needed, test again, then Save. Verify the selected
+	site appears in the main window and survives restart along with both keys.
+6. Test an invalid UniFi key: UniFi must report Unauthorized while NetBox remains
+	independent. Restore the real key. Test Cancel without altering saved settings.
+7. Test a closed port/unreachable console with a short timeout. UniFi reports
+	Offline, the GUI stays responsive and NetBox's result remains visible.
+8. Restart with both connections saved. Both checks run automatically. Close
+	during checks and confirm safe completion without worker-related crashes.
+9. If a required endpoint is missing or the response schema differs, report the
+	status and versions only. Do not share keys, raw responses or private inventory.
+
+All UniFi requests in this milestone are GET. No adopted-device operations, port
+changes, cloud access or NetBox writes are part of these tests. Network 10.6.106
+reference documentation is not a substitute for these installed-version checks.
 
 ## Offline Suite
 

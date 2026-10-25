@@ -97,14 +97,21 @@ Online, failures are distinguishable, no GUI blocking and no API mutations.
 
 Branch: `feature/unifi-network-connection`; depends on M1.
 
+Status: implemented locally as 0.1.3; awaiting target-PC UniFi acceptance and a
+separate merge decision. No v0.2.0 release or M2 merge is authorized.
+
 - [x] Add independent UniFi TOML storage without changing existing NetBox settings
   (v0.1.1: 62 offline tests pass, optional package test skipped).
-- [ ] Add Network host/key/site/TLS settings and independent status checks.
+- [x] Add Network host/key/site/TLS settings and independent status checks.
 - [x] Detect installed application version and authenticated endpoint capability
   (v0.1.2: local API adapter, 94 offline tests pass; live confirmation pending).
-- [ ] Use controller-specific documentation for 10.6.100; published 10.6.106
-  documentation does not establish installed endpoint coverage.
-- [ ] Test independent failures, startup checks and read-only request behavior.
+- [x] Use available published 10.6.106 schemas as a reference only; the 10.6.100
+  documentation URL returned 404. Installed coverage requires target-PC checks.
+- [x] Test independent failures, startup checks and read-only request behavior.
+- [x] Run local M2 gates: 101 offline tests pass, optional package test skipped in
+  the default run; Ruff lint/format and editor diagnostics pass. Normal/compact
+  GUI screenshots reviewed with synthetic data. Fresh Windows standalone 0.1.3
+  startup/shutdown passes in a separately enabled native test.
 - [ ] Perform target-PC read acceptance and document capability gaps.
 
 Acceptance: NetBox and Network independently display authenticated connectivity.
