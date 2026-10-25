@@ -74,9 +74,9 @@ Branch: `feature/netbox-connection`.
 - [x] Resolve Windows Python 3.15 dependency packages without bypassing constraints.
 - [x] Verify Python 3.15.1 imports, TOML roundtrip and a Qt Widgets startup/exit.
 - [x] Record project rules and this implementation plan.
-- [ ] Add package metadata, pinned requirements and configuration tests.
-- [ ] Implement validated, atomically saved TOML and outside-repository defaults.
-- [ ] Implement authenticated NetBox read/version check with bounded timeouts.
+- [x] Add package metadata, pinned requirements and configuration tests.
+- [x] Implement validated, atomically saved TOML and outside-repository defaults.
+- [x] Implement authenticated NetBox read/version check with bounded timeouts.
 - [ ] Implement nonblocking status window and GUI-editable settings.
 - [ ] Cover first start, malformed configuration, masking, save/cancel, TLS,
   401/403, timeout, refusal, unsupported version, responsiveness and shutdown.
@@ -244,6 +244,7 @@ are implemented. Update milestone checkboxes with evidence, not intentions.
   was not replaced. Dry-run resolution succeeded for PySide6 6.12.0 and pynetbox
   7.9.0. A real Qt Widgets show/start/exit returned zero; TOML and API imports passed.
 - Linux, native packaged startup and live NetBox remain unverified.
+- v0.0.1: 36 offline configuration/adapter tests passed; Ruff lint passed.
 - [Qt release notes](https://doc.qt.io/qtforpython-6/release_notes/pyside6_release_notes.html)
   document initial Python 3.15 support in 6.12.
 - [pynetbox](https://github.com/netbox-community/pynetbox) lists 7.9.0 / NetBox 4.7.
