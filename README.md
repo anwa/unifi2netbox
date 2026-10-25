@@ -38,9 +38,12 @@ file content and personal access records are excluded. All UI/code/docs are Engl
 | Access | 4.3.22; later milestone |
 | Drive | UNAS Pro 6.0.11 / Drive 4.4.20; later capability gate |
 
-Future Python versions are not automatically certified. Live infrastructure and
-packaged deployment are unverified until tested. The development PC cannot reach
-the infrastructure; default tests use fixtures and block live sockets.
+Future Python versions are not automatically certified. The user reported all
+NetBox online tests passed on 2026-10-25; see the
+[acceptance record](docs/TESTING.md#acceptance-record) for evidence and limitations.
+Native Windows standalone startup is verified locally; Linux and exact target-OS
+coverage remain unverified. The development PC cannot reach the infrastructure;
+default tests use fixtures and block live sockets.
 
 ## Installation
 

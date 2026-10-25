@@ -45,3 +45,15 @@ background responsiveness and closing while workers are active.
 Report commit, application/Python/OS/NetBox versions and observed results without
 tokens, raw responses or private inventory. Linux and live checks are not passed
 until executed on the corresponding systems.
+
+## Acceptance Record
+
+On 2026-10-25, the user reported that all online tests passed for the NetBox
+connection milestone. Record the target-environment online acceptance as passed
+on that basis; the development assistant did not contact the infrastructure.
+
+The confirmation did not specify the exact tested commit/application version,
+source versus packaged execution, Python version, OS build or TLS mode. These
+details are not inferred. The configured project target remains NetBox Community
+4.7.3 / netbox-docker 5.1.1. Linux and exact target-platform acceptance remain
+unverified. This confirmation does not authorize a merge, release tag or API writes.

@@ -10,6 +10,8 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 - Record binding project rules, milestone branches and acceptance criteria.
 - Document the agreed read-only UniFi and explicitly approved NetBox workflow.
+- Record the user's successful NetBox online acceptance on 2026-10-25.
+- Keep unreported environment details and pending Linux coverage explicit.
 
 ## v0.0.2
 
@@ -36,7 +38,8 @@ only on explicit user instruction. Documentation-only changes have no release ta
 ### Compatibility
 
 - Python 3.15.1 / Qt 6.12 source and standalone checks on local Windows 11.
-- Live NetBox, Linux and exact target-OS acceptance remain pending; no merge/tag created.
+- NetBox online acceptance reported passed by the user on 2026-10-25.
+- Linux and exact target-OS coverage remain unverified; no merge/tag created.
 
 ## v0.0.1
 
