@@ -3,6 +3,10 @@
 Release: **v0.1.0**, the first NetBox connection milestone. UniFi connectivity and
 inventory synchronization remain later milestones.
 
+M2 development on `feature/unifi-network-connection` adds UniFi Network in small
+patches. Version 0.1.1 introduces independent configuration storage; the UniFi
+GUI and API checks follow in the next patch.
+
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. This branch implements the first milestone:
 NetBox connection status and GUI-editable settings. UniFi connectivity and actual
@@ -102,6 +106,12 @@ finishes the in-flight check before closing safely; network timeouts still apply
 ## Configuration and Security
 
 Default local TOML configuration, outside the repository:
+
+NetBox uses `[netbox]`; UniFi Network uses `[unifi_network]` with its own `url`,
+`token` (local API key), `site`, `verify_tls`, `ca_bundle` and `timeout`. An absent
+UniFi section is unconfigured and does not affect an existing NetBox connection.
+Saving one service preserves the other section. A blank site permits discovery
+of a single accessible site; multiple sites will require explicit selection.
 
 - Windows: `%LOCALAPPDATA%\unifi2netbox\config.toml`.
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/unifi2netbox/config.toml`.

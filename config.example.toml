@@ -6,3 +6,11 @@ token = ""
 verify_tls = true
 ca_bundle = ""
 timeout = 10.0
+
+[unifi_network]
+url = "https://console.example.invalid"
+token = ""
+site = ""
+verify_tls = true
+ca_bundle = ""
+timeout = 10.0

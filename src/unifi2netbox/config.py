@@ -2,7 +2,7 @@ import math
 import os
 import tempfile
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -82,12 +82,36 @@ def default_config_path() -> Path:
     return user_config_path("unifi2netbox", appauthor=False) / "config.toml"
 
 
+@dataclass(frozen=True)
+class UniFiConfig(NetBoxConfig):
+    site: str = ""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.site, str) or any(
+            ord(character) < 32 for character in self.site
+        ):
+            raise ConfigError("Site must be a string without control characters.")
+        if self.url and "/integration/" in urlsplit(self.url).path:
+            raise ConfigError("Enter the UniFi console base URL, not an API endpoint.")
+
+
 def load_config(path: Path) -> NetBoxConfig:
+    return _load_section(path, "netbox", NetBoxConfig)
+
+
+def load_unifi_config(path: Path) -> UniFiConfig:
+    return _load_section(path, "unifi_network", UniFiConfig)
+
+
+def _load_section[Config: NetBoxConfig](
+    path: Path, name: str, config_type: type[Config]
+) -> Config:
     try:
         with path.open("rb") as source:
             document = tomllib.load(source)
     except FileNotFoundError:
-        return NetBoxConfig()
+        return config_type()
     except OSError, ValueError:
         raise ConfigError(
             "Cannot read configuration: check file access and TOML."
@@ -97,19 +121,27 @@ def load_config(path: Path) -> NetBoxConfig:
         or document.get("schema_version", 1) != 1
     ):
         raise ConfigError("Unsupported configuration schema version.")
-    section = document.get("netbox", {})
+    section = document.get(name, {})
     if not isinstance(section, dict):
-        raise ConfigError("The netbox configuration must be a TOML table.")
-    return NetBoxConfig(
+        raise ConfigError(f"The {name} configuration must be a TOML table.")
+    return config_type(
         **{
-            key: section[key]
-            for key in ("url", "token", "verify_tls", "ca_bundle", "timeout")
-            if key in section
+            item.name: section[item.name]
+            for item in fields(config_type)
+            if item.name in section
         }
     )
 
 
 def save_config(path: Path, config: NetBoxConfig) -> None:
+    _save_section(path, "netbox", config)
+
+
+def save_unifi_config(path: Path, config: UniFiConfig) -> None:
+    _save_section(path, "unifi_network", config)
+
+
+def _save_section(path: Path, name: str, config: NetBoxConfig) -> None:
     temporary: Path | None = None
     try:
         document = (
@@ -117,17 +149,18 @@ def save_config(path: Path, config: NetBoxConfig) -> None:
             if path.exists()
             else tomlkit.document()
         )
-        if document.get("schema_version", 1) != 1:
+        schema_version = document.unwrap().get("schema_version", 1)
+        if type(schema_version) is not int or schema_version != 1:
             raise ConfigError("Unsupported configuration schema version.")
         document["schema_version"] = 1
-        section = document.get("netbox")
+        section = document.get(name)
         if section is None:
             section = tomlkit.table()
-            document["netbox"] = section
+            document[name] = section
         if not isinstance(section, dict):
-            raise ConfigError("The netbox configuration must be a TOML table.")
-        for key in ("url", "token", "verify_tls", "ca_bundle", "timeout"):
-            section[key] = getattr(config, key)
+            raise ConfigError(f"The {name} configuration must be a TOML table.")
+        for item in fields(config):
+            section[item.name] = getattr(config, item.name)
         path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, filename = tempfile.mkstemp(dir=path.parent, prefix=".config-")
         temporary = Path(filename)

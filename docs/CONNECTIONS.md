@@ -1,5 +1,13 @@
 # Connection Behavior
 
+## UniFi Configuration Preparation
+
+The independent `[unifi_network]` TOML section stores a console base URL, local
+API key in `token`, optional site ID/name, TLS verification, private CA path and
+request timeout. Omitted UniFi settings leave NetBox-only configuration working.
+Each service's save preserves the other service and unrelated tables/comments.
+Version 0.1.1 prepares storage only; API and GUI checks are the next M2 slice.
+
 The first milestone supports NetBox 4.7.x through pynetbox 7.9.0. It performs
 GET requests only, first to `/api/status/`, then `/api/dcim/devices/?limit=1`.
 The second request checks actual inventory access, including an empty inventory.

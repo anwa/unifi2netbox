@@ -6,6 +6,23 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.1.1
+
+### Added
+
+- Independent UniFi Network TOML settings for console URL, API key, site and TLS.
+- Preserve NetBox settings, unknown tables and comments when editing either service.
+
+### Validation
+
+- 62 offline tests pass; the optional native package test is skipped by default.
+- Ruff lint/format and editor diagnostics pass for the configuration slice.
+
+### Compatibility
+
+- Existing NetBox-only configuration works without migration. UniFi GUI/API follow
+	in the next M2 patch; no UniFi live connectivity is claimed yet.
+
 ## v0.1.0 - 2026-10-25
 
 ### Summary
