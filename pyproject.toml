@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=80"]
+requires = ["setuptools==84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "unifi2netbox"
-version = "0.0.1"
+version = "0.0.2"
 description = "Review UniFi inventory changes before applying them to NetBox"
 readme = "README.md"
 requires-python = ">=3.15.1"
@@ -17,6 +17,9 @@ dependencies = [
     "requests==2.34.2",
     "packaging==26.3",
 ]
+
+[project.scripts]
+unifi2netbox = "unifi2netbox.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

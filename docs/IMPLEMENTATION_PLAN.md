@@ -2,6 +2,7 @@
 
 Approved scope: Python desktop inventory comparison from UniFi to NetBox.
 Implementation started on `feature/netbox-connection`. No merge is authorized.
+M1 is implemented and locally tested; target-PC/live and Linux acceptance remain open.
 
 ## Requirements and Environment
 
@@ -77,11 +78,11 @@ Branch: `feature/netbox-connection`.
 - [x] Add package metadata, pinned requirements and configuration tests.
 - [x] Implement validated, atomically saved TOML and outside-repository defaults.
 - [x] Implement authenticated NetBox read/version check with bounded timeouts.
-- [ ] Implement nonblocking status window and GUI-editable settings.
-- [ ] Cover first start, malformed configuration, masking, save/cancel, TLS,
+- [x] Implement nonblocking status window and GUI-editable settings.
+- [x] Cover first start, malformed configuration, masking, save/cancel, TLS,
   401/403, timeout, refusal, unsupported version, responsiveness and shutdown.
-- [ ] Update English README, changelog and testing/connection reference docs.
-- [ ] Verify a native packaging smoke build and its startup on available Windows.
+- [x] Update English README, changelog and testing/connection reference docs.
+- [x] Verify a native packaging smoke build and its startup on available Windows.
 - [ ] Run target-PC NetBox acceptance; record missing Linux/OS verification.
 - [ ] Obtain explicit merge approval; prepare minor version and release tag.
 
@@ -245,6 +246,11 @@ are implemented. Update milestone checkboxes with evidence, not intentions.
   7.9.0. A real Qt Widgets show/start/exit returned zero; TOML and API imports passed.
 - Linux, native packaged startup and live NetBox remain unverified.
 - v0.0.1: 36 offline configuration/adapter tests passed; Ruff lint passed.
+- v0.0.2: 50 offline tests passed, optional package test skipped by default.
+  The explicitly enabled native Windows windowed-EXE smoke test passed separately.
+  Lint and editor diagnostics passed; synthetic-data Qt screenshots were reviewed.
+  The real entrypoint is covered after finding/correcting a QLocale enum mismatch.
+- A Windows/Linux CI definition exists but has not been executed remotely here.
 - [Qt release notes](https://doc.qt.io/qtforpython-6/release_notes/pyside6_release_notes.html)
   document initial Python 3.15 support in 6.12.
 - [pynetbox](https://github.com/netbox-community/pynetbox) lists 7.9.0 / NetBox 4.7.

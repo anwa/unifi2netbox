@@ -9,7 +9,7 @@ both a base URL and a token.
 | Status | Meaning |
 | --- | --- |
 | Unconfigured | URL or token is missing |
-| Checking | A background read is in progress (GUI patch) |
+| Checking | A background read is in progress |
 | Online | Supported version and authenticated device read succeeded |
 | Offline | Connection failed or a request timed out |
 | Unauthorized | API returned 401 or 403, including missing device-read permission |
@@ -36,3 +36,21 @@ Saving uses a temporary file in the same directory, flush/fsync and atomic repla
 unrelated tables/comments are preserved. A failed replacement leaves the previous
 file intact. New temporary files use restrictive permissions where the OS supports
 them; Windows ACLs still depend on the user's profile configuration.
+
+## GUI Lifecycle
+
+First run opens settings; saved connections are checked automatically at startup.
+The settings test uses its current unsaved values without touching the file.
+Save persists validated settings atomically, clears the old status and requests a
+fresh check. Results for superseded settings cannot replace the current result.
+
+A bounded pool runs at most two checks: main window and settings test. A runner
+does not queue repeated requests while busy. Settings fields and Save/Cancel are
+disabled during a settings test; a window-close/Escape request is deferred until
+the worker finishes. Closing the main window also waits asynchronously rather
+than destroying running Qt objects. No force termination of a network worker is
+attempted. The UI stays responsive, but shutdown is not an immediate cancellation
+of an in-flight socket request. See the timeout limitations above.
+
+Remote exception bodies and tokens are never displayed. Recover malformed TOML by
+moving the file to a private backup and restarting; it is not silently overwritten.

@@ -1,8 +1,9 @@
 # unifi2netbox
 
 Python desktop application for reviewing UniFi inventory differences before
-applying selected changes to NetBox. This branch currently implements NetBox
-configuration and a read-only connection layer. The GUI follows in the next patch.
+applying selected changes to NetBox. This branch implements the first milestone:
+NetBox connection status and GUI-editable settings. UniFi connectivity and actual
+inventory synchronization are not implemented yet.
 
 ## Goals
 
@@ -63,7 +64,34 @@ python -m pip install -r requirements.txt
 ```
 
 Install the matching venv package if required. Never replace system Python or use
-`--break-system-packages`. Native EXE/Linux package deployment remains planned.
+`--break-system-packages`. A native Windows standalone smoke build is verified;
+final installers and Linux packages remain later milestones. See
+[deployment instructions](docs/DEPLOYMENT.md). Distribute the entire standalone
+directory, not only the executable; real settings/tokens are never bundled.
+
+## Start
+
+After activating `.venv` and installing the requirements:
+
+```powershell
+python -m unifi2netbox
+```
+
+Alternatively run `unifi2netbox`, or `python -m unifi2netbox --config PATH` to use
+an explicit local TOML file. `python -m unifi2netbox --version` prints the installed
+version. Reinstall requirements after checking out a new commit so package metadata
+and the displayed version stay current.
+
+First start opens **NetBox Settings**. Enter the explicit base URL and token,
+choose TLS/CA settings and timeout, then use **Test Connection** or **Save**.
+Testing does not save changes; Cancel preserves the previous settings. Tokens
+are masked by default and can be shown explicitly. Save triggers a new main-window
+check. Saved connections are checked automatically on the next startup.
+
+The main window displays status, endpoint, server version, last check and security
+warnings. Use **Check Connection** to retest or **Settings** to change the connection.
+No button writes inventory. A close request during a check remains responsive and
+finishes the in-flight check before closing safely; network timeouts still apply.
 
 ## Configuration and Security
 
@@ -86,7 +114,8 @@ This milestone needs a dedicated token with device-read permission, not writes.
 Online requires successful authenticated API status/version and device inventory
 reads, even for an empty inventory. Redirects are refused. See
 [connection behavior](docs/CONNECTIONS.md) for outcomes and timeout semantics.
-GUI settings and startup instructions follow with the GUI patch.
+Malformed configuration is reported without overwriting it. Move the broken file
+to a private backup outside the repository, then restart and re-enter settings.
 
 ## Development and Testing
 
@@ -117,4 +146,3 @@ authorized; every merge to main needs explicit approval.
 ## License
 
 MIT; see [LICENSE](LICENSE). Dependencies retain their respective licenses.
-# unifi2netbox
