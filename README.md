@@ -1,5 +1,8 @@
 # unifi2netbox
 
+Release: **v0.1.0**, the first NetBox connection milestone. UniFi connectivity and
+inventory synchronization remain later milestones.
+
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. This branch implements the first milestone:
 NetBox connection status and GUI-editable settings. UniFi connectivity and actual

@@ -6,12 +6,44 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.1.0 - 2026-10-25
+
+### Summary
+
+- First approved functional milestone: NetBox connection status in a desktop GUI.
+
+### Added
+
+- Authenticated read-only NetBox checks, editable TOML settings and background jobs.
+- TLS/CA options, masked tokens, startup/manual checks and a Windows build recipe.
+
+### Changed
+
+- Promote the accepted NetBox milestone from development version 0.0.2 to 0.1.0.
+
+### Fixed
+
+- No additional behavior fixes in this release-preparation change.
+
 ### Documentation
 
 - Record binding project rules, milestone branches and acceptance criteria.
 - Document the agreed read-only UniFi and explicitly approved NetBox workflow.
 - Record the user's successful NetBox online acceptance on 2026-10-25.
 - Keep unreported environment details and pending Linux coverage explicit.
+
+### Validation
+
+- Release 0.1.0: 50 offline tests passed; the opt-in package test is skipped by default.
+- The separately enabled native Windows EXE startup/shutdown test passed for 0.1.0.
+- Release metadata, Ruff lint and Ruff format checks passed.
+- NetBox online acceptance passed according to the user on 2026-10-25.
+
+### Compatibility
+
+- Python >=3.15.1, PySide6 6.12.0, pynetbox 7.9.0 and the NetBox 4.7 API.
+- Linux and exact target-OS coverage remain unverified. UniFi is not implemented.
+- The user explicitly approved the main merge and v0.1.0 release on 2026-10-25.
 
 ## v0.0.2
 

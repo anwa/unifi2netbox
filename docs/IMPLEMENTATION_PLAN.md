@@ -1,9 +1,10 @@
 # Implementation Plan
 
 Approved scope: Python desktop inventory comparison from UniFi to NetBox.
-Implementation started on `feature/netbox-connection`. No merge is authorized.
+Implementation started on `feature/netbox-connection`. On 2026-10-25, the user
+explicitly approved the M1 merge to main and the v0.1.0 release tag.
 M1 is implemented and locally tested. The user reported all NetBox online tests
-passed on 2026-10-25. Linux/exact-platform verification and merge approval remain open.
+passed on 2026-10-25. Linux/exact-platform verification remains open.
 
 ## Requirements and Environment
 
@@ -86,7 +87,8 @@ Branch: `feature/netbox-connection`.
 - [x] Verify a native packaging smoke build and its startup on available Windows.
 - [x] Run target-PC NetBox acceptance; record missing Linux/OS verification
   (user-reported online test success on 2026-10-25; see `TESTING.md`).
-- [ ] Obtain explicit merge approval; prepare minor version and release tag.
+- [x] Obtain explicit merge approval (2026-10-25); prepare version 0.1.0.
+- [ ] Complete the approved main merge and tag its resulting commit v0.1.0.
 
 Acceptance: settings survive restart, valid authenticated inventory access reports
 Online, failures are distinguishable, no GUI blocking and no API mutations.
@@ -254,6 +256,9 @@ are implemented. Update milestone checkboxes with evidence, not intentions.
   Lint and editor diagnostics passed; synthetic-data Qt screenshots were reviewed.
   The real entrypoint is covered after finding/correcting a QLocale enum mismatch.
 - A Windows/Linux CI definition exists but has not been executed remotely here.
+- Release 0.1.0: all 50 offline tests passed (optional native package test skipped
+  in the default run), Ruff lint/format passed, and a fresh Windows windowed build
+  passed the separately enabled versioned-window startup/shutdown test.
 - On 2026-10-25, the user confirmed all online tests passed for the current NetBox
   milestone. This is target-environment feedback, not assistant-executed live
   verification. Exact tested commit/version, source versus packaged execution,
