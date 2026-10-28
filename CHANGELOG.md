@@ -6,6 +6,12 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Documentation
+
+- Record user-reported target-PC confirmation for the revised 0.1.4 unified
+	Settings and shared Check Connections workflow on 2026-10-28.
+- Keep M2 merge and v0.2.0 tag as a separate explicit approval decision.
+
 ## v0.1.4
 
 ### Changed
@@ -30,7 +36,8 @@ only on explicit user instruction. Documentation-only changes have no release ta
 ### Compatibility
 
 - Existing TOML files need no migration; API endpoints and authentication are unchanged.
-- Linux and the revised GUI's target-PC acceptance remain unverified. No merge/tag.
+- The user reported revised GUI target-PC acceptance passed on 2026-10-28.
+- Linux remains unverified. No merge/tag.
 
 ## v0.1.3
 

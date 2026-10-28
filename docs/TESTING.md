@@ -121,3 +121,10 @@ source versus packaged execution, Python version, OS build or TLS mode. These
 details are not inferred. The configured project target remains NetBox Community
 4.7.3 / netbox-docker 5.1.1. Linux and exact target-platform acceptance remain
 unverified. This confirmation does not authorize a merge, release tag or API writes.
+
+On 2026-10-28, the user reported the targeted 0.1.4 unified Settings and shared
+Check Connections confirmation passed on the target PC. Reported outcomes include
+single shared actions, tabbed unified settings, separate service outcomes, Cancel
+preserving both tabs, atomic combined save behavior and safe close handling while
+checks were active. This is user feedback; the assistant did not execute live tests
+against the infrastructure.

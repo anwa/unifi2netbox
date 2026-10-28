@@ -98,8 +98,9 @@ Online, failures are distinguishable, no GUI blocking and no API mutations.
 Branch: `feature/unifi-network-connection`; depends on M1.
 
 Status: the user reported the preceding M2 online tests passed on 2026-10-25.
-Version 0.1.4 consolidates settings/check actions; targeted GUI confirmation and a
-separate merge decision remain open. No v0.2.0 release or M2 merge is authorized.
+On 2026-10-28, the user confirmed the revised 0.1.4 shared Settings and Check
+Connections workflow on the target PC. A separate merge decision remains open.
+No v0.2.0 release or M2 merge is authorized yet.
 
 - [x] Add independent UniFi TOML storage without changing existing NetBox settings
   (v0.1.1: 62 offline tests pass, optional package test skipped).
@@ -118,8 +119,9 @@ separate merge decision remain open. No v0.2.0 release or M2 merge is authorized
 - [x] Implement shared settings/check actions and atomic combined saving in 0.1.4:
   109 offline tests, Ruff lint/format and editor diagnostics pass; fresh native
   Windows startup/shutdown passes separately. Both tabs/compact layout reviewed.
-- [ ] Confirm the revised 0.1.4 shared Settings and Check Connections workflow on
-  the target PC. Keep independent TLS/site settings and atomic combined saves.
+- [x] Confirm the revised 0.1.4 shared Settings and Check Connections workflow on
+  the target PC (user-reported pass on 2026-10-28). Keep independent TLS/site
+  settings and atomic combined saves.
 
 Acceptance: NetBox and Network independently display authenticated connectivity.
 
