@@ -139,7 +139,8 @@ Branch: `feature/inventory-snapshots`; depends on M2.
 - [x] Add stale/offline browsing and partial-read diagnostics, without writes
   (cache browse service and refresh diagnostics with offline contract tests on
   2026-10-28).
-- [ ] Provide opt-in sanitized fixture/report export for the target PC.
+- [x] Provide opt-in sanitized fixture/report export for the target PC
+  (deterministic pseudonymization and offline contract tests on 2026-10-28).
 - [ ] Build an installed-version field capability matrix for ports, profiles,
   overrides, VLANs, PoE, speed/duplex, LAG and LLDP.
 

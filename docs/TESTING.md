@@ -108,6 +108,21 @@ python -m pytest -q tests/test_refresh.py tests/test_snapshots.py
 
 These checks remain fully offline and use synthetic fixtures only.
 
+## M3 Sanitized Fixture and Report Export Contracts
+
+The fourth M3 slice adds an explicit opt-in export service for sanitized
+snapshot fixtures/reports. Exports include timestamped source snapshots and
+deterministically pseudonymized identifiers so fixtures remain useful while
+avoiding direct leakage of source IDs, serials, MAC addresses or site labels.
+
+Run the focused export checks:
+
+```powershell
+python -m pytest -q tests/test_reporting.py
+```
+
+This slice remains fully offline and does not contact live infrastructure.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.2.4
+
+### Added
+
+- Add an explicit opt-in snapshot fixture/report export service for target-PC sharing.
+- Add deterministic pseudonymization for source IDs, names, serials, MAC addresses,
+  sites and snapshot scope in exported fixtures.
+- Add export controls for including or omitting previous snapshots per source.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_reporting.py`.
+- Ruff checks pass for `reporting.py` and export tests.
+
 ## v0.2.3
 
 ### Added

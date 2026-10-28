@@ -19,6 +19,8 @@ now exist for NetBox and UniFi Network. Versioned SQLite snapshot state with
 current/previous records and an internal refresh service are now included.
 The service layer now also supports stale/offline cache browsing and
 partial-read diagnostics while keeping all behavior read-only.
+An opt-in sanitized fixture/report export is available for target-PC sharing,
+using deterministic pseudonymization for potentially sensitive identifiers.
 GUI refresh/snapshot browsing and diagnostics integration follow in later M3
 slices.
 
