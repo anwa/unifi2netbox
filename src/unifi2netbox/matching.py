@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from enum import StrEnum
 
 from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
@@ -47,6 +48,20 @@ class DeduplicationResult:
     conflicts: tuple[IdentityConflict, ...]
     unmatched_unifi: tuple[str, ...]
     unmatched_netbox: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeviceTypeCandidate:
+    manufacturer: str
+    model: str
+    score: int
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeviceTypeSuggestion:
+    unifi_observation_id: str
+    candidates: tuple[DeviceTypeCandidate, ...]
 
 
 def deduplicate_inventory(
@@ -151,6 +166,43 @@ def deduplicate_inventory(
     )
 
 
+def suggest_device_types_for_unmatched(
+    result: DeduplicationResult,
+    netbox_snapshot: InventorySnapshot | None,
+    unifi_snapshot: InventorySnapshot | None,
+    *,
+    limit: int = 3,
+) -> tuple[DeviceTypeSuggestion, ...]:
+    if limit < 1:
+        raise ValueError("limit must be positive.")
+    if unifi_snapshot is None:
+        return ()
+
+    catalog = _build_type_catalog(netbox_snapshot)
+    if not catalog:
+        return ()
+
+    unifi_by_id = {
+        _observation_id(InventorySource.UNIFI_NETWORK, device): device
+        for device in unifi_snapshot.devices
+    }
+    suggestions: list[DeviceTypeSuggestion] = []
+    for observation_id in result.unmatched_unifi:
+        device = unifi_by_id.get(observation_id)
+        if device is None:
+            continue
+        candidates = _rank_candidates(device, catalog)[:limit]
+        if not candidates:
+            continue
+        suggestions.append(
+            DeviceTypeSuggestion(
+                unifi_observation_id=observation_id,
+                candidates=tuple(candidates),
+            )
+        )
+    return tuple(suggestions)
+
+
 def _observations(snapshot: InventorySnapshot | None) -> list[DeviceObservation]:
     if snapshot is None:
         return []
@@ -214,3 +266,77 @@ def _identity_keys(observation: DeviceObservation) -> tuple[str, ...]:
     if observation.mac_address:
         keys.append(f"mac:{observation.mac_address}")
     return tuple(keys)
+
+
+def _build_type_catalog(
+    netbox_snapshot: InventorySnapshot | None,
+) -> tuple[tuple[str, str], ...]:
+    if netbox_snapshot is None:
+        return ()
+    seen: set[tuple[str, str]] = set()
+    catalog: list[tuple[str, str]] = []
+    for device in netbox_snapshot.devices:
+        manufacturer = device.manufacturer.strip()
+        model = device.model.strip()
+        if not manufacturer or not model:
+            continue
+        key = (_norm(manufacturer), _norm(model))
+        if key in seen:
+            continue
+        seen.add(key)
+        catalog.append((manufacturer, model))
+    return tuple(catalog)
+
+
+def _rank_candidates(
+    device: InventoryDevice,
+    catalog: tuple[tuple[str, str], ...],
+) -> list[DeviceTypeCandidate]:
+    model = device.model.strip()
+    manufacturer = device.manufacturer.strip()
+    if not model and not manufacturer:
+        return []
+
+    ranked: list[DeviceTypeCandidate] = []
+    for target_manufacturer, target_model in catalog:
+        score = 0
+        reasons: list[str] = []
+        if manufacturer and _norm(manufacturer) == _norm(target_manufacturer):
+            score += 20
+            reasons.append("manufacturer exact match")
+        model_similarity = _model_similarity(model, target_model)
+        if model and model_similarity >= 0.999:
+            score += 70
+            reasons.append("model exact match")
+        elif model and model_similarity >= 0.85:
+            score += 35
+            reasons.append("model close match")
+        elif model and model_similarity >= 0.7:
+            score += 15
+            reasons.append("model partial similarity")
+
+        if score <= 0:
+            continue
+        ranked.append(
+            DeviceTypeCandidate(
+                manufacturer=target_manufacturer,
+                model=target_model,
+                score=score,
+                reasons=tuple(reasons),
+            )
+        )
+
+    ranked.sort(
+        key=lambda item: (-item.score, _norm(item.manufacturer), _norm(item.model))
+    )
+    return ranked
+
+
+def _model_similarity(left: str, right: str) -> float:
+    if not left or not right:
+        return 0.0
+    return SequenceMatcher(a=_norm(left), b=_norm(right)).ratio()
+
+
+def _norm(value: str) -> str:
+    return "".join(character.lower() for character in value if character.isalnum())

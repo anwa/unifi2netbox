@@ -28,6 +28,8 @@ slices.
 M4 has started with a service-level matching core for identity conflicts,
 confirmed mappings and cross-source deduplication between NetBox and UniFi
 observations.
+M4 now also adds read-only ranked Device Type suggestions for unmatched UniFi
+devices based on existing NetBox manufacturer/model combinations.
 
 ## Goals
 

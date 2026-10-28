@@ -163,6 +163,26 @@ python -m pytest -q tests/test_matching.py
 
 This slice remains fully offline and uses synthetic fixtures only.
 
+## M4 Device Type Suggestion Contracts
+
+The second M4 slice adds explainable Device Type suggestions for unmatched
+UniFi observations only. Suggestions are ranked by manufacturer/model evidence
+against existing NetBox manufacturer/model combinations and remain read-only.
+
+The focused tests validate that:
+
+- only unmatched UniFi observations receive suggestions,
+- suggested candidates are ranked and include explainable reasons,
+- no suggestions are emitted when no target catalog evidence exists.
+
+Run the focused suggestion checks:
+
+```powershell
+python -m pytest -q tests/test_matching.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

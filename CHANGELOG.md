@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.2
+
+### Added
+
+- Add explainable Device Type suggestions for unmatched UniFi observations only.
+- Rank suggestions by manufacturer/model similarity against existing NetBox
+	manufacturer/model combinations.
+- Keep suggestions read-only and exclude already matched observations.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_matching.py`.
+- Ruff checks pass for updated matching service and tests.
+
 ## v0.3.1
 
 ### Added
