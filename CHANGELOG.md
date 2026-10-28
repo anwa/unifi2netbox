@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.2.1
+
+### Added
+
+- Add M3 inventory-reader foundations with normalized timestamped snapshot models.
+- Add read-only paginated NetBox and UniFi Network inventory readers with bounded
+	pagination checks and schema validation.
+- Add offline contract tests for normalized pagination reads and failure handling.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_inventory.py`, `tests/test_netbox.py`
+	and `tests/test_unifi.py` (51 tests).
+- Ruff checks pass for the new inventory reader and its tests.
+
 ## v0.2.0 - 2026-10-28
 
 ### Summary

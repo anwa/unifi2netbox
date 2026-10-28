@@ -131,7 +131,9 @@ Acceptance: NetBox and Network independently display authenticated connectivity.
 
 Branch: `feature/inventory-snapshots`; depends on M2.
 
-- [ ] Read paginated inventories into normalized, timestamped domain models.
+- [x] Read paginated inventories into normalized, timestamped domain models
+  (initial internal NetBox/UniFi readers plus offline contract tests on
+  2026-10-28).
 - [ ] Add versioned SQLite state, current/previous complete snapshots and Refresh.
 - [ ] Add stale/offline browsing and partial-read diagnostics, without writes.
 - [ ] Provide opt-in sanitized fixture/report export for the target PC.

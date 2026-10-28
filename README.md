@@ -13,6 +13,11 @@ Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. This release checks both API connections;
 actual inventory comparison and writes are not implemented yet.
 
+M3 foundation work has started on `feature/inventory-snapshots`: internal
+read-only paginated inventory readers and normalized timestamped snapshot models
+now exist for NetBox and UniFi Network. GUI refresh/snapshot browsing and
+diagnostics integration follow in later M3 slices.
+
 ## Goals
 
  - Read local UniFi APIs; never modify UniFi.

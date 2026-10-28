@@ -64,6 +64,21 @@ All UniFi requests in this milestone are GET. No adopted-device operations, port
 changes, cloud access or NetBox writes are part of these tests. Network 10.6.106
 reference documentation is not a substitute for these installed-version checks.
 
+## M3 Inventory Reader Contracts
+
+Initial M3 groundwork adds internal read-only paginated inventory readers for
+NetBox and UniFi Network, returning normalized timestamped snapshot models.
+The current slice validates pagination metadata consistency, bounded page loops,
+site selection behavior and normalized field extraction in synthetic tests.
+
+Run the focused M3 contract checks:
+
+```powershell
+python -m pytest -q tests/test_inventory.py
+```
+
+This test slice remains fully offline and does not contact live infrastructure.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.
