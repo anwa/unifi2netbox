@@ -64,6 +64,84 @@ All UniFi requests in this milestone are GET. No adopted-device operations, port
 changes, cloud access or NetBox writes are part of these tests. Network 10.6.106
 reference documentation is not a substitute for these installed-version checks.
 
+## M3 Inventory Reader Contracts
+
+Initial M3 groundwork adds internal read-only paginated inventory readers for
+NetBox and UniFi Network, returning normalized timestamped snapshot models.
+The current slice validates pagination metadata consistency, bounded page loops,
+site selection behavior and normalized field extraction in synthetic tests.
+
+Run the focused M3 contract checks:
+
+```powershell
+python -m pytest -q tests/test_inventory.py
+```
+
+This test slice remains fully offline and does not contact live infrastructure.
+
+## M3 Snapshot State and Refresh Contracts
+
+The second M3 slice adds a versioned SQLite snapshot store with per-source
+current/previous records and an internal refresh service that writes successful
+reads while preserving prior good snapshots for failed reads.
+
+Run the focused snapshot-state checks:
+
+```powershell
+python -m pytest -q tests/test_snapshots.py tests/test_refresh.py
+```
+
+These tests remain fully offline and use synthetic readers/transports only.
+
+## M3 Stale Browse and Partial Diagnostics Contracts
+
+The third M3 slice adds stale/offline cache browsing and partial-refresh
+diagnostics without write paths. On refresh failures, the service reports the
+error, keeps the last successful snapshot available for browsing, and annotates
+the result as cached/stale. Freshness checks are based on snapshot timestamps.
+
+Run the focused diagnostics checks:
+
+```powershell
+python -m pytest -q tests/test_refresh.py tests/test_snapshots.py
+```
+
+These checks remain fully offline and use synthetic fixtures only.
+
+## M3 Sanitized Fixture and Report Export Contracts
+
+The fourth M3 slice adds an explicit opt-in export service for sanitized
+snapshot fixtures/reports. Exports include timestamped source snapshots and
+deterministically pseudonymized identifiers so fixtures remain useful while
+avoiding direct leakage of source IDs, serials, MAC addresses or site labels.
+
+Run the focused export checks:
+
+```powershell
+python -m pytest -q tests/test_reporting.py
+```
+
+This slice remains fully offline and does not contact live infrastructure.
+
+## M3 Capability Matrix Contracts
+
+The final M3 slice adds an installed-version field capability matrix for ports,
+profiles, overrides, VLAN, PoE, speed/duplex, LAG and LLDP. Tests validate that
+the matrix:
+
+- includes all required field groups,
+- defaults to `Unverified` without sampled payload evidence,
+- marks evidence-backed fields as `Verified`,
+- renders a stable markdown table for report output.
+
+Run the focused matrix checks:
+
+```powershell
+python -m pytest -q tests/test_capabilities.py
+```
+
+This matrix slice remains fully offline and uses synthetic evidence only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

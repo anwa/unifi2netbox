@@ -36,3 +36,19 @@ adapter. Errors do not echo URLs, response bodies, keys or exception text.
 
 Port profiles, overrides, VLANs, LLDP, PoE and other inventory field coverage are
 not established by this connection gate; those remain the M3/M6 capability work.
+
+## Installed-Version Field Capability Matrix
+
+M3 now provides a service-level matrix builder for installed-version capability
+tracking of ports, profiles, overrides, VLAN, PoE, speed/duplex, LAG and LLDP.
+The matrix records:
+
+- installed UniFi and NetBox versions,
+- generation timestamp,
+- per-field UniFi evidence signal,
+- intended NetBox target mapping,
+- status (`Verified`, `Unverified` or `Missing`) and implementation note.
+
+Without sampled field evidence, matrix entries are intentionally `Unverified`
+rather than assumed supported. Evidence-backed states are derived from observed
+payload keys and remain read-only diagnostics at this stage.

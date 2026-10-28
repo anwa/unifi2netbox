@@ -6,6 +6,106 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.0
+
+### Summary
+
+- Third functional milestone: inventory snapshots and diagnostics foundations.
+
+### Added
+
+- Read-only paginated NetBox/UniFi inventory readers with normalized timestamped
+	snapshot models.
+- Versioned SQLite snapshot state with current/previous records and refresh
+	service foundations.
+- Stale/offline cache browsing plus partial-read diagnostics without write paths.
+- Explicit opt-in sanitized fixture/report export with deterministic
+	pseudonymization for sensitive identifiers.
+- Installed-version capability matrix for ports, profiles, overrides, VLAN,
+	PoE, speed/duplex, LAG and LLDP.
+
+### Validation
+
+- Milestone-wide offline gate: 130 passed, 1 skipped, 0 failed.
+- Ruff lint and format checks pass for the full workspace.
+
+### Compatibility
+
+- Existing settings and snapshot schema remain compatible without migration.
+- Linux and exact target-platform verification remain unreported.
+
+## v0.2.5
+
+### Added
+
+- Add an installed-version capability matrix builder for ports, profiles,
+	overrides, VLAN, PoE, speed/duplex, LAG and LLDP.
+- Add per-field status mapping (`Verified`, `Unverified`, `Missing`) with
+	UniFi evidence hints and intended NetBox targets.
+- Add markdown rendering support for capability-matrix reporting.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_capabilities.py`.
+- Ruff checks pass for `capabilities.py` and matrix tests.
+
+## v0.2.4
+
+### Added
+
+- Add an explicit opt-in snapshot fixture/report export service for target-PC sharing.
+- Add deterministic pseudonymization for source IDs, names, serials, MAC addresses,
+  sites and snapshot scope in exported fixtures.
+- Add export controls for including or omitting previous snapshots per source.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_reporting.py`.
+- Ruff checks pass for `reporting.py` and export tests.
+
+## v0.2.3
+
+### Added
+
+- Add stale/offline cache browsing based on stored current/previous snapshots.
+- Add partial-refresh diagnostics that preserve and reuse the last successful
+	cached snapshot when a source refresh fails.
+- Add freshness checks for cached snapshots and expose stale indicators in the
+	refresh/browse service results.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_refresh.py` and `tests/test_snapshots.py`.
+- Ruff checks pass for updated refresh/snapshot services and tests.
+
+## v0.2.2
+
+### Added
+
+- Add a versioned SQLite snapshot store for per-source current/previous inventory snapshots.
+- Add an internal refresh service that persists successful reads and reports per-source failures.
+- Add offline contract tests for schema checks, current/previous rollover and refresh behavior.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_snapshots.py` and `tests/test_refresh.py`.
+- Ruff checks pass for `snapshots.py`, `refresh.py` and the new tests.
+
+## v0.2.1
+
+### Added
+
+- Add M3 inventory-reader foundations with normalized timestamped snapshot models.
+- Add read-only paginated NetBox and UniFi Network inventory readers with bounded
+	pagination checks and schema validation.
+- Add offline contract tests for normalized pagination reads and failure handling.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_inventory.py`, `tests/test_netbox.py`
+	and `tests/test_unifi.py` (51 tests).
+- Ruff checks pass for the new inventory reader and its tests.
+
 ## v0.2.0 - 2026-10-28
 
 ### Summary
