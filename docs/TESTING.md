@@ -142,6 +142,27 @@ python -m pytest -q tests/test_capabilities.py
 
 This matrix slice remains fully offline and uses synthetic evidence only.
 
+## M4 Matching Core Contracts
+
+The first M4 slice adds a matching core for identity conflict handling,
+confirmed mapping support and cross-source deduplication between UniFi and
+NetBox observations.
+
+The focused tests validate that:
+
+- unique identity evidence produces one deterministic pair,
+- ambiguous identity evidence is reported as an explicit conflict,
+- confirmed mappings can pair observations without identity evidence,
+- duplicate or missing confirmed mapping targets are reported as conflicts.
+
+Run the focused matching checks:
+
+```powershell
+python -m pytest -q tests/test_matching.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

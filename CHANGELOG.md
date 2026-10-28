@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.1
+
+### Added
+
+- Add an identity deduplication service for cross-source NetBox/UniFi matching.
+- Add confirmed mapping support with explicit conflict detection for duplicate
+	targets and missing mapping endpoints.
+- Add ambiguity diagnostics when one UniFi observation matches multiple NetBox
+	candidates by identity evidence.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_matching.py`.
+- Ruff checks pass for `matching.py` and matching tests.
+
 ## v0.3.0
 
 ### Summary

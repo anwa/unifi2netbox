@@ -159,7 +159,9 @@ exports contain no credentials/personal data and remain useful as test fixtures.
 
 Branch: `feature/diff-and-device-matching`; depends on M3.
 
-- [ ] Implement identity conflicts, confirmed mappings and cross-source deduplication.
+- [x] Implement identity conflicts, confirmed mappings and cross-source
+  deduplication (service-level matching core and offline contract tests on
+  2026-10-28).
 - [ ] Suggest existing manufacturer/model Device Types only for missing devices.
 - [ ] Display source/target values, provenance, operational/configured category,
   unsupported fields and field/device/batch checkboxes.

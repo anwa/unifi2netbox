@@ -25,6 +25,9 @@ A service-level installed-version capability matrix now tracks ports, profiles,
 overrides, VLAN, PoE, speed/duplex, LAG and LLDP readiness states.
 GUI refresh/snapshot browsing and diagnostics integration follow in later M3
 slices.
+M4 has started with a service-level matching core for identity conflicts,
+confirmed mappings and cross-source deduplication between NetBox and UniFi
+observations.
 
 ## Goals
 
