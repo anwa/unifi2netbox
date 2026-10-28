@@ -6,6 +6,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.2.2
+
+### Added
+
+- Add a versioned SQLite snapshot store for per-source current/previous inventory snapshots.
+- Add an internal refresh service that persists successful reads and reports per-source failures.
+- Add offline contract tests for schema checks, current/previous rollover and refresh behavior.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_snapshots.py` and `tests/test_refresh.py`.
+- Ruff checks pass for `snapshots.py`, `refresh.py` and the new tests.
+
 ## v0.2.1
 
 ### Added

@@ -79,6 +79,20 @@ python -m pytest -q tests/test_inventory.py
 
 This test slice remains fully offline and does not contact live infrastructure.
 
+## M3 Snapshot State and Refresh Contracts
+
+The second M3 slice adds a versioned SQLite snapshot store with per-source
+current/previous records and an internal refresh service that writes successful
+reads while preserving prior good snapshots for failed reads.
+
+Run the focused snapshot-state checks:
+
+```powershell
+python -m pytest -q tests/test_snapshots.py tests/test_refresh.py
+```
+
+These tests remain fully offline and use synthetic readers/transports only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

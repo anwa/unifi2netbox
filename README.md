@@ -15,8 +15,10 @@ actual inventory comparison and writes are not implemented yet.
 
 M3 foundation work has started on `feature/inventory-snapshots`: internal
 read-only paginated inventory readers and normalized timestamped snapshot models
-now exist for NetBox and UniFi Network. GUI refresh/snapshot browsing and
-diagnostics integration follow in later M3 slices.
+now exist for NetBox and UniFi Network. Versioned SQLite snapshot state with
+current/previous records and an internal refresh service are now included.
+GUI refresh/snapshot browsing and diagnostics integration follow in later M3
+slices.
 
 ## Goals
 

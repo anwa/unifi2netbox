@@ -134,7 +134,8 @@ Branch: `feature/inventory-snapshots`; depends on M2.
 - [x] Read paginated inventories into normalized, timestamped domain models
   (initial internal NetBox/UniFi readers plus offline contract tests on
   2026-10-28).
-- [ ] Add versioned SQLite state, current/previous complete snapshots and Refresh.
+- [x] Add versioned SQLite state, current/previous complete snapshots and
+  internal Refresh service foundations (offline contract tests on 2026-10-28).
 - [ ] Add stale/offline browsing and partial-read diagnostics, without writes.
 - [ ] Provide opt-in sanitized fixture/report export for the target PC.
 - [ ] Build an installed-version field capability matrix for ports, profiles,
