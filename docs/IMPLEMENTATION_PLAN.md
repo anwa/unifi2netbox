@@ -136,7 +136,9 @@ Branch: `feature/inventory-snapshots`; depends on M2.
   2026-10-28).
 - [x] Add versioned SQLite state, current/previous complete snapshots and
   internal Refresh service foundations (offline contract tests on 2026-10-28).
-- [ ] Add stale/offline browsing and partial-read diagnostics, without writes.
+- [x] Add stale/offline browsing and partial-read diagnostics, without writes
+  (cache browse service and refresh diagnostics with offline contract tests on
+  2026-10-28).
 - [ ] Provide opt-in sanitized fixture/report export for the target PC.
 - [ ] Build an installed-version field capability matrix for ports, profiles,
   overrides, VLANs, PoE, speed/duplex, LAG and LLDP.

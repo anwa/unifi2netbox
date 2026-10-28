@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.2.3
+
+### Added
+
+- Add stale/offline cache browsing based on stored current/previous snapshots.
+- Add partial-refresh diagnostics that preserve and reuse the last successful
+	cached snapshot when a source refresh fails.
+- Add freshness checks for cached snapshots and expose stale indicators in the
+	refresh/browse service results.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_refresh.py` and `tests/test_snapshots.py`.
+- Ruff checks pass for updated refresh/snapshot services and tests.
+
 ## v0.2.2
 
 ### Added

@@ -93,6 +93,21 @@ python -m pytest -q tests/test_snapshots.py tests/test_refresh.py
 
 These tests remain fully offline and use synthetic readers/transports only.
 
+## M3 Stale Browse and Partial Diagnostics Contracts
+
+The third M3 slice adds stale/offline cache browsing and partial-refresh
+diagnostics without write paths. On refresh failures, the service reports the
+error, keeps the last successful snapshot available for browsing, and annotates
+the result as cached/stale. Freshness checks are based on snapshot timestamps.
+
+Run the focused diagnostics checks:
+
+```powershell
+python -m pytest -q tests/test_refresh.py tests/test_snapshots.py
+```
+
+These checks remain fully offline and use synthetic fixtures only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

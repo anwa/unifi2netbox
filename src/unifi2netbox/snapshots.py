@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,6 +11,13 @@ SNAPSHOT_SCHEMA_VERSION = 1
 
 class SnapshotStoreError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class StoredSnapshots:
+    current: InventorySnapshot | None
+    previous: InventorySnapshot | None
+    updated_at: str
 
 
 class SnapshotStore:
@@ -70,24 +77,31 @@ class SnapshotStore:
             )
 
     def load_current(self, source: InventorySource) -> InventorySnapshot | None:
-        return self._load(source, "current_json")
+        return self.load_state(source).current
 
     def load_previous(self, source: InventorySource) -> InventorySnapshot | None:
-        return self._load(source, "previous_json")
+        return self.load_state(source).previous
 
-    def _load(self, source: InventorySource, column: str) -> InventorySnapshot | None:
+    def load_state(self, source: InventorySource) -> StoredSnapshots:
         self.initialize()
         with sqlite3.connect(self.path) as connection:
             row = connection.execute(
-                f"SELECT {column} FROM snapshots WHERE source = ?",  # noqa: S608
+                """
+                SELECT current_json, previous_json, updated_at
+                FROM snapshots
+                WHERE source = ?
+                """,
                 (source.value,),
             ).fetchone()
-        if row is None or row[0] is None:
-            return None
+        if row is None:
+            return StoredSnapshots(None, None, "")
         try:
-            return _decode(row[0])
+            current = _decode(row[0])
+            previous = _decode(row[1]) if row[1] is not None else None
+            updated_at = str(row[2])
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as error:
             raise SnapshotStoreError("Stored snapshot data is invalid.") from error
+        return StoredSnapshots(current, previous, updated_at)
 
 
 def _encode(snapshot: InventorySnapshot) -> str:

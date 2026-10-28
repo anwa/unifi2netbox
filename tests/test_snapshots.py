@@ -50,6 +50,10 @@ def test_save_current_shifts_previous(tmp_path):
     store.save_current(first)
     assert store.load_current(InventorySource.NETBOX) == first
     assert store.load_previous(InventorySource.NETBOX) is None
+    state = store.load_state(InventorySource.NETBOX)
+    assert state.current == first
+    assert state.previous is None
+    assert state.updated_at
 
     store.save_current(second)
     assert store.load_current(InventorySource.NETBOX) == second
