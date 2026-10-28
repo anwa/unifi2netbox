@@ -6,6 +6,34 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.0
+
+### Summary
+
+- Third functional milestone: inventory snapshots and diagnostics foundations.
+
+### Added
+
+- Read-only paginated NetBox/UniFi inventory readers with normalized timestamped
+	snapshot models.
+- Versioned SQLite snapshot state with current/previous records and refresh
+	service foundations.
+- Stale/offline cache browsing plus partial-read diagnostics without write paths.
+- Explicit opt-in sanitized fixture/report export with deterministic
+	pseudonymization for sensitive identifiers.
+- Installed-version capability matrix for ports, profiles, overrides, VLAN,
+	PoE, speed/duplex, LAG and LLDP.
+
+### Validation
+
+- Milestone-wide offline gate: 130 passed, 1 skipped, 0 failed.
+- Ruff lint and format checks pass for the full workspace.
+
+### Compatibility
+
+- Existing settings and snapshot schema remain compatible without migration.
+- Linux and exact target-platform verification remain unreported.
+
 ## v0.2.5
 
 ### Added
