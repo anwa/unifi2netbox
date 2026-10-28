@@ -123,6 +123,25 @@ python -m pytest -q tests/test_reporting.py
 
 This slice remains fully offline and does not contact live infrastructure.
 
+## M3 Capability Matrix Contracts
+
+The final M3 slice adds an installed-version field capability matrix for ports,
+profiles, overrides, VLAN, PoE, speed/duplex, LAG and LLDP. Tests validate that
+the matrix:
+
+- includes all required field groups,
+- defaults to `Unverified` without sampled payload evidence,
+- marks evidence-backed fields as `Verified`,
+- renders a stable markdown table for report output.
+
+Run the focused matrix checks:
+
+```powershell
+python -m pytest -q tests/test_capabilities.py
+```
+
+This matrix slice remains fully offline and uses synthetic evidence only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

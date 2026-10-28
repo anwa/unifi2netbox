@@ -21,6 +21,8 @@ The service layer now also supports stale/offline cache browsing and
 partial-read diagnostics while keeping all behavior read-only.
 An opt-in sanitized fixture/report export is available for target-PC sharing,
 using deterministic pseudonymization for potentially sensitive identifiers.
+A service-level installed-version capability matrix now tracks ports, profiles,
+overrides, VLAN, PoE, speed/duplex, LAG and LLDP readiness states.
 GUI refresh/snapshot browsing and diagnostics integration follow in later M3
 slices.
 

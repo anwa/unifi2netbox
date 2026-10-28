@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.2.5
+
+### Added
+
+- Add an installed-version capability matrix builder for ports, profiles,
+	overrides, VLAN, PoE, speed/duplex, LAG and LLDP.
+- Add per-field status mapping (`Verified`, `Unverified`, `Missing`) with
+	UniFi evidence hints and intended NetBox targets.
+- Add markdown rendering support for capability-matrix reporting.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_capabilities.py`.
+- Ruff checks pass for `capabilities.py` and matrix tests.
+
 ## v0.2.4
 
 ### Added

@@ -141,8 +141,9 @@ Branch: `feature/inventory-snapshots`; depends on M2.
   2026-10-28).
 - [x] Provide opt-in sanitized fixture/report export for the target PC
   (deterministic pseudonymization and offline contract tests on 2026-10-28).
-- [ ] Build an installed-version field capability matrix for ports, profiles,
-  overrides, VLANs, PoE, speed/duplex, LAG and LLDP.
+- [x] Build an installed-version field capability matrix for ports, profiles,
+  overrides, VLANs, PoE, speed/duplex, LAG and LLDP (service-level matrix
+  builder and offline contract tests on 2026-10-28).
 
 Acceptance: complete reads are repeatable; failures preserve a good baseline;
 exports contain no credentials/personal data and remain useful as test fixtures.
