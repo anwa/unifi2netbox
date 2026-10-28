@@ -17,6 +17,7 @@ class ConnectionState(StrEnum):
     UNAUTHORIZED = "Unauthorized"
     TLS_ERROR = "TLS error"
     UNSUPPORTED = "Unsupported"
+    PARTIAL = "Partial"
     ERROR = "Error"
 
 
@@ -25,6 +26,8 @@ class ConnectionResult:
     state: ConnectionState
     message: str
     version: str = ""
+    site: str = ""
+    sites: tuple[tuple[str, str], ...] = ()
 
 
 class RedirectError(Exception):

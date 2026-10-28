@@ -97,12 +97,31 @@ Online, failures are distinguishable, no GUI blocking and no API mutations.
 
 Branch: `feature/unifi-network-connection`; depends on M1.
 
-- [ ] Add Network host/key/site/TLS settings and independent status checks.
-- [ ] Detect installed application version and authenticated endpoint capability.
-- [ ] Use controller-specific documentation for 10.6.100; published 10.6.106
-  documentation does not establish installed endpoint coverage.
-- [ ] Test independent failures, startup checks and read-only request behavior.
-- [ ] Perform target-PC read acceptance and document capability gaps.
+Status: the user reported the preceding M2 online tests passed on 2026-10-25.
+On 2026-10-28, the user confirmed the revised 0.1.4 shared Settings and Check
+Connections workflow on the target PC. A separate merge decision remains open.
+No v0.2.0 release or M2 merge is authorized yet.
+
+- [x] Add independent UniFi TOML storage without changing existing NetBox settings
+  (v0.1.1: 62 offline tests pass, optional package test skipped).
+- [x] Add Network host/key/site/TLS settings and independent status checks.
+- [x] Detect installed application version and authenticated endpoint capability
+  (v0.1.2: local API adapter, 94 offline tests pass; live confirmation pending).
+- [x] Use available published 10.6.106 schemas as a reference only; the 10.6.100
+  documentation URL returned 404. Installed coverage requires target-PC checks.
+- [x] Test independent failures, startup checks and read-only request behavior.
+- [x] Run local M2 gates: 101 offline tests pass, optional package test skipped in
+  the default run; Ruff lint/format and editor diagnostics pass. Normal/compact
+  GUI screenshots reviewed with synthetic data. Fresh Windows standalone 0.1.3
+  startup/shutdown passes in a separately enabled native test.
+- [x] Record user-reported target-PC online test success for the preceding M2
+  workflow (2026-10-25; exact artifact and environment details not supplied).
+- [x] Implement shared settings/check actions and atomic combined saving in 0.1.4:
+  109 offline tests, Ruff lint/format and editor diagnostics pass; fresh native
+  Windows startup/shutdown passes separately. Both tabs/compact layout reviewed.
+- [x] Confirm the revised 0.1.4 shared Settings and Check Connections workflow on
+  the target PC (user-reported pass on 2026-10-28). Keep independent TLS/site
+  settings and atomic combined saves.
 
 Acceptance: NetBox and Network independently display authenticated connectivity.
 
