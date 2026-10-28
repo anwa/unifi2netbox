@@ -99,8 +99,8 @@ Branch: `feature/unifi-network-connection`; depends on M1.
 
 Status: the user reported the preceding M2 online tests passed on 2026-10-25.
 On 2026-10-28, the user confirmed the revised 0.1.4 shared Settings and Check
-Connections workflow on the target PC. A separate merge decision remains open.
-No v0.2.0 release or M2 merge is authorized yet.
+Connections workflow on the target PC. The user then approved the M2 merge to
+main and v0.2.0 release preparation.
 
 - [x] Add independent UniFi TOML storage without changing existing NetBox settings
   (v0.1.1: 62 offline tests pass, optional package test skipped).
@@ -122,6 +122,8 @@ No v0.2.0 release or M2 merge is authorized yet.
 - [x] Confirm the revised 0.1.4 shared Settings and Check Connections workflow on
   the target PC (user-reported pass on 2026-10-28). Keep independent TLS/site
   settings and atomic combined saves.
+- [x] Obtain explicit merge approval (2026-10-28); prepare version 0.2.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.2.0.
 
 Acceptance: NetBox and Network independently display authenticated connectivity.
 

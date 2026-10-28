@@ -6,11 +6,35 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.2.0 - 2026-10-28
+
+### Summary
+
+- Second approved functional milestone: UniFi Network connection status with the
+	shared NetBox/UniFi Settings and Check Connections workflow.
+
+### Changed
+
+- Promote the accepted M2 milestone from development version 0.1.4 to 0.2.0.
+
 ### Documentation
 
-- Record user-reported target-PC confirmation for the revised 0.1.4 unified
+- Record user-reported target-PC confirmation of the revised 0.1.4 unified
 	Settings and shared Check Connections workflow on 2026-10-28.
-- Keep M2 merge and v0.2.0 tag as a separate explicit approval decision.
+- Record the approved M2 merge to main and v0.2.0 release preparation.
+
+### Validation
+
+- M2 local gates remained green at release preparation: 109 offline tests pass,
+	optional native package test skipped by default.
+- Fresh Windows standalone 0.1.4 startup/shutdown passed in its separately
+	enabled native test.
+- Ruff lint/format and editor diagnostics remained clean for the milestone slice.
+
+### Compatibility
+
+- Existing TOML files need no migration; API endpoints and authentication are unchanged.
+- Linux and exact target-platform coverage remain unverified.
 
 ## v0.1.4
 
@@ -37,7 +61,7 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 - Existing TOML files need no migration; API endpoints and authentication are unchanged.
 - The user reported revised GUI target-PC acceptance passed on 2026-10-28.
-- Linux remains unverified. No merge/tag.
+- Linux remained unverified at this development patch level.
 
 ## v0.1.3
 

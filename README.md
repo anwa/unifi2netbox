@@ -1,17 +1,16 @@
 # unifi2netbox
 
-Latest main release: **v0.1.0**, the NetBox connection milestone.
+Latest main release: **v0.2.0**, the UniFi Network connection milestone.
 
-M2 development on `feature/unifi-network-connection` adds UniFi Network in small
-patches. Version **0.1.4** provides one settings dialog and one Check Connections
-action for both services, with separate status results and a read-only local
-Network API adapter. The user reported the preceding M2 online tests passed;
-the unified GUI needs targeted confirmation. No M2 merge or v0.2.0 release is authorized.
+Release **v0.2.0** adds UniFi Network connectivity alongside NetBox with one
+unified Settings dialog and one shared Check Connections action. Both services
+are checked independently, results remain separate, and the local Network API
+adapter stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
-applying selected changes to NetBox. This branch checks both API connections;
+applying selected changes to NetBox. This release checks both API connections;
 actual inventory comparison and writes are not implemented yet.
 
 ## Goals
