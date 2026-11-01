@@ -286,6 +286,8 @@ and the default site-scoped filtering of NetBox-only delete proposals.
 GUI coverage now also validates apply-flow behavior: enabling write execution
 for executable plans, confirmation-triggered runner start and visible write
 result rendering in preview highlights.
+Rows-dialog coverage also validates single-row execution for selected executable
+entries.
 
 Run the focused read-back checks:
 

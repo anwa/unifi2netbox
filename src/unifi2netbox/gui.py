@@ -60,7 +60,12 @@ from unifi2netbox.refresh import refresh_snapshots
 from unifi2netbox.snapshots import SnapshotStore
 from unifi2netbox.write_execute import execute_write_plan
 from unifi2netbox.write_journal import summarize_journal
-from unifi2netbox.write_plan import WritePlan, build_write_plan
+from unifi2netbox.write_plan import (
+    OperationType,
+    WritePlan,
+    WritePlanSummary,
+    build_write_plan,
+)
 
 
 @dataclass(frozen=True)
@@ -1216,6 +1221,51 @@ class MainWindow(QMainWindow):
         )
         self.update_check_action()
 
+    def execute_selected_preview_row(self, device_key: str) -> None:
+        if self.write_runner.busy or self.closing:
+            return
+        if self.current_difference_preview is None or self.current_write_plan is None:
+            self.statusBar().showMessage(
+                "Refresh inventory preview before row execution."
+            )
+            return
+
+        single_plan = _single_operation_plan(self.current_write_plan, device_key)
+        if single_plan is None:
+            self.statusBar().showMessage(
+                "Selected row has no executable write operation."
+            )
+            return
+
+        confirm = QDialog(self)
+        confirm.setWindowTitle("Confirm row execution")
+        layout = QVBoxLayout(confirm)
+        layout.addWidget(plain_label(single_plan.summary.confirmation_message))
+        layout.addWidget(
+            plain_label("This runs only the selected row as a single write operation.")
+        )
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            confirm,
+        )
+        buttons.accepted.connect(confirm.accept)
+        buttons.rejected.connect(confirm.reject)
+        layout.addWidget(buttons)
+
+        if confirm.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.preview_status.setText("Applying row...")
+        self.preview_plan.setText("Executing selected row in background...")
+        self.write_runner.start(
+            self.netbox.config,
+            self.behavior,
+            self.current_difference_preview,
+            single_plan,
+            dry_run=self.dry_run_only.isChecked(),
+        )
+        self.update_check_action()
+
     def write_execution_finished(self, result: WriteExecutionGuiResult) -> None:
         self.preview_status.setText(result.status)
         self.preview_plan.setText(result.details)
@@ -1296,6 +1346,8 @@ class MainWindow(QMainWindow):
 
         table = QTableWidget(dialog)
         table.setObjectName("preview_rows_table")
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         table.setColumnCount(6)
         table.setHorizontalHeaderLabels(
             [
@@ -1331,6 +1383,8 @@ class MainWindow(QMainWindow):
                 for column_index, value in enumerate(values):
                     table.setItem(row_index, column_index, QTableWidgetItem(value))
             table.resizeColumnsToContents()
+            if visible_rows and table.currentRow() < 0:
+                table.setCurrentCell(0, 0)
 
         action_filter.currentIndexChanged.connect(lambda _index: populate_table())
         executable_only.toggled.connect(lambda _checked: populate_table())
@@ -1338,6 +1392,26 @@ class MainWindow(QMainWindow):
 
         table.setAlternatingRowColors(True)
         layout.addWidget(table)
+        execute_selected = QPushButton("Execute selected row", dialog)
+        execute_selected.setObjectName("preview_rows_execute_selected")
+
+        def run_selected_row() -> None:
+            row_index = table.currentRow()
+            if row_index < 0:
+                self.statusBar().showMessage("No preview row selected.")
+                return
+            device_item = table.item(row_index, 0)
+            executable_item = table.item(row_index, 5)
+            if device_item is None or executable_item is None:
+                self.statusBar().showMessage("Selected preview row is invalid.")
+                return
+            if executable_item.text() != "Yes":
+                self.statusBar().showMessage("Selected preview row is not executable.")
+                return
+            self.execute_selected_preview_row(device_item.text())
+
+        execute_selected.clicked.connect(run_selected_row)
+        layout.addWidget(execute_selected)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
@@ -1387,3 +1461,33 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         super().closeEvent(event)
+
+
+def _single_operation_plan(write_plan: WritePlan, device_key: str) -> WritePlan | None:
+    operation = next(
+        (item for item in write_plan.operations if item.device_key == device_key), None
+    )
+    if operation is None:
+        return None
+    summary = WritePlanSummary(
+        total_operations=1,
+        create_operations=(
+            1 if operation.operation_type == OperationType.CREATE_DEVICE else 0
+        ),
+        update_operations=(
+            1 if operation.operation_type == OperationType.UPDATE_DEVICE else 0
+        ),
+        blocker_issues=0,
+        warning_issues=0,
+        blocked_device_keys=(),
+        requires_confirmation=True,
+        confirmation_message=(
+            "Confirm execution of 1 operation " f"({operation.device_key})."
+        ),
+    )
+    return WritePlan(
+        operations=(operation,),
+        issues=(),
+        executable=True,
+        summary=summary,
+    )

@@ -74,6 +74,8 @@ write executor to resolve create prerequisites deterministically.
 The preview section now includes an `Execute write plan` action with one
 confirmation step and an optional `Dry run only` toggle that records outcome
 journal entries without mutating NetBox.
+The `Show all rows` dialog also supports executing one selected executable row,
+which helps when global plan blockers prevent full-batch execution.
 
 ## Goals
 

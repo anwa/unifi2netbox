@@ -14,6 +14,8 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	"Execute write plan" action, one confirmation dialog and optional dry-run mode.
 - Surface write execution outcomes directly in preview highlights so success,
 	failure and skipped operations are visible without leaving the main window.
+- Add per-row execution from the `Show all rows` dialog for selected executable
+	rows, enabling targeted writes when full-batch execution is blocked.
 
 ### Validation
 

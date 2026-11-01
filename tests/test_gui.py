@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QLineEdit,
+    QPushButton,
     QTableWidget,
     QToolBar,
 )
@@ -747,6 +748,73 @@ def test_inventory_preview_rows_dialog_filters(qtbot, tmp_path, pool):
     executable_filter.setChecked(True)
     qtbot.waitUntil(lambda: table.rowCount() == 1)
     assert table.item(0, 5).text() == "Yes"
+    window.preview_rows_dialog.close()
+
+
+def test_inventory_preview_rows_dialog_execute_selected_row(
+    qtbot, tmp_path, pool, monkeypatch
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="1", name="switch-a", serial="S1", site="HQ"),
+        ),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="a", name="switch-a", serial="S1-new", site="HQ"),
+            InventoryDevice(source_id="b", name="switch-b", site="HQ"),
+        ),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=_preview_rows(diff, change, plan),
+            difference_preview=diff,
+            write_plan=plan,
+        )
+    )
+
+    monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    started = {}
+
+    def fake_start(netbox_config, behavior, difference_preview, write_plan, *, dry_run):
+        started["called"] = True
+        started["count"] = len(write_plan.operations)
+        started["device_key"] = write_plan.operations[0].device_key
+        return True
+
+    monkeypatch.setattr(window.write_runner, "start", fake_start)
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    execute_button = window.preview_rows_dialog.findChild(
+        QPushButton, "preview_rows_execute_selected"
+    )
+    assert table is not None
+    assert execute_button is not None
+
+    # Select first executable row and trigger single-row execution.
+    table.setCurrentCell(0, 0)
+    execute_button.click()
+
+    assert started["called"] is True
+    assert started["count"] == 1
+    assert started["device_key"] == table.item(0, 0).text()
     window.preview_rows_dialog.close()
 
 
