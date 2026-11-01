@@ -6,6 +6,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.15
+
+### Added
+
+- Add a non-modal `Show all rows` dialog for inventory preview data.
+- Display complete preview rows in a table with device key, action, labels,
+  selected fields and executable state.
+
+### Validation
+
+- GUI suite passes with dialog/table checks: `tests/test_gui.py`.
+- Ruff checks pass for `gui.py` and GUI tests.
+
 ## v0.3.14
 
 ### Added
