@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.13
+
+### Added
+
+- Ensure inventory preview highlights always include at least one visible detail
+	line for `Partial`/`Unavailable` states.
+- Add explicit empty-NetBox guidance and unmatched/plan-issue fallback lines so
+	users see why no direct matches are shown yet.
+- Set a minimum list height for preview highlights to avoid collapsed rendering.
+
+### Validation
+
+- GUI suite passes with new fallback-detail test: `tests/test_gui.py`.
+- Ruff checks pass for `gui.py` and GUI tests.
+
 ## v0.3.12
 
 ### Added

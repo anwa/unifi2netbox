@@ -52,6 +52,8 @@ Inventory Preview now also shows structured highlight lines for sample matches,
 conflicts and planned write operations.
 Those highlights are now clickable in the main window and show the selected
 entry in a dedicated detail field.
+When NetBox is still empty or a preview refresh is partial, fallback highlights
+now explain why direct matches are missing.
 
 ## Goals
 
