@@ -110,6 +110,45 @@ def test_missing_confirmed_target_reports_conflict():
     assert result.conflicts[0].reason == ConflictReason.MISSING_CONFIRMED_TARGET
 
 
+def test_name_fallback_matches_unique_name_when_identity_missing():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [InventoryDevice(source_id="1", name="HG-DG-R1-UDM")],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="HG-DG-R1-UDM")],
+    )
+
+    result = deduplicate_inventory(netbox, unifi)
+
+    assert len(result.pairs) == 1
+    assert result.pairs[0].reason == MatchReason.NAME
+    assert result.conflicts == ()
+    assert result.unmatched_unifi == ()
+    assert result.unmatched_netbox == ()
+
+
+def test_name_fallback_reports_ambiguous_candidates():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [
+            InventoryDevice(source_id="1", name="HG-DG-R1-UDM"),
+            InventoryDevice(source_id="2", name="HG-DG-R1-UDM"),
+        ],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="HG-DG-R1-UDM")],
+    )
+
+    result = deduplicate_inventory(netbox, unifi)
+
+    assert result.pairs == ()
+    assert len(result.conflicts) == 1
+    assert result.conflicts[0].reason == ConflictReason.AMBIGUOUS_CANDIDATES
+
+
 def test_type_suggestions_only_for_unmatched_devices():
     netbox = snapshot(
         InventorySource.NETBOX,

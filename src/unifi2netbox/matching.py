@@ -10,6 +10,7 @@ from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, Inventory
 class MatchReason(StrEnum):
     CONFIRMED = "confirmed"
     IDENTITY = "identity"
+    NAME = "name"
 
 
 class ConflictReason(StrEnum):
@@ -149,6 +150,49 @@ def deduplicate_inventory(
         paired_unifi.add(source.observation_id)
         paired_netbox.add(target.observation_id)
 
+    # Pass 3: normalized-name fallback for still-unpaired observations.
+    netbox_by_name = _index_by_name(
+        [item for item in netbox if item.observation_id not in paired_netbox]
+    )
+    for source in unifi:
+        if source.observation_id in paired_unifi:
+            continue
+        key = _normalize_name(source.name)
+        if not key:
+            continue
+        candidates = [
+            item
+            for item in netbox_by_name.get(key, ())
+            if item.observation_id not in paired_netbox
+        ]
+        if not candidates:
+            continue
+        if len(candidates) > 1:
+            conflicts.append(
+                IdentityConflict(
+                    reason=ConflictReason.AMBIGUOUS_CANDIDATES,
+                    observation_ids=(
+                        source.observation_id,
+                        *(item.observation_id for item in candidates),
+                    ),
+                    message=(
+                        "UniFi observation matches multiple NetBox candidates by "
+                        "name."
+                    ),
+                )
+            )
+            continue
+        target = candidates[0]
+        pairs.append(
+            MatchPair(
+                unifi_observation_id=source.observation_id,
+                netbox_observation_id=target.observation_id,
+                reason=MatchReason.NAME,
+            )
+        )
+        paired_unifi.add(source.observation_id)
+        paired_netbox.add(target.observation_id)
+
     unmatched_unifi = tuple(
         item.observation_id for item in unifi if item.observation_id not in paired_unifi
     )
@@ -248,6 +292,18 @@ def _index_by_identity(
     return index
 
 
+def _index_by_name(
+    observations: list[DeviceObservation],
+) -> dict[str, list[DeviceObservation]]:
+    index: dict[str, list[DeviceObservation]] = {}
+    for item in observations:
+        key = _normalize_name(item.name)
+        if not key:
+            continue
+        index.setdefault(key, []).append(item)
+    return index
+
+
 def _candidates_for(
     source: DeviceObservation,
     netbox_by_identity: dict[str, list[DeviceObservation]],
@@ -266,6 +322,10 @@ def _identity_keys(observation: DeviceObservation) -> tuple[str, ...]:
     if observation.mac_address:
         keys.append(f"mac:{observation.mac_address}")
     return tuple(keys)
+
+
+def _normalize_name(value: str) -> str:
+    return "".join(character for character in value.lower() if character.isalnum())
 
 
 def _build_type_catalog(
