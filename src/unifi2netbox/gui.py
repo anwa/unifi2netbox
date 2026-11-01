@@ -86,6 +86,10 @@ class InventoryPreviewJob(QRunnable):
             diagnostics = (*refresh.netbox.diagnostics, *refresh.unifi.diagnostics)
             message = " ".join(item for item in diagnostics if item)
             if refresh.netbox.error or refresh.unifi.error:
+                partial_detail = (
+                    message
+                    or "Inventory refresh is partial; check source diagnostics."
+                )
                 self.signals.finished.emit(
                     InventoryPreviewResult(
                         status="Partial",
@@ -105,7 +109,7 @@ class InventoryPreviewJob(QRunnable):
                         ),
                         last_updated=refresh.netbox.last_updated
                         or refresh.unifi.last_updated,
-                        detail_lines=(message,) if message else (),
+                        detail_lines=(partial_detail,),
                     )
                 )
                 return
@@ -113,6 +117,10 @@ class InventoryPreviewJob(QRunnable):
             netbox_snapshot = refresh.netbox.snapshot
             unifi_snapshot = refresh.unifi.snapshot
             if netbox_snapshot is None or unifi_snapshot is None:
+                unavailable_detail = (
+                    message
+                    or "Inventory snapshots are not available for both sources."
+                )
                 self.signals.finished.emit(
                     InventoryPreviewResult(
                         status="Unavailable",
@@ -122,6 +130,7 @@ class InventoryPreviewJob(QRunnable):
                         ),
                         last_updated=refresh.netbox.last_updated
                         or refresh.unifi.last_updated,
+                        detail_lines=(unavailable_detail,),
                     )
                 )
                 return
@@ -149,7 +158,12 @@ class InventoryPreviewJob(QRunnable):
                     ),
                     last_updated=refresh.netbox.last_updated
                     or refresh.unifi.last_updated,
-                    detail_lines=_preview_detail_lines(dedup, plan),
+                    detail_lines=_preview_detail_lines(
+                        dedup,
+                        plan,
+                        netbox_device_count=len(netbox_snapshot.devices),
+                        unifi_device_count=len(unifi_snapshot.devices),
+                    ),
                 )
             )
         except Exception:
@@ -165,8 +179,30 @@ class InventoryPreviewJob(QRunnable):
             )
 
 
-def _preview_detail_lines(dedup, plan) -> tuple[str, ...]:
+def _preview_detail_lines(
+    dedup,
+    plan,
+    *,
+    netbox_device_count: int,
+    unifi_device_count: int,
+) -> tuple[str, ...]:
     lines: list[str] = []
+
+    if netbox_device_count == 0 and unifi_device_count > 0:
+        lines.append(
+            "NetBox inventory is empty; unmatched UniFi devices are expected "
+            "until target records exist or create flow is executed."
+        )
+
+    if dedup.unmatched_unifi:
+        lines.append(
+            f"Unmatched UniFi observations: {len(dedup.unmatched_unifi)}"
+        )
+    if dedup.unmatched_netbox:
+        lines.append(
+            f"Unmatched NetBox observations: {len(dedup.unmatched_netbox)}"
+        )
+
     for pair in dedup.pairs[:3]:
         lines.append(
             "Match "
@@ -183,6 +219,11 @@ def _preview_detail_lines(dedup, plan) -> tuple[str, ...]:
             f"#{operation.sequence} {operation.operation_type} "
             f"{operation.device_key}"
         )
+
+    if plan.issues:
+        first_issue = plan.issues[0]
+        lines.append(f"Plan issue ({first_issue.code}): {first_issue.message}")
+
     if not lines:
         lines.append("No preview detail entries are currently available.")
     return tuple(lines)
@@ -695,9 +736,8 @@ class MainWindow(QMainWindow):
         self.preview_detail_list.setSelectionMode(
             QListWidget.SelectionMode.SingleSelection
         )
-        self.preview_detail_list.currentItemChanged.connect(
-            self.preview_detail_changed
-        )
+        self.preview_detail_list.setMinimumHeight(96)
+        self.preview_detail_list.currentItemChanged.connect(self.preview_detail_changed)
         self.preview_detail_text = plain_label("No preview details yet.")
         preview_grid.addWidget(plain_label("Status"), 0, 0)
         preview_grid.addWidget(self.preview_status, 0, 1)

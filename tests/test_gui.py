@@ -445,6 +445,25 @@ def test_inventory_preview_finished_updates_visible_summary(qtbot, tmp_path, poo
     assert "Plan #1 create_device create:unifi:a" in window.preview_detail_text.text()
 
 
+def test_inventory_preview_finished_shows_fallback_details_for_partial(
+    qtbot, tmp_path, pool
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Partial",
+            details="Synthetic partial refresh.",
+            detail_lines=("Inventory refresh is partial; check source diagnostics.",),
+        )
+    )
+
+    assert window.preview_detail_list.count() == 1
+    assert "partial" in window.preview_detail_text.text().lower()
+
+
 def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
     checked = []
 
