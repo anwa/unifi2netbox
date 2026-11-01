@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.32
+
+### Changed
+
+- NetBox create payload now uses `role` (NetBox API field) instead of
+	`device_role`, improving compatibility with NetBox 4.x create validation.
+- Create/update failures now include parsed NetBox response details in error
+	messages (for example field-level validation output), not just HTTP status.
+
+### Validation
+
+- Updated write-execution tests to assert the `role` payload field and reran
+	focused write-execution checks.
+
 ## v0.3.31
 
 ### Added

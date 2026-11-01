@@ -218,7 +218,7 @@ def _build_payload(
         payload = {
             "name": required["name"],
             "site": backend.resolve_site_id(required["site"]),
-            "device_role": backend.resolve_role_id(role_name),
+            "role": backend.resolve_role_id(role_name),
             "device_type": (
                 selected_device_type_id
                 if selected_device_type_id
@@ -325,8 +325,9 @@ class RequestsNetBoxWriteBackend:
     def create_device(self, payload: dict[str, object]) -> str:
         response = self._request("POST", "/api/dcim/devices/", json=payload)
         if response.status_code not in {200, 201}:
+            detail = _response_error_detail(response)
             raise WriteExecutionError(
-                f"NetBox create failed with HTTP {response.status_code}."
+                f"NetBox create failed with HTTP {response.status_code}: {detail}"
             )
         data = response.json()
         if not isinstance(data, dict) or not str(data.get("id", "")).strip():
@@ -338,8 +339,9 @@ class RequestsNetBoxWriteBackend:
             "PATCH", f"/api/dcim/devices/{device_id}/", json=payload
         )
         if response.status_code not in {200, 204}:
+            detail = _response_error_detail(response)
             raise WriteExecutionError(
-                f"NetBox update failed with HTTP {response.status_code}."
+                f"NetBox update failed with HTTP {response.status_code}: {detail}"
             )
 
 
@@ -363,3 +365,28 @@ def _single_result_id(response: requests.Response, kind: str, name: str) -> str:
 
 def _norm(value: str) -> str:
     return "".join(character.lower() for character in value if character.isalnum())
+
+
+def _response_error_detail(response: requests.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        text = response.text.strip()
+        return text if text else "No response detail provided."
+
+    if isinstance(payload, dict):
+        parts: list[str] = []
+        for key, value in payload.items():
+            if isinstance(value, list):
+                rendered = "; ".join(str(item) for item in value if str(item).strip())
+                if rendered:
+                    parts.append(f"{key}: {rendered}")
+            elif isinstance(value, dict):
+                nested = "; ".join(f"{k}={v}" for k, v in value.items())
+                if nested:
+                    parts.append(f"{key}: {nested}")
+            elif str(value).strip():
+                parts.append(f"{key}: {value}")
+        if parts:
+            return " | ".join(parts)
+    return str(payload)

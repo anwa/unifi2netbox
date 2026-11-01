@@ -165,7 +165,7 @@ def test_execute_write_plan_create_success_with_role_setting():
         {
             "name": "switch-a",
             "site": "11",
-            "device_role": "21",
+            "role": "21",
             "device_type": "31",
             "serial": "SER-1",
         }
@@ -285,7 +285,7 @@ def test_execute_write_plan_create_uses_role_override():
 
     assert len(result.journal.outcomes) == 1
     assert result.journal.outcomes[0].status == OperationOutcomeStatus.SUCCESS
-    assert backend.created_payloads[0]["device_role"] == "21"
+    assert backend.created_payloads[0]["role"] == "21"
 
 
 def test_execute_write_plan_create_uses_site_override():
