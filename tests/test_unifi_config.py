@@ -130,7 +130,10 @@ def test_combined_save_failure_preserves_both_connections(tmp_path, monkeypatch)
 def test_behavior_section_roundtrip_and_defaults(tmp_path):
     path = tmp_path / "config.toml"
     assert load_behavior_config(path) == BehaviorConfig()
-    config = BehaviorConfig(include_all_netbox_delete_candidates=True)
+    config = BehaviorConfig(
+        include_all_netbox_delete_candidates=True,
+        default_device_role_name="Network Device",
+    )
     save_behavior_config(path, config)
     assert load_behavior_config(path) == config
 
@@ -138,3 +141,5 @@ def test_behavior_section_roundtrip_and_defaults(tmp_path):
 def test_invalid_behavior_settings_are_rejected():
     with pytest.raises(ConfigError):
         BehaviorConfig(include_all_netbox_delete_candidates="yes")
+    with pytest.raises(ConfigError):
+        BehaviorConfig(default_device_role_name="bad\nrole")

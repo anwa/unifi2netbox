@@ -69,6 +69,8 @@ are treated as ambiguity conflicts and are not auto-matched.
 Delete proposals for NetBox-only devices are scope-limited by default to the
 active UniFi site context; Settings now provide an explicit option to include
 all NetBox devices in delete proposals.
+Settings also include a default NetBox device role name used by the device-create
+write executor to resolve create prerequisites deterministically.
 
 ## Goals
 

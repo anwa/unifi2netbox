@@ -582,6 +582,17 @@ class SettingsDialog(QDialog):
             self.behavior.include_all_netbox_delete_candidates
         )
         layout.addWidget(self.include_all_netbox_delete_candidates)
+        behavior_form = QFormLayout()
+        self.default_device_role_name = QLineEdit(
+            self.behavior.default_device_role_name
+        )
+        self.default_device_role_name.setPlaceholderText(
+            "Optional now; required for create execution"
+        )
+        behavior_form.addRow(
+            "Default NetBox device role (create)", self.default_device_role_name
+        )
+        layout.addLayout(behavior_form)
         layout.addWidget(plain_label("Local token storage: plaintext"))
         layout.addWidget(plain_label(str(path)))
         self.outcome = plain_label()
@@ -618,7 +629,8 @@ class SettingsDialog(QDialog):
             behavior = BehaviorConfig(
                 include_all_netbox_delete_candidates=(
                     self.include_all_netbox_delete_candidates.isChecked()
-                )
+                ),
+                default_device_role_name=self.default_device_role_name.text().strip(),
             )
             save_connections(self.path, netbox, unifi, behavior)
         except ConfigError as error:

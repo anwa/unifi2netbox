@@ -99,11 +99,19 @@ class UniFiConfig(NetBoxConfig):
 @dataclass(frozen=True)
 class BehaviorConfig:
     include_all_netbox_delete_candidates: bool = False
+    default_device_role_name: str = ""
 
     def __post_init__(self) -> None:
         if type(self.include_all_netbox_delete_candidates) is not bool:
             raise ConfigError(
                 "Delete-candidate scope must be enabled or disabled explicitly."
+            )
+        if not isinstance(self.default_device_role_name, str) or any(
+            ord(character) < 32 for character in self.default_device_role_name
+        ):
+            raise ConfigError(
+                "Default device role name must be a string without control "
+                "characters."
             )
 
 

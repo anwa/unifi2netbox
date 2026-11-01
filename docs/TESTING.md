@@ -292,6 +292,27 @@ python -m pytest -q tests/test_write_readback.py
 
 This slice remains fully offline and uses synthetic fixtures only.
 
+## M5 Write-Executor Contracts
+
+The next M5 micro-slice adds a service-level NetBox write executor for
+create/update operations with immutable journal outcomes and a dry-run mode.
+
+The focused tests validate that:
+
+- matched update operations produce deterministic NetBox patch payloads,
+- create execution requires an explicit default NetBox device role setting,
+- create execution succeeds with resolvable site/role/device-type references,
+- dry-run execution records skipped outcomes without backend writes,
+- mixed create/update runs continue and record partial failures per operation.
+
+Run the focused executor checks:
+
+```powershell
+python -m pytest -q tests/test_write_execute.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

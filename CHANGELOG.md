@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.21
+
+### Added
+
+- Add a service-level NetBox write executor for device create/update operations
+	with immutable journal outcomes and optional dry-run mode.
+- Add behavior setting `default_device_role_name` to support create execution
+	with explicit NetBox role resolution.
+
+### Validation
+
+- Added focused executor/config/GUI tests:
+	`tests/test_write_execute.py`, `tests/test_unifi_config.py`,
+	`tests/test_gui.py`.
+
 ### Added
 
 - Extend M5 offline contract coverage for write-plan/read-back behavior:
