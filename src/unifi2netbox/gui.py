@@ -96,6 +96,7 @@ class InventoryPreviewResult:
     detail_lines: tuple[str, ...] = ()
     rows: tuple[InventoryPreviewRow, ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
+    netbox_sites: tuple[str, ...] = ()
     difference_preview: DifferencePreview | None = None
     write_plan: WritePlan | None = None
 
@@ -237,6 +238,15 @@ class InventoryPreviewJob(QRunnable):
                             }
                         )
                     ),
+                    netbox_sites=tuple(
+                        sorted(
+                            {
+                                item.name.strip()
+                                for item in netbox_snapshot.sites
+                                if item.name.strip()
+                            }
+                        )
+                    ),
                     difference_preview=diff,
                     write_plan=plan,
                 )
@@ -268,6 +278,7 @@ class WriteExecutionJob(QRunnable):
         difference_preview: DifferencePreview,
         write_plan: WritePlan,
         role_overrides: dict[str, str],
+        site_overrides: dict[str, str],
         *,
         dry_run: bool,
     ) -> None:
@@ -277,6 +288,7 @@ class WriteExecutionJob(QRunnable):
         self.difference_preview = difference_preview
         self.write_plan = write_plan
         self.role_overrides = role_overrides
+        self.site_overrides = site_overrides
         self.dry_run = dry_run
         self.signals = WriteExecutionSignals()
 
@@ -294,6 +306,7 @@ class WriteExecutionJob(QRunnable):
                 finished_at=datetime.now().astimezone().isoformat(timespec="seconds"),
                 dry_run=self.dry_run,
                 role_overrides=self.role_overrides,
+                site_overrides=self.site_overrides,
             )
             summary = summarize_journal(result.journal)
             details = (
@@ -343,6 +356,7 @@ class WriteExecutionRunner(QObject):
         difference_preview: DifferencePreview,
         write_plan: WritePlan,
         role_overrides: dict[str, str],
+        site_overrides: dict[str, str],
         *,
         dry_run: bool,
     ) -> bool:
@@ -354,6 +368,7 @@ class WriteExecutionRunner(QObject):
             difference_preview,
             write_plan,
             role_overrides,
+            site_overrides,
             dry_run=dry_run,
         )
         self.job.signals.finished.connect(self._finished)
@@ -1103,7 +1118,9 @@ class MainWindow(QMainWindow):
         self.preview_detail_text = plain_label("No preview details yet.")
         self.preview_rows: tuple[InventoryPreviewRow, ...] = ()
         self.netbox_device_roles: tuple[str, ...] = ()
+        self.netbox_sites: tuple[str, ...] = ()
         self.create_role_by_device_key: dict[str, str] = {}
+        self.create_site_by_device_key: dict[str, str] = {}
         self.preview_rows_dialog: QDialog | None = None
         self.copy_selected_button = QPushButton("Copy selected", self)
         self.copy_selected_button.clicked.connect(self.copy_selected_highlight)
@@ -1220,11 +1237,31 @@ class MainWindow(QMainWindow):
         self.preview_checked_at.setText(result.last_updated or "Not available")
         self.preview_rows = result.rows
         self.netbox_device_roles = result.netbox_device_roles
+        self.netbox_sites = result.netbox_sites
         self.create_role_by_device_key = {}
+        self.create_site_by_device_key = {}
+        source_site_by_key: dict[str, str] = {}
+        if result.difference_preview is not None:
+            for device in result.difference_preview.devices:
+                site_value = next(
+                    (
+                        field.source_value.strip()
+                        for field in device.fields
+                        if field.name == "site" and field.source_value.strip()
+                    ),
+                    "",
+                )
+                if site_value:
+                    source_site_by_key[device.device_key] = site_value
         default_role = self.behavior.default_device_role_name.strip()
         for row in self.preview_rows:
             if row.action != "create":
                 continue
+            default_site = source_site_by_key.get(row.device_key, "")
+            if default_site and default_site in self.netbox_sites:
+                self.create_site_by_device_key[row.device_key] = default_site
+            elif self.netbox_sites:
+                self.create_site_by_device_key[row.device_key] = self.netbox_sites[0]
             if default_role and default_role in self.netbox_device_roles:
                 self.create_role_by_device_key[row.device_key] = default_role
             elif self.netbox_device_roles:
@@ -1290,6 +1327,7 @@ class MainWindow(QMainWindow):
             self.current_difference_preview,
             self.current_write_plan,
             self._create_role_overrides(self.current_write_plan),
+            self._create_site_overrides(self.current_write_plan),
             dry_run=self.dry_run_only.isChecked(),
         )
         self.update_check_action()
@@ -1336,6 +1374,7 @@ class MainWindow(QMainWindow):
             self.current_difference_preview,
             single_plan,
             self._create_role_overrides(single_plan),
+            self._create_site_overrides(single_plan),
             dry_run=self.dry_run_only.isChecked(),
         )
         self.update_check_action()
@@ -1422,7 +1461,7 @@ class MainWindow(QMainWindow):
         table.setObjectName("preview_rows_table")
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        table.setColumnCount(9)
+        table.setColumnCount(10)
         table.setHorizontalHeaderLabels(
             [
                 "Device key",
@@ -1431,6 +1470,7 @@ class MainWindow(QMainWindow):
                 "Target",
                 "Selected fields",
                 "Executable",
+                "Device site",
                 "Device role",
                 "Reason",
                 "Suggested Device Types",
@@ -1455,12 +1495,33 @@ class MainWindow(QMainWindow):
                 table.setItem(row_index, 3, QTableWidgetItem(row.target_label))
                 table.setItem(row_index, 4, QTableWidgetItem(row.selected_fields))
                 table.setItem(row_index, 5, QTableWidgetItem(row.executable))
-                table.setItem(row_index, 7, QTableWidgetItem(row.blocked_reason))
+                table.setItem(row_index, 8, QTableWidgetItem(row.blocked_reason))
                 table.setItem(
-                    row_index, 8, QTableWidgetItem(row.suggested_device_types)
+                    row_index, 9, QTableWidgetItem(row.suggested_device_types)
                 )
 
                 if row.action == "create":
+                    site_combo = QComboBox(table)
+                    if self.netbox_sites:
+                        for site_name in self.netbox_sites:
+                            site_combo.addItem(site_name)
+                        selected_site = self.create_site_by_device_key.get(
+                            row.device_key, self.netbox_sites[0]
+                        )
+                        if selected_site not in self.netbox_sites:
+                            selected_site = self.netbox_sites[0]
+                        self.create_site_by_device_key[row.device_key] = selected_site
+                        site_combo.setCurrentText(selected_site)
+                        site_combo.currentTextChanged.connect(
+                            lambda site, key=row.device_key: self._set_create_site(
+                                key, site
+                            )
+                        )
+                    else:
+                        site_combo.addItem("No sites available")
+                        site_combo.setEnabled(False)
+                    table.setCellWidget(row_index, 6, site_combo)
+
                     role_combo = QComboBox(table)
                     if self.netbox_device_roles:
                         for role_name in self.netbox_device_roles:
@@ -1480,9 +1541,10 @@ class MainWindow(QMainWindow):
                     else:
                         role_combo.addItem("No roles available")
                         role_combo.setEnabled(False)
-                    table.setCellWidget(row_index, 6, role_combo)
+                    table.setCellWidget(row_index, 7, role_combo)
                 else:
                     table.setItem(row_index, 6, QTableWidgetItem(""))
+                    table.setItem(row_index, 7, QTableWidgetItem(""))
             table.resizeColumnsToContents()
             if visible_rows and table.currentRow() < 0:
                 table.setCurrentCell(0, 0)
@@ -1507,7 +1569,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Selected preview row is invalid.")
                 return
             if executable_item.text() != "Yes":
-                reason_item = table.item(row_index, 7)
+                reason_item = table.item(row_index, 8)
                 reason = (
                     reason_item.text()
                     if reason_item is not None and reason_item.text().strip()
@@ -1581,8 +1643,23 @@ class MainWindow(QMainWindow):
             if key in create_keys and role.strip()
         }
 
+    def _create_site_overrides(self, write_plan: WritePlan) -> dict[str, str]:
+        create_keys = {
+            operation.device_key
+            for operation in write_plan.operations
+            if operation.operation_type == OperationType.CREATE_DEVICE
+        }
+        return {
+            key: site
+            for key, site in self.create_site_by_device_key.items()
+            if key in create_keys and site.strip()
+        }
+
     def _set_create_role(self, device_key: str, role_name: str) -> None:
         self.create_role_by_device_key[device_key] = role_name.strip()
+
+    def _set_create_site(self, device_key: str, site_name: str) -> None:
+        self.create_site_by_device_key[device_key] = site_name.strip()
 
 
 def _single_operation_plan(write_plan: WritePlan, device_key: str) -> WritePlan | None:

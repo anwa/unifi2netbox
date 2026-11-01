@@ -49,6 +49,7 @@ def execute_write_plan(
     finished_at: str,
     dry_run: bool = False,
     role_overrides: dict[str, str] | None = None,
+    site_overrides: dict[str, str] | None = None,
     backend: NetBoxWriteBackend | None = None,
 ) -> WriteExecutionResult:
     journal = initialize_journal(write_plan, run_id=run_id, started_at=started_at)
@@ -60,6 +61,7 @@ def execute_write_plan(
     device_by_key = {item.device_key: item for item in difference_preview.devices}
     resolved_backend = backend or RequestsNetBoxWriteBackend(netbox)
     resolved_role_overrides = role_overrides or {}
+    resolved_site_overrides = site_overrides or {}
 
     for operation in write_plan.operations:
         device = device_by_key.get(operation.device_key)
@@ -79,6 +81,9 @@ def execute_write_plan(
                 behavior,
                 resolved_backend,
                 role_name_override=resolved_role_overrides.get(
+                    operation.device_key, ""
+                ),
+                site_name_override=resolved_site_overrides.get(
                     operation.device_key, ""
                 ),
             )
@@ -147,6 +152,7 @@ def _build_payload(
     backend: NetBoxWriteBackend,
     *,
     role_name_override: str = "",
+    site_name_override: str = "",
 ) -> dict[str, object]:
     source_values = {
         field.name: field.source_value.strip()
@@ -183,9 +189,10 @@ def _build_payload(
             raise WriteExecutionError(
                 "Create requires a default NetBox device role in settings."
             )
+        site_name = site_name_override.strip() or source_values.get("site", "")
         required = {
             "name": source_values.get("name", ""),
-            "site": source_values.get("site", ""),
+            "site": site_name,
             "manufacturer": source_values.get("manufacturer", ""),
             "model": source_values.get("model", ""),
         }

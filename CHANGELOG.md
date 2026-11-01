@@ -6,6 +6,25 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.28
+
+### Added
+
+- Read NetBox sites from `dcim/sites` during inventory refresh and persist
+	them in snapshot state.
+- Add a per-row `Device site` dropdown for create rows in `Show all rows`,
+	populated from the current NetBox site catalog.
+
+### Changed
+
+- Use the selected row site for create execution as an explicit override;
+	fallback to the preview source site when no row-specific site is set.
+
+### Validation
+
+- Extended inventory, GUI and write-execution tests for site ingestion,
+	row-level site selection and create-site override execution.
+
 ## v0.3.27
 
 ### Added

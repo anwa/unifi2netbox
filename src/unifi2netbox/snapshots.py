@@ -8,6 +8,7 @@ from unifi2netbox.inventory import (
     InventoryDevice,
     InventoryDeviceRole,
     InventoryDeviceType,
+    InventorySite,
     InventorySnapshot,
     InventorySource,
 )
@@ -119,6 +120,7 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "devices": [asdict(device) for device in snapshot.devices],
         "device_types": [asdict(item) for item in snapshot.device_types],
         "device_roles": [asdict(item) for item in snapshot.device_roles],
+        "sites": [asdict(item) for item in snapshot.sites],
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -142,6 +144,9 @@ def _decode(raw: str) -> InventorySnapshot:
         isinstance(item, dict) for item in device_roles
     ):
         raise ValueError
+    sites = payload.get("sites", [])
+    if not isinstance(sites, list) or not all(isinstance(item, dict) for item in sites):
+        raise ValueError
     return InventorySnapshot(
         source=InventorySource(payload["source"]),
         captured_at=str(payload["captured_at"]),
@@ -150,4 +155,5 @@ def _decode(raw: str) -> InventorySnapshot:
         devices=tuple(InventoryDevice(**item) for item in devices),
         device_types=tuple(InventoryDeviceType(**item) for item in device_types),
         device_roles=tuple(InventoryDeviceRole(**item) for item in device_roles),
+        sites=tuple(InventorySite(**item) for item in sites),
     )

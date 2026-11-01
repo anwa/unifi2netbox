@@ -122,6 +122,24 @@ def netbox_transport(monkeypatch):
                 "results": [{"id": 202, "name": "Wireless"}],
             },
         ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": "https://netbox.invalid/api/dcim/sites/?limit=1&offset=1",
+                "previous": None,
+                "results": [{"id": 301, "name": "HQ"}],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": None,
+                "previous": "https://netbox.invalid/api/dcim/sites/?limit=1&offset=0",
+                "results": [{"id": 302, "name": "Branch"}],
+            },
+        ),
     ]
 
     def send(session, request, **kwargs):
@@ -228,6 +246,9 @@ def test_netbox_inventory_is_paginated_and_normalized(netbox_transport):
     assert [item.source_id for item in snapshot.device_roles] == ["201", "202"]
     assert snapshot.device_roles[0].name == "Network Device"
     assert snapshot.device_roles[1].name == "Wireless"
+    assert [item.source_id for item in snapshot.sites] == ["301", "302"]
+    assert snapshot.sites[0].name == "HQ"
+    assert snapshot.sites[1].name == "Branch"
 
     for request, options in calls:
         assert request.method == "GET"
