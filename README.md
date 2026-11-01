@@ -77,6 +77,10 @@ writes.
 If that choices endpoint is unavailable for a restricted/read-only token,
 status values are inferred from observed NetBox device rows so refresh remains
 successful and the selector can still be populated from existing statuses.
+Create rows also expose a `Device type` dropdown in `Show all rows`, fed from
+the NetBox device-type catalog with explicit IDs. Choosing one passes that
+exact type ID into create execution and avoids ambiguous manufacturer/model
+lookups.
 The rows dialog regression that could hide all row hits after filtering has
 been fixed.
 Matching now runs in passes: confirmed mappings first, then ranked candidate

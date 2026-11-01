@@ -51,6 +51,7 @@ def execute_write_plan(
     role_overrides: dict[str, str] | None = None,
     site_overrides: dict[str, str] | None = None,
     status_overrides: dict[str, str] | None = None,
+    device_type_overrides: dict[str, str] | None = None,
     backend: NetBoxWriteBackend | None = None,
 ) -> WriteExecutionResult:
     journal = initialize_journal(write_plan, run_id=run_id, started_at=started_at)
@@ -64,6 +65,7 @@ def execute_write_plan(
     resolved_role_overrides = role_overrides or {}
     resolved_site_overrides = site_overrides or {}
     resolved_status_overrides = status_overrides or {}
+    resolved_device_type_overrides = device_type_overrides or {}
 
     for operation in write_plan.operations:
         device = device_by_key.get(operation.device_key)
@@ -89,6 +91,9 @@ def execute_write_plan(
                     operation.device_key, ""
                 ),
                 status_value_override=resolved_status_overrides.get(
+                    operation.device_key, ""
+                ),
+                device_type_id_override=resolved_device_type_overrides.get(
                     operation.device_key, ""
                 ),
             )
@@ -159,6 +164,7 @@ def _build_payload(
     role_name_override: str = "",
     site_name_override: str = "",
     status_value_override: str = "",
+    device_type_id_override: str = "",
 ) -> dict[str, object]:
     source_values = {
         field.name: field.source_value.strip()
@@ -208,12 +214,17 @@ def _build_payload(
                 "Create is missing required fields: " + ", ".join(sorted(missing)) + "."
             )
 
+        selected_device_type_id = device_type_id_override.strip()
         payload = {
             "name": required["name"],
             "site": backend.resolve_site_id(required["site"]),
             "device_role": backend.resolve_role_id(role_name),
-            "device_type": backend.resolve_device_type_id(
-                required["manufacturer"], required["model"]
+            "device_type": (
+                selected_device_type_id
+                if selected_device_type_id
+                else backend.resolve_device_type_id(
+                    required["manufacturer"], required["model"]
+                )
             ),
         }
         status_value = status_value_override.strip()

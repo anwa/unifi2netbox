@@ -6,6 +6,24 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.31
+
+### Added
+
+- Add a per-row `Device type` dropdown for create rows in `Show all rows`,
+	sourced from the current NetBox device-type catalog and including type IDs.
+
+### Changed
+
+- Create execution now accepts row-level device-type ID overrides; selected
+	values are written directly into the create payload and bypass ambiguous
+	manufacturer/model auto-resolution.
+
+### Validation
+
+- Extended GUI and write-execution tests for device-type dropdown rendering and
+	create execution with explicit device-type ID overrides.
+
 ## v0.3.30
 
 ### Changed

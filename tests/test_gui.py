@@ -582,6 +582,7 @@ def test_execute_write_plan_starts_runner_after_confirmation(
         role_overrides,
         site_overrides,
         status_overrides,
+        device_type_overrides,
         *,
         dry_run,
     ):
@@ -591,6 +592,7 @@ def test_execute_write_plan_starts_runner_after_confirmation(
         started["role_overrides"] = role_overrides
         started["site_overrides"] = site_overrides
         started["status_overrides"] = status_overrides
+        started["device_type_overrides"] = device_type_overrides
         return True
 
     monkeypatch.setattr(window.write_runner, "start", fake_start)
@@ -604,6 +606,7 @@ def test_execute_write_plan_starts_runner_after_confirmation(
     assert isinstance(started["role_overrides"], dict)
     assert isinstance(started["site_overrides"], dict)
     assert isinstance(started["status_overrides"], dict)
+    assert isinstance(started["device_type_overrides"], dict)
 
 
 def test_write_execution_finished_updates_preview_details(qtbot, tmp_path, pool):
@@ -811,7 +814,7 @@ def test_inventory_preview_rows_dialog_shows_blocked_reason(qtbot, tmp_path, poo
     assert table is not None
     assert table.rowCount() == 1
     assert table.item(0, 5).text() == "No"
-    assert "create_required_identity" in table.item(0, 9).text()
+    assert "create_required_identity" in table.item(0, 10).text()
     window.preview_rows_dialog.close()
 
 
@@ -872,7 +875,7 @@ def test_inventory_preview_rows_dialog_shows_create_device_type_suggestions(
     table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
     assert table is not None
     assert table.rowCount() == 1
-    assert "Ubiquiti USW-Pro-24" in table.item(0, 10).text()
+    assert "Ubiquiti USW-Pro-24" in table.item(0, 11).text()
     window.preview_rows_dialog.close()
 
 
@@ -897,6 +900,7 @@ def test_inventory_preview_rows_dialog_shows_role_dropdown_for_create_rows(
                     executable="Yes",
                 ),
             ),
+            netbox_device_types=(("101", "Ubiquiti", "USW-Pro-24"),),
             netbox_device_statuses=("active", "planned"),
             netbox_device_roles=("Network Device", "Wireless"),
             netbox_sites=("HQ", "Branch"),
@@ -925,6 +929,12 @@ def test_inventory_preview_rows_dialog_shows_role_dropdown_for_create_rows(
     assert role_widget.count() == 2
     assert role_widget.itemText(0) == "Network Device"
     assert role_widget.itemText(1) == "Wireless"
+
+    type_widget = table.cellWidget(0, 9)
+    assert isinstance(type_widget, QComboBox)
+    assert type_widget.count() == 2
+    assert type_widget.itemData(1) == "101"
+    assert "Ubiquiti USW-Pro-24" in type_widget.itemText(1)
     window.preview_rows_dialog.close()
 
 
@@ -976,6 +986,7 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
         role_overrides,
         site_overrides,
         status_overrides,
+        device_type_overrides,
         *,
         dry_run,
     ):
@@ -985,6 +996,7 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
         started["role_overrides"] = role_overrides
         started["site_overrides"] = site_overrides
         started["status_overrides"] = status_overrides
+        started["device_type_overrides"] = device_type_overrides
         return True
 
     monkeypatch.setattr(window.write_runner, "start", fake_start)
@@ -1008,6 +1020,7 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
     assert isinstance(started["role_overrides"], dict)
     assert isinstance(started["site_overrides"], dict)
     assert isinstance(started["status_overrides"], dict)
+    assert isinstance(started["device_type_overrides"], dict)
     window.preview_rows_dialog.close()
 
 

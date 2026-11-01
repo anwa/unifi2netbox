@@ -95,6 +95,7 @@ class InventoryPreviewResult:
     last_updated: str = ""
     detail_lines: tuple[str, ...] = ()
     rows: tuple[InventoryPreviewRow, ...] = ()
+    netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
     netbox_sites: tuple[str, ...] = ()
     netbox_device_statuses: tuple[str, ...] = ()
@@ -230,6 +231,26 @@ class InventoryPreviewJob(QRunnable):
                         unifi_device_count=len(unifi_snapshot.devices),
                     ),
                     rows=_preview_rows(diff, change, plan, suggestions=suggestions),
+                    netbox_device_types=tuple(
+                        sorted(
+                            {
+                                (
+                                    item.source_id.strip(),
+                                    item.manufacturer.strip(),
+                                    item.model.strip(),
+                                )
+                                for item in netbox_snapshot.device_types
+                                if item.source_id.strip()
+                                and item.manufacturer.strip()
+                                and item.model.strip()
+                            },
+                            key=lambda value: (
+                                value[1].lower(),
+                                value[2].lower(),
+                                value[0],
+                            ),
+                        )
+                    ),
                     netbox_device_roles=tuple(
                         sorted(
                             {
@@ -286,6 +307,7 @@ class WriteExecutionJob(QRunnable):
         role_overrides: dict[str, str],
         site_overrides: dict[str, str],
         status_overrides: dict[str, str],
+        device_type_overrides: dict[str, str],
         *,
         dry_run: bool,
     ) -> None:
@@ -297,6 +319,7 @@ class WriteExecutionJob(QRunnable):
         self.role_overrides = role_overrides
         self.site_overrides = site_overrides
         self.status_overrides = status_overrides
+        self.device_type_overrides = device_type_overrides
         self.dry_run = dry_run
         self.signals = WriteExecutionSignals()
 
@@ -316,6 +339,7 @@ class WriteExecutionJob(QRunnable):
                 role_overrides=self.role_overrides,
                 site_overrides=self.site_overrides,
                 status_overrides=self.status_overrides,
+                device_type_overrides=self.device_type_overrides,
             )
             summary = summarize_journal(result.journal)
             details = (
@@ -367,6 +391,7 @@ class WriteExecutionRunner(QObject):
         role_overrides: dict[str, str],
         site_overrides: dict[str, str],
         status_overrides: dict[str, str],
+        device_type_overrides: dict[str, str],
         *,
         dry_run: bool,
     ) -> bool:
@@ -380,6 +405,7 @@ class WriteExecutionRunner(QObject):
             role_overrides,
             site_overrides,
             status_overrides,
+            device_type_overrides,
             dry_run=dry_run,
         )
         self.job.signals.finished.connect(self._finished)
@@ -1128,9 +1154,11 @@ class MainWindow(QMainWindow):
         self.preview_detail_list.currentItemChanged.connect(self.preview_detail_changed)
         self.preview_detail_text = plain_label("No preview details yet.")
         self.preview_rows: tuple[InventoryPreviewRow, ...] = ()
+        self.netbox_device_types: tuple[tuple[str, str, str], ...] = ()
         self.netbox_device_statuses: tuple[str, ...] = ()
         self.netbox_device_roles: tuple[str, ...] = ()
         self.netbox_sites: tuple[str, ...] = ()
+        self.create_device_type_by_device_key: dict[str, str] = {}
         self.create_status_by_device_key: dict[str, str] = {}
         self.create_role_by_device_key: dict[str, str] = {}
         self.create_site_by_device_key: dict[str, str] = {}
@@ -1249,13 +1277,16 @@ class MainWindow(QMainWindow):
         )
         self.preview_checked_at.setText(result.last_updated or "Not available")
         self.preview_rows = result.rows
+        self.netbox_device_types = result.netbox_device_types
         self.netbox_device_statuses = result.netbox_device_statuses
         self.netbox_device_roles = result.netbox_device_roles
         self.netbox_sites = result.netbox_sites
+        self.create_device_type_by_device_key = {}
         self.create_status_by_device_key = {}
         self.create_role_by_device_key = {}
         self.create_site_by_device_key = {}
         source_site_by_key: dict[str, str] = {}
+        source_type_by_key: dict[str, tuple[str, str]] = {}
         if result.difference_preview is not None:
             for device in result.difference_preview.devices:
                 site_value = next(
@@ -1268,10 +1299,40 @@ class MainWindow(QMainWindow):
                 )
                 if site_value:
                     source_site_by_key[device.device_key] = site_value
+                manufacturer = next(
+                    (
+                        field.source_value.strip()
+                        for field in device.fields
+                        if field.name == "manufacturer" and field.source_value.strip()
+                    ),
+                    "",
+                )
+                model = next(
+                    (
+                        field.source_value.strip()
+                        for field in device.fields
+                        if field.name == "model" and field.source_value.strip()
+                    ),
+                    "",
+                )
+                if manufacturer and model:
+                    source_type_by_key[device.device_key] = (manufacturer, model)
+
+        type_ids_by_name: dict[tuple[str, str], list[str]] = {}
+        for type_id, manufacturer, model in self.netbox_device_types:
+            key = (manufacturer.strip().lower(), model.strip().lower())
+            type_ids_by_name.setdefault(key, []).append(type_id)
+
         default_role = self.behavior.default_device_role_name.strip()
         for row in self.preview_rows:
             if row.action != "create":
                 continue
+            source_type = source_type_by_key.get(row.device_key)
+            if source_type is not None:
+                type_key = (source_type[0].lower(), source_type[1].lower())
+                type_ids = type_ids_by_name.get(type_key, [])
+                if len(type_ids) == 1:
+                    self.create_device_type_by_device_key[row.device_key] = type_ids[0]
             if "active" in self.netbox_device_statuses:
                 self.create_status_by_device_key[row.device_key] = "active"
             elif self.netbox_device_statuses:
@@ -1350,6 +1411,7 @@ class MainWindow(QMainWindow):
             self._create_role_overrides(self.current_write_plan),
             self._create_site_overrides(self.current_write_plan),
             self._create_status_overrides(self.current_write_plan),
+            self._create_device_type_overrides(self.current_write_plan),
             dry_run=self.dry_run_only.isChecked(),
         )
         self.update_check_action()
@@ -1398,6 +1460,7 @@ class MainWindow(QMainWindow):
             self._create_role_overrides(single_plan),
             self._create_site_overrides(single_plan),
             self._create_status_overrides(single_plan),
+            self._create_device_type_overrides(single_plan),
             dry_run=self.dry_run_only.isChecked(),
         )
         self.update_check_action()
@@ -1484,7 +1547,7 @@ class MainWindow(QMainWindow):
         table.setObjectName("preview_rows_table")
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        table.setColumnCount(11)
+        table.setColumnCount(12)
         table.setHorizontalHeaderLabels(
             [
                 "Device key",
@@ -1496,6 +1559,7 @@ class MainWindow(QMainWindow):
                 "Device status",
                 "Device site",
                 "Device role",
+                "Device type",
                 "Reason",
                 "Suggested Device Types",
             ]
@@ -1519,9 +1583,9 @@ class MainWindow(QMainWindow):
                 table.setItem(row_index, 3, QTableWidgetItem(row.target_label))
                 table.setItem(row_index, 4, QTableWidgetItem(row.selected_fields))
                 table.setItem(row_index, 5, QTableWidgetItem(row.executable))
-                table.setItem(row_index, 9, QTableWidgetItem(row.blocked_reason))
+                table.setItem(row_index, 10, QTableWidgetItem(row.blocked_reason))
                 table.setItem(
-                    row_index, 10, QTableWidgetItem(row.suggested_device_types)
+                    row_index, 11, QTableWidgetItem(row.suggested_device_types)
                 )
 
                 if row.action == "create":
@@ -1589,10 +1653,46 @@ class MainWindow(QMainWindow):
                         role_combo.addItem("No roles available")
                         role_combo.setEnabled(False)
                     table.setCellWidget(row_index, 8, role_combo)
+
+                    type_combo = QComboBox(table)
+                    if self.netbox_device_types:
+                        type_combo.addItem("Auto-resolve from source", "")
+                        for type_id, manufacturer, model in self.netbox_device_types:
+                            type_combo.addItem(
+                                f"{manufacturer} {model} [id:{type_id}]", type_id
+                            )
+                        selected_type_id = self.create_device_type_by_device_key.get(
+                            row.device_key, ""
+                        )
+                        selected_index = type_combo.findData(selected_type_id)
+                        if selected_index < 0:
+                            selected_index = 0
+                            self.create_device_type_by_device_key.pop(
+                                row.device_key, None
+                            )
+                        type_combo.setCurrentIndex(selected_index)
+
+                        def _on_type_changed(
+                            _index: int,
+                            *,
+                            combo: QComboBox = type_combo,
+                            key: str = row.device_key,
+                        ) -> None:
+                            self._set_create_device_type(
+                                key,
+                                str(combo.currentData() or ""),
+                            )
+
+                        type_combo.currentIndexChanged.connect(_on_type_changed)
+                    else:
+                        type_combo.addItem("No device types available", "")
+                        type_combo.setEnabled(False)
+                    table.setCellWidget(row_index, 9, type_combo)
                 else:
                     table.setItem(row_index, 6, QTableWidgetItem(""))
                     table.setItem(row_index, 7, QTableWidgetItem(""))
                     table.setItem(row_index, 8, QTableWidgetItem(""))
+                    table.setItem(row_index, 9, QTableWidgetItem(""))
             table.resizeColumnsToContents()
             if visible_rows and table.currentRow() < 0:
                 table.setCurrentCell(0, 0)
@@ -1617,7 +1717,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Selected preview row is invalid.")
                 return
             if executable_item.text() != "Yes":
-                reason_item = table.item(row_index, 9)
+                reason_item = table.item(row_index, 10)
                 reason = (
                     reason_item.text()
                     if reason_item is not None and reason_item.text().strip()
@@ -1715,6 +1815,18 @@ class MainWindow(QMainWindow):
             if key in create_keys and status.strip()
         }
 
+    def _create_device_type_overrides(self, write_plan: WritePlan) -> dict[str, str]:
+        create_keys = {
+            operation.device_key
+            for operation in write_plan.operations
+            if operation.operation_type == OperationType.CREATE_DEVICE
+        }
+        return {
+            key: device_type_id
+            for key, device_type_id in self.create_device_type_by_device_key.items()
+            if key in create_keys and device_type_id.strip()
+        }
+
     def _set_create_role(self, device_key: str, role_name: str) -> None:
         self.create_role_by_device_key[device_key] = role_name.strip()
 
@@ -1723,6 +1835,13 @@ class MainWindow(QMainWindow):
 
     def _set_create_status(self, device_key: str, status_value: str) -> None:
         self.create_status_by_device_key[device_key] = status_value.strip()
+
+    def _set_create_device_type(self, device_key: str, device_type_id: str) -> None:
+        value = device_type_id.strip()
+        if value:
+            self.create_device_type_by_device_key[device_key] = value
+        else:
+            self.create_device_type_by_device_key.pop(device_key, None)
 
 
 def _single_operation_plan(write_plan: WritePlan, device_key: str) -> WritePlan | None:
