@@ -13,7 +13,7 @@ from unifi2netbox.config import (
     save_unifi_config,
 )
 from unifi2netbox.connections import ConnectionRunner
-from unifi2netbox.gui import MainWindow, SettingsDialog
+from unifi2netbox.gui import InventoryPreviewResult, MainWindow, SettingsDialog
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
 
 
@@ -398,6 +398,45 @@ def test_close_waits_for_both_connection_workers(qtbot, tmp_path, pool):
     qtbot.waitUntil(lambda: not window.isVisible())
 
 
+def test_inventory_preview_requires_configured_connections(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.refresh_inventory_preview()
+
+    assert window.preview_status.text() == "Unconfigured"
+    assert "Configure NetBox and UniFi Network" in window.preview_plan.text()
+
+
+def test_inventory_preview_finished_updates_visible_summary(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            netbox_devices=12,
+            unifi_devices=10,
+            matched_devices=8,
+            unmatched_unifi=2,
+            unmatched_netbox=4,
+            conflicts=1,
+            preview_rows=6,
+            executable_operations=5,
+            last_updated="2026-11-01T14:00:00+00:00",
+        )
+    )
+
+    assert window.preview_status.text() == "Ready"
+    assert "NetBox: 12 | UniFi: 10" in window.preview_counts.text()
+    assert "Matched: 8" in window.preview_matches.text()
+    assert "Executable operations: 5" in window.preview_plan.text()
+    assert window.preview_checked_at.text() == "2026-11-01T14:00:00+00:00"
+
+
 def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
     checked = []
 
@@ -420,6 +459,7 @@ def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
     toolbar = window.findChild(QToolBar)
     assert [action.text() for action in toolbar.actions()] == [
         "Check Connections",
+        "Refresh Inventory Preview",
         "Settings",
     ]
     window.check_action.trigger()

@@ -1,9 +1,9 @@
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -35,7 +35,152 @@ from unifi2netbox.config import (
     save_connections,
 )
 from unifi2netbox.connections import Checker, ConnectionRunner, check_unifi_connection
+from unifi2netbox.matching import deduplicate_inventory
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
+from unifi2netbox.preview import build_change_preview, build_difference_preview
+from unifi2netbox.refresh import refresh_snapshots
+from unifi2netbox.snapshots import SnapshotStore
+from unifi2netbox.write_plan import build_write_plan
+
+
+@dataclass(frozen=True)
+class InventoryPreviewResult:
+    status: str
+    details: str
+    netbox_devices: int = 0
+    unifi_devices: int = 0
+    matched_devices: int = 0
+    unmatched_unifi: int = 0
+    unmatched_netbox: int = 0
+    conflicts: int = 0
+    preview_rows: int = 0
+    executable_operations: int = 0
+    last_updated: str = ""
+
+
+class InventoryJobSignals(QObject):
+    finished = Signal(object)
+
+
+class InventoryPreviewJob(QRunnable):
+    def __init__(
+        self,
+        config_path: Path,
+        netbox_config: NetBoxConfig,
+        unifi_config: UniFiConfig,
+    ) -> None:
+        super().__init__()
+        self.config_path = config_path
+        self.netbox_config = netbox_config
+        self.unifi_config = unifi_config
+        self.signals = InventoryJobSignals()
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            store = SnapshotStore(self.config_path.with_name("snapshots.sqlite3"))
+            refresh = refresh_snapshots(self.netbox_config, self.unifi_config, store)
+            diagnostics = (*refresh.netbox.diagnostics, *refresh.unifi.diagnostics)
+            message = " ".join(item for item in diagnostics if item)
+            if refresh.netbox.error or refresh.unifi.error:
+                self.signals.finished.emit(
+                    InventoryPreviewResult(
+                        status="Partial",
+                        details=(
+                            message
+                            or "Inventory refresh completed with cached/failed sources."
+                        ),
+                        netbox_devices=(
+                            len(refresh.netbox.snapshot.devices)
+                            if refresh.netbox.snapshot
+                            else 0
+                        ),
+                        unifi_devices=(
+                            len(refresh.unifi.snapshot.devices)
+                            if refresh.unifi.snapshot
+                            else 0
+                        ),
+                        last_updated=refresh.netbox.last_updated
+                        or refresh.unifi.last_updated,
+                    )
+                )
+                return
+
+            netbox_snapshot = refresh.netbox.snapshot
+            unifi_snapshot = refresh.unifi.snapshot
+            if netbox_snapshot is None or unifi_snapshot is None:
+                self.signals.finished.emit(
+                    InventoryPreviewResult(
+                        status="Unavailable",
+                        details=(
+                            message
+                            or "Inventory snapshots are not available for both sources."
+                        ),
+                        last_updated=refresh.netbox.last_updated
+                        or refresh.unifi.last_updated,
+                    )
+                )
+                return
+
+            dedup = deduplicate_inventory(netbox_snapshot, unifi_snapshot)
+            diff = build_difference_preview(netbox_snapshot, unifi_snapshot, dedup)
+            change = build_change_preview(diff)
+            plan = build_write_plan(diff, change)
+
+            self.signals.finished.emit(
+                InventoryPreviewResult(
+                    status="Ready",
+                    details=(
+                        message or "Inventory preview and write-plan summary updated."
+                    ),
+                    netbox_devices=len(netbox_snapshot.devices),
+                    unifi_devices=len(unifi_snapshot.devices),
+                    matched_devices=len(dedup.pairs),
+                    unmatched_unifi=len(dedup.unmatched_unifi),
+                    unmatched_netbox=len(dedup.unmatched_netbox),
+                    conflicts=len(dedup.conflicts),
+                    preview_rows=len(diff.devices),
+                    executable_operations=(
+                        len(plan.operations) if plan.executable else 0
+                    ),
+                    last_updated=refresh.netbox.last_updated
+                    or refresh.unifi.last_updated,
+                )
+            )
+        except Exception:
+            self.signals.finished.emit(
+                InventoryPreviewResult(
+                    status="Error",
+                    details="Inventory preview refresh failed unexpectedly.",
+                )
+            )
+
+
+class InventoryPreviewRunner(QObject):
+    finished = Signal(object)
+
+    def __init__(self, pool: QThreadPool, config_path: Path, parent=None) -> None:
+        super().__init__(parent)
+        self.pool = pool
+        self.config_path = config_path
+        self.job: InventoryPreviewJob | None = None
+
+    @property
+    def busy(self) -> bool:
+        return self.job is not None
+
+    def start(self, netbox: NetBoxConfig, unifi: UniFiConfig) -> bool:
+        if self.busy:
+            return False
+        self.job = InventoryPreviewJob(self.config_path, netbox, unifi)
+        self.job.signals.finished.connect(self._finished)
+        self.pool.start(self.job)
+        return True
+
+    @Slot(object)
+    def _finished(self, result: InventoryPreviewResult) -> None:
+        self.job = None
+        self.finished.emit(result)
 
 
 def plain_label(text: str = "") -> QLabel:
@@ -441,6 +586,8 @@ class MainWindow(QMainWindow):
         self.path = config_path
         self.pool = pool
         self.closing = False
+        self.inventory_runner = InventoryPreviewRunner(pool, config_path, self)
+        self.inventory_runner.finished.connect(self.inventory_preview_finished)
         self.netbox = ConnectionPanel(config_path, pool, checker)
         self.unifi = ConnectionPanel(config_path, pool, unifi_checker, unifi=True)
         self.setWindowTitle(f"unifi2netbox {version('unifi2netbox')}")
@@ -467,10 +614,20 @@ class MainWindow(QMainWindow):
         )
         self.settings_action.setToolTip("Edit NetBox and UniFi Network settings")
         self.settings_action.triggered.connect(self.open_settings)
+        self.preview_action = QAction(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
+            "Refresh Inventory Preview",
+            self,
+        )
+        self.preview_action.setToolTip(
+            "Read both inventories and build the M4/M5 preview summary"
+        )
+        self.preview_action.triggered.connect(self.refresh_inventory_preview)
         toolbar = QToolBar("Connections")
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
         toolbar.addAction(self.check_action)
+        toolbar.addAction(self.preview_action)
         toolbar.addAction(self.settings_action)
         file_menu = self.menuBar().addMenu("File")
         file_menu.addAction(self.settings_action)
@@ -492,6 +649,28 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.netbox)
         layout.addSpacing(24)
         layout.addWidget(self.unifi)
+        layout.addSpacing(24)
+        layout.addWidget(plain_label("Inventory Preview"))
+        preview_grid = QGridLayout()
+        self.preview_status = plain_label("Not refreshed")
+        self.preview_counts = plain_label("NetBox: 0 | UniFi: 0")
+        self.preview_matches = plain_label(
+            "Matched: 0 | Unmatched UniFi: 0 | Unmatched NetBox: 0 | Conflicts: 0"
+        )
+        self.preview_plan = plain_label("Preview rows: 0 | Executable operations: 0")
+        self.preview_checked_at = plain_label("Not refreshed")
+        preview_grid.addWidget(plain_label("Status"), 0, 0)
+        preview_grid.addWidget(self.preview_status, 0, 1)
+        preview_grid.addWidget(plain_label("Counts"), 1, 0)
+        preview_grid.addWidget(self.preview_counts, 1, 1)
+        preview_grid.addWidget(plain_label("Matching"), 2, 0)
+        preview_grid.addWidget(self.preview_matches, 2, 1)
+        preview_grid.addWidget(plain_label("Write plan"), 3, 0)
+        preview_grid.addWidget(self.preview_plan, 3, 1)
+        preview_grid.addWidget(plain_label("Last refresh"), 4, 0)
+        preview_grid.addWidget(self.preview_checked_at, 4, 1)
+        preview_grid.setColumnStretch(1, 1)
+        layout.addLayout(preview_grid)
         layout.addStretch()
         self.setCentralWidget(central)
         self.statusBar().showMessage(f"Configuration: {config_path}")
@@ -529,14 +708,57 @@ class MainWindow(QMainWindow):
         self.netbox.recheck()
         self.unifi.recheck()
 
+    def refresh_inventory_preview(self) -> None:
+        if self.closing or self.inventory_runner.busy:
+            return
+        if not self.netbox.config.configured or not self.unifi.config.configured:
+            self.preview_status.setText("Unconfigured")
+            self.preview_plan.setText(
+                "Configure NetBox and UniFi Network before inventory preview refresh."
+            )
+            return
+        self.preview_status.setText("Refreshing...")
+        self.preview_plan.setText("Collecting inventory snapshots in background...")
+        self.inventory_runner.start(self.netbox.config, self.unifi.config)
+        self.update_check_action()
+
+    def inventory_preview_finished(self, result: InventoryPreviewResult) -> None:
+        self.preview_status.setText(result.status)
+        self.preview_counts.setText(
+            f"NetBox: {result.netbox_devices} | UniFi: {result.unifi_devices}"
+        )
+        self.preview_matches.setText(
+            "Matched: "
+            f"{result.matched_devices} | "
+            f"Unmatched UniFi: {result.unmatched_unifi} | "
+            f"Unmatched NetBox: {result.unmatched_netbox} | "
+            f"Conflicts: {result.conflicts}"
+        )
+        self.preview_plan.setText(
+            f"Preview rows: {result.preview_rows} | "
+            f"Executable operations: {result.executable_operations}"
+            f". {result.details}"
+        )
+        self.preview_checked_at.setText(result.last_updated or "Not available")
+        self.update_check_action()
+
     def update_check_action(self) -> None:
         self.settings_action.setEnabled(not self.closing)
         self.check_action.setEnabled(
             not self.closing and not (self.netbox.runner.busy or self.unifi.runner.busy)
         )
+        self.preview_action.setEnabled(
+            not self.closing
+            and not self.inventory_runner.busy
+            and not (self.netbox.runner.busy or self.unifi.runner.busy)
+        )
 
     def finish_close(self) -> None:
-        if self.closing and not (self.netbox.runner.busy or self.unifi.runner.busy):
+        if self.closing and not (
+            self.netbox.runner.busy
+            or self.unifi.runner.busy
+            or self.inventory_runner.busy
+        ):
             self.close()
 
     def closeEvent(self, event: QCloseEvent) -> None:
@@ -544,7 +766,11 @@ class MainWindow(QMainWindow):
         self.netbox.stop_for_close()
         self.unifi.stop_for_close()
         self.update_check_action()
-        if self.netbox.runner.busy or self.unifi.runner.busy:
+        if (
+            self.netbox.runner.busy
+            or self.unifi.runner.busy
+            or self.inventory_runner.busy
+        ):
             event.ignore()
             return
         super().closeEvent(event)
