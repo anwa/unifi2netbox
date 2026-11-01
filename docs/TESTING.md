@@ -302,6 +302,7 @@ python -m pytest -q tests/test_gui.py
 
 The GUI check includes inventory-preview highlight rendering for sample match,
 conflict and planned-operation lines.
+It also validates interactive highlight selection and detail-field updates.
 
 Default tests block socket connections. API tests exercise the real pynetbox
 request construction against a synthetic requests transport. No infrastructure

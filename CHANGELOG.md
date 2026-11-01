@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.12
+
+### Added
+
+- Replace the inventory preview action icon with a clearer info-style symbol to
+	distinguish it from connection checks.
+- Add a clickable inventory highlight list with a dedicated detail field so
+	users can inspect preview items directly in the main window.
+
+### Validation
+
+- GUI suite passes with interactive highlight selection checks:
+	`tests/test_gui.py`.
+- Ruff checks pass for `gui.py` and GUI tests.
+
 ## v0.3.11
 
 ### Added

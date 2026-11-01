@@ -50,6 +50,8 @@ The main window now also includes a visible Inventory Preview section and a
 "Refresh Inventory Preview" action to surface M4/M5 service summaries.
 Inventory Preview now also shows structured highlight lines for sample matches,
 conflicts and planned write operations.
+Those highlights are now clickable in the main window and show the selected
+entry in a dedicated detail field.
 
 ## Goals
 
