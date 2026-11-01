@@ -50,6 +50,7 @@ def execute_write_plan(
     dry_run: bool = False,
     role_overrides: dict[str, str] | None = None,
     site_overrides: dict[str, str] | None = None,
+    status_overrides: dict[str, str] | None = None,
     backend: NetBoxWriteBackend | None = None,
 ) -> WriteExecutionResult:
     journal = initialize_journal(write_plan, run_id=run_id, started_at=started_at)
@@ -62,6 +63,7 @@ def execute_write_plan(
     resolved_backend = backend or RequestsNetBoxWriteBackend(netbox)
     resolved_role_overrides = role_overrides or {}
     resolved_site_overrides = site_overrides or {}
+    resolved_status_overrides = status_overrides or {}
 
     for operation in write_plan.operations:
         device = device_by_key.get(operation.device_key)
@@ -84,6 +86,9 @@ def execute_write_plan(
                     operation.device_key, ""
                 ),
                 site_name_override=resolved_site_overrides.get(
+                    operation.device_key, ""
+                ),
+                status_value_override=resolved_status_overrides.get(
                     operation.device_key, ""
                 ),
             )
@@ -153,6 +158,7 @@ def _build_payload(
     *,
     role_name_override: str = "",
     site_name_override: str = "",
+    status_value_override: str = "",
 ) -> dict[str, object]:
     source_values = {
         field.name: field.source_value.strip()
@@ -210,6 +216,9 @@ def _build_payload(
                 required["manufacturer"], required["model"]
             ),
         }
+        status_value = status_value_override.strip()
+        if status_value:
+            payload["status"] = status_value
         if "serial" in source_values and source_values["serial"]:
             payload["serial"] = source_values["serial"]
         return payload

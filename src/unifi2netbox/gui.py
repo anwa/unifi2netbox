@@ -97,6 +97,7 @@ class InventoryPreviewResult:
     rows: tuple[InventoryPreviewRow, ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
     netbox_sites: tuple[str, ...] = ()
+    netbox_device_statuses: tuple[str, ...] = ()
     difference_preview: DifferencePreview | None = None
     write_plan: WritePlan | None = None
 
@@ -247,6 +248,11 @@ class InventoryPreviewJob(QRunnable):
                             }
                         )
                     ),
+                    netbox_device_statuses=tuple(
+                        item.value.strip()
+                        for item in netbox_snapshot.device_statuses
+                        if item.value.strip()
+                    ),
                     difference_preview=diff,
                     write_plan=plan,
                 )
@@ -279,6 +285,7 @@ class WriteExecutionJob(QRunnable):
         write_plan: WritePlan,
         role_overrides: dict[str, str],
         site_overrides: dict[str, str],
+        status_overrides: dict[str, str],
         *,
         dry_run: bool,
     ) -> None:
@@ -289,6 +296,7 @@ class WriteExecutionJob(QRunnable):
         self.write_plan = write_plan
         self.role_overrides = role_overrides
         self.site_overrides = site_overrides
+        self.status_overrides = status_overrides
         self.dry_run = dry_run
         self.signals = WriteExecutionSignals()
 
@@ -307,6 +315,7 @@ class WriteExecutionJob(QRunnable):
                 dry_run=self.dry_run,
                 role_overrides=self.role_overrides,
                 site_overrides=self.site_overrides,
+                status_overrides=self.status_overrides,
             )
             summary = summarize_journal(result.journal)
             details = (
@@ -357,6 +366,7 @@ class WriteExecutionRunner(QObject):
         write_plan: WritePlan,
         role_overrides: dict[str, str],
         site_overrides: dict[str, str],
+        status_overrides: dict[str, str],
         *,
         dry_run: bool,
     ) -> bool:
@@ -369,6 +379,7 @@ class WriteExecutionRunner(QObject):
             write_plan,
             role_overrides,
             site_overrides,
+            status_overrides,
             dry_run=dry_run,
         )
         self.job.signals.finished.connect(self._finished)
@@ -1117,8 +1128,10 @@ class MainWindow(QMainWindow):
         self.preview_detail_list.currentItemChanged.connect(self.preview_detail_changed)
         self.preview_detail_text = plain_label("No preview details yet.")
         self.preview_rows: tuple[InventoryPreviewRow, ...] = ()
+        self.netbox_device_statuses: tuple[str, ...] = ()
         self.netbox_device_roles: tuple[str, ...] = ()
         self.netbox_sites: tuple[str, ...] = ()
+        self.create_status_by_device_key: dict[str, str] = {}
         self.create_role_by_device_key: dict[str, str] = {}
         self.create_site_by_device_key: dict[str, str] = {}
         self.preview_rows_dialog: QDialog | None = None
@@ -1236,8 +1249,10 @@ class MainWindow(QMainWindow):
         )
         self.preview_checked_at.setText(result.last_updated or "Not available")
         self.preview_rows = result.rows
+        self.netbox_device_statuses = result.netbox_device_statuses
         self.netbox_device_roles = result.netbox_device_roles
         self.netbox_sites = result.netbox_sites
+        self.create_status_by_device_key = {}
         self.create_role_by_device_key = {}
         self.create_site_by_device_key = {}
         source_site_by_key: dict[str, str] = {}
@@ -1257,6 +1272,12 @@ class MainWindow(QMainWindow):
         for row in self.preview_rows:
             if row.action != "create":
                 continue
+            if "active" in self.netbox_device_statuses:
+                self.create_status_by_device_key[row.device_key] = "active"
+            elif self.netbox_device_statuses:
+                self.create_status_by_device_key[row.device_key] = (
+                    self.netbox_device_statuses[0]
+                )
             default_site = source_site_by_key.get(row.device_key, "")
             if default_site and default_site in self.netbox_sites:
                 self.create_site_by_device_key[row.device_key] = default_site
@@ -1328,6 +1349,7 @@ class MainWindow(QMainWindow):
             self.current_write_plan,
             self._create_role_overrides(self.current_write_plan),
             self._create_site_overrides(self.current_write_plan),
+            self._create_status_overrides(self.current_write_plan),
             dry_run=self.dry_run_only.isChecked(),
         )
         self.update_check_action()
@@ -1375,6 +1397,7 @@ class MainWindow(QMainWindow):
             single_plan,
             self._create_role_overrides(single_plan),
             self._create_site_overrides(single_plan),
+            self._create_status_overrides(single_plan),
             dry_run=self.dry_run_only.isChecked(),
         )
         self.update_check_action()
@@ -1461,7 +1484,7 @@ class MainWindow(QMainWindow):
         table.setObjectName("preview_rows_table")
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        table.setColumnCount(10)
+        table.setColumnCount(11)
         table.setHorizontalHeaderLabels(
             [
                 "Device key",
@@ -1470,6 +1493,7 @@ class MainWindow(QMainWindow):
                 "Target",
                 "Selected fields",
                 "Executable",
+                "Device status",
                 "Device site",
                 "Device role",
                 "Reason",
@@ -1495,12 +1519,35 @@ class MainWindow(QMainWindow):
                 table.setItem(row_index, 3, QTableWidgetItem(row.target_label))
                 table.setItem(row_index, 4, QTableWidgetItem(row.selected_fields))
                 table.setItem(row_index, 5, QTableWidgetItem(row.executable))
-                table.setItem(row_index, 8, QTableWidgetItem(row.blocked_reason))
+                table.setItem(row_index, 9, QTableWidgetItem(row.blocked_reason))
                 table.setItem(
-                    row_index, 9, QTableWidgetItem(row.suggested_device_types)
+                    row_index, 10, QTableWidgetItem(row.suggested_device_types)
                 )
 
                 if row.action == "create":
+                    status_combo = QComboBox(table)
+                    if self.netbox_device_statuses:
+                        for status_value in self.netbox_device_statuses:
+                            status_combo.addItem(status_value)
+                        selected_status = self.create_status_by_device_key.get(
+                            row.device_key, self.netbox_device_statuses[0]
+                        )
+                        if selected_status not in self.netbox_device_statuses:
+                            selected_status = self.netbox_device_statuses[0]
+                        self.create_status_by_device_key[row.device_key] = (
+                            selected_status
+                        )
+                        status_combo.setCurrentText(selected_status)
+                        status_combo.currentTextChanged.connect(
+                            lambda status, key=row.device_key: self._set_create_status(
+                                key, status
+                            )
+                        )
+                    else:
+                        status_combo.addItem("No statuses available")
+                        status_combo.setEnabled(False)
+                    table.setCellWidget(row_index, 6, status_combo)
+
                     site_combo = QComboBox(table)
                     if self.netbox_sites:
                         for site_name in self.netbox_sites:
@@ -1520,7 +1567,7 @@ class MainWindow(QMainWindow):
                     else:
                         site_combo.addItem("No sites available")
                         site_combo.setEnabled(False)
-                    table.setCellWidget(row_index, 6, site_combo)
+                    table.setCellWidget(row_index, 7, site_combo)
 
                     role_combo = QComboBox(table)
                     if self.netbox_device_roles:
@@ -1541,10 +1588,11 @@ class MainWindow(QMainWindow):
                     else:
                         role_combo.addItem("No roles available")
                         role_combo.setEnabled(False)
-                    table.setCellWidget(row_index, 7, role_combo)
+                    table.setCellWidget(row_index, 8, role_combo)
                 else:
                     table.setItem(row_index, 6, QTableWidgetItem(""))
                     table.setItem(row_index, 7, QTableWidgetItem(""))
+                    table.setItem(row_index, 8, QTableWidgetItem(""))
             table.resizeColumnsToContents()
             if visible_rows and table.currentRow() < 0:
                 table.setCurrentCell(0, 0)
@@ -1569,7 +1617,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Selected preview row is invalid.")
                 return
             if executable_item.text() != "Yes":
-                reason_item = table.item(row_index, 8)
+                reason_item = table.item(row_index, 9)
                 reason = (
                     reason_item.text()
                     if reason_item is not None and reason_item.text().strip()
@@ -1655,11 +1703,26 @@ class MainWindow(QMainWindow):
             if key in create_keys and site.strip()
         }
 
+    def _create_status_overrides(self, write_plan: WritePlan) -> dict[str, str]:
+        create_keys = {
+            operation.device_key
+            for operation in write_plan.operations
+            if operation.operation_type == OperationType.CREATE_DEVICE
+        }
+        return {
+            key: status
+            for key, status in self.create_status_by_device_key.items()
+            if key in create_keys and status.strip()
+        }
+
     def _set_create_role(self, device_key: str, role_name: str) -> None:
         self.create_role_by_device_key[device_key] = role_name.strip()
 
     def _set_create_site(self, device_key: str, site_name: str) -> None:
         self.create_site_by_device_key[device_key] = site_name.strip()
+
+    def _set_create_status(self, device_key: str, status_value: str) -> None:
+        self.create_status_by_device_key[device_key] = status_value.strip()
 
 
 def _single_operation_plan(write_plan: WritePlan, device_key: str) -> WritePlan | None:

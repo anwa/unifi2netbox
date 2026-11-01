@@ -325,3 +325,42 @@ def test_execute_write_plan_create_uses_site_override():
     assert len(result.journal.outcomes) == 1
     assert result.journal.outcomes[0].status == OperationOutcomeStatus.SUCCESS
     assert backend.created_payloads[0]["site"] == "11"
+
+
+def test_execute_write_plan_create_uses_status_override():
+    netbox = snapshot(InventorySource.NETBOX, [])
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(
+                source_id="a",
+                name="switch-a",
+                serial="SER-1",
+                site="HQ",
+                manufacturer="Ubiquiti",
+                model="USW-24",
+            )
+        ],
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    backend = FakeBackend()
+    result = execute_write_plan(
+        plan,
+        diff,
+        NetBoxConfig("https://netbox.invalid", "token"),
+        BehaviorConfig(default_device_role_name="Network Device"),
+        run_id="run-8",
+        started_at="2026-11-01T15:57:00+00:00",
+        finished_at="2026-11-01T15:58:00+00:00",
+        status_overrides={"create:unifi_network:a": "active"},
+        backend=backend,
+    )
+
+    assert len(result.journal.outcomes) == 1
+    assert result.journal.outcomes[0].status == OperationOutcomeStatus.SUCCESS
+    assert backend.created_payloads[0]["status"] == "active"

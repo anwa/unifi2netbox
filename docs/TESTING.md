@@ -347,6 +347,8 @@ NetBox role catalog ingestion and create-row role selection/override execution
 are covered as well.
 NetBox site catalog ingestion and create-row site selection/override execution
 are covered as well.
+NetBox device-status choice ingestion and create-row status selection/override
+execution are covered as well.
 Matching coverage now includes ordered criteria evaluation (name -> serial ->
 MAC), ambiguity handling per active criterion and NetBox device-type catalog
 ingestion for unmatched create suggestions.

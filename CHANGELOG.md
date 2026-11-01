@@ -6,6 +6,25 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.29
+
+### Added
+
+- Read NetBox device status choices from `dcim/devices/_choices/` during
+	inventory refresh and persist them in snapshot state.
+- Add a per-row `Device status` dropdown for create rows in `Show all rows`,
+	populated from the current NetBox status choices.
+
+### Changed
+
+- Use the selected row status for create execution as an explicit override;
+	fallback to NetBox API defaults when no row-specific status is set.
+
+### Validation
+
+- Extended inventory, GUI and write-execution tests for status ingestion,
+	row-level status selection and create-status override execution.
+
 ## v0.3.28
 
 ### Added

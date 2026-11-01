@@ -140,6 +140,21 @@ def netbox_transport(monkeypatch):
                 "results": [{"id": 302, "name": "Branch"}],
             },
         ),
+        (
+            200,
+            {
+                "actions": {
+                    "POST": {
+                        "status": {
+                            "choices": [
+                                {"value": "active", "label": "Active"},
+                                {"value": "planned", "label": "Planned"},
+                            ]
+                        }
+                    }
+                }
+            },
+        ),
     ]
 
     def send(session, request, **kwargs):
@@ -249,6 +264,8 @@ def test_netbox_inventory_is_paginated_and_normalized(netbox_transport):
     assert [item.source_id for item in snapshot.sites] == ["301", "302"]
     assert snapshot.sites[0].name == "HQ"
     assert snapshot.sites[1].name == "Branch"
+    assert [item.value for item in snapshot.device_statuses] == ["active", "planned"]
+    assert snapshot.device_statuses[0].label == "Active"
 
     for request, options in calls:
         assert request.method == "GET"

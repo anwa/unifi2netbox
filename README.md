@@ -71,6 +71,9 @@ Create rows now also expose a `Device role` dropdown in `Show all rows`, fed
 from NetBox `dcim/device-roles`; the selected role is used for create writes.
 Create rows also expose a `Device site` dropdown in `Show all rows`, fed from
 NetBox `dcim/sites`; the selected site is used for create writes.
+Create rows also expose a `Device status` dropdown in `Show all rows`, fed
+from NetBox `dcim/devices/_choices`; the selected status is used for create
+writes.
 The rows dialog regression that could hide all row hits after filtering has
 been fixed.
 Matching now runs in passes: confirmed mappings first, then ranked candidate

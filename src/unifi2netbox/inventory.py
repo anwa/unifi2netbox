@@ -50,6 +50,12 @@ class InventorySite:
 
 
 @dataclass(frozen=True)
+class InventoryDeviceStatus:
+    value: str
+    label: str
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     source: InventorySource
     captured_at: str
@@ -59,6 +65,7 @@ class InventorySnapshot:
     device_types: tuple[InventoryDeviceType, ...] = ()
     device_roles: tuple[InventoryDeviceRole, ...] = ()
     sites: tuple[InventorySite, ...] = ()
+    device_statuses: tuple[InventoryDeviceStatus, ...] = ()
 
 
 def _text(value: object) -> str:
@@ -158,6 +165,29 @@ def _normalize_netbox_site(row: dict[str, object]) -> InventorySite | None:
     return InventorySite(source_id=source_id, name=name)
 
 
+def _netbox_device_statuses(
+    session: requests.Session, config: NetBoxConfig
+) -> list[InventoryDeviceStatus]:
+    payload = _netbox_json(session, config, "/api/dcim/devices/_choices/")
+    actions = payload.get("actions") if isinstance(payload, dict) else None
+    post = actions.get("POST") if isinstance(actions, dict) else None
+    status = post.get("status") if isinstance(post, dict) else None
+    choices = status.get("choices") if isinstance(status, dict) else None
+    if not isinstance(choices, list):
+        raise InventoryError("NetBox device status choices payload is invalid.")
+
+    values: list[InventoryDeviceStatus] = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        value = _text(choice.get("value"))
+        label = _text(choice.get("label")) or value
+        if not value:
+            continue
+        values.append(InventoryDeviceStatus(value=value, label=label))
+    return values
+
+
 def _netbox_paginated_rows(
     session: requests.Session,
     config: NetBoxConfig,
@@ -219,6 +249,7 @@ def read_netbox_inventory(
     device_types: list[InventoryDeviceType] = []
     device_roles: list[InventoryDeviceRole] = []
     sites: list[InventorySite] = []
+    device_statuses: list[InventoryDeviceStatus] = []
     version = ""
     try:
         with ReadOnlySession(config) as session:
@@ -282,6 +313,8 @@ def read_netbox_inventory(
                 site = _normalize_netbox_site(row)
                 if site is not None:
                     sites.append(site)
+
+            device_statuses.extend(_netbox_device_statuses(session, config))
     except RedirectError as error:
         raise InventoryError(
             "Redirect refused. Configure the final NetBox URL explicitly."
@@ -299,6 +332,7 @@ def read_netbox_inventory(
         device_types=tuple(device_types),
         device_roles=tuple(device_roles),
         sites=tuple(sites),
+        device_statuses=tuple(device_statuses),
     )
 
 

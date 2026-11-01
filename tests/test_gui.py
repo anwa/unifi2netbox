@@ -581,6 +581,7 @@ def test_execute_write_plan_starts_runner_after_confirmation(
         write_plan,
         role_overrides,
         site_overrides,
+        status_overrides,
         *,
         dry_run,
     ):
@@ -589,6 +590,7 @@ def test_execute_write_plan_starts_runner_after_confirmation(
         started["plan"] = write_plan
         started["role_overrides"] = role_overrides
         started["site_overrides"] = site_overrides
+        started["status_overrides"] = status_overrides
         return True
 
     monkeypatch.setattr(window.write_runner, "start", fake_start)
@@ -601,6 +603,7 @@ def test_execute_write_plan_starts_runner_after_confirmation(
     assert started["plan"] == plan
     assert isinstance(started["role_overrides"], dict)
     assert isinstance(started["site_overrides"], dict)
+    assert isinstance(started["status_overrides"], dict)
 
 
 def test_write_execution_finished_updates_preview_details(qtbot, tmp_path, pool):
@@ -808,7 +811,7 @@ def test_inventory_preview_rows_dialog_shows_blocked_reason(qtbot, tmp_path, poo
     assert table is not None
     assert table.rowCount() == 1
     assert table.item(0, 5).text() == "No"
-    assert "create_required_identity" in table.item(0, 8).text()
+    assert "create_required_identity" in table.item(0, 9).text()
     window.preview_rows_dialog.close()
 
 
@@ -869,7 +872,7 @@ def test_inventory_preview_rows_dialog_shows_create_device_type_suggestions(
     table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
     assert table is not None
     assert table.rowCount() == 1
-    assert "Ubiquiti USW-Pro-24" in table.item(0, 9).text()
+    assert "Ubiquiti USW-Pro-24" in table.item(0, 10).text()
     window.preview_rows_dialog.close()
 
 
@@ -894,6 +897,7 @@ def test_inventory_preview_rows_dialog_shows_role_dropdown_for_create_rows(
                     executable="Yes",
                 ),
             ),
+            netbox_device_statuses=("active", "planned"),
             netbox_device_roles=("Network Device", "Wireless"),
             netbox_sites=("HQ", "Branch"),
         )
@@ -904,13 +908,19 @@ def test_inventory_preview_rows_dialog_shows_role_dropdown_for_create_rows(
     table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
     assert table is not None
 
-    site_widget = table.cellWidget(0, 6)
+    status_widget = table.cellWidget(0, 6)
+    assert isinstance(status_widget, QComboBox)
+    assert status_widget.count() == 2
+    assert status_widget.itemText(0) == "active"
+    assert status_widget.itemText(1) == "planned"
+
+    site_widget = table.cellWidget(0, 7)
     assert isinstance(site_widget, QComboBox)
     assert site_widget.count() == 2
     assert site_widget.itemText(0) == "HQ"
     assert site_widget.itemText(1) == "Branch"
 
-    role_widget = table.cellWidget(0, 7)
+    role_widget = table.cellWidget(0, 8)
     assert isinstance(role_widget, QComboBox)
     assert role_widget.count() == 2
     assert role_widget.itemText(0) == "Network Device"
@@ -965,6 +975,7 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
         write_plan,
         role_overrides,
         site_overrides,
+        status_overrides,
         *,
         dry_run,
     ):
@@ -973,6 +984,7 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
         started["device_key"] = write_plan.operations[0].device_key
         started["role_overrides"] = role_overrides
         started["site_overrides"] = site_overrides
+        started["status_overrides"] = status_overrides
         return True
 
     monkeypatch.setattr(window.write_runner, "start", fake_start)
@@ -995,6 +1007,7 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
     assert started["device_key"] == table.item(0, 0).text()
     assert isinstance(started["role_overrides"], dict)
     assert isinstance(started["site_overrides"], dict)
+    assert isinstance(started["status_overrides"], dict)
     window.preview_rows_dialog.close()
 
 

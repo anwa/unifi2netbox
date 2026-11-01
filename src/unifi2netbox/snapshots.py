@@ -7,6 +7,7 @@ from pathlib import Path
 from unifi2netbox.inventory import (
     InventoryDevice,
     InventoryDeviceRole,
+    InventoryDeviceStatus,
     InventoryDeviceType,
     InventorySite,
     InventorySnapshot,
@@ -121,6 +122,7 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "device_types": [asdict(item) for item in snapshot.device_types],
         "device_roles": [asdict(item) for item in snapshot.device_roles],
         "sites": [asdict(item) for item in snapshot.sites],
+        "device_statuses": [asdict(item) for item in snapshot.device_statuses],
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -147,6 +149,11 @@ def _decode(raw: str) -> InventorySnapshot:
     sites = payload.get("sites", [])
     if not isinstance(sites, list) or not all(isinstance(item, dict) for item in sites):
         raise ValueError
+    device_statuses = payload.get("device_statuses", [])
+    if not isinstance(device_statuses, list) or not all(
+        isinstance(item, dict) for item in device_statuses
+    ):
+        raise ValueError
     return InventorySnapshot(
         source=InventorySource(payload["source"]),
         captured_at=str(payload["captured_at"]),
@@ -156,4 +163,7 @@ def _decode(raw: str) -> InventorySnapshot:
         device_types=tuple(InventoryDeviceType(**item) for item in device_types),
         device_roles=tuple(InventoryDeviceRole(**item) for item in device_roles),
         sites=tuple(InventorySite(**item) for item in sites),
+        device_statuses=tuple(
+            InventoryDeviceStatus(**item) for item in device_statuses
+        ),
     )
