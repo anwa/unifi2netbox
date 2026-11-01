@@ -4,6 +4,8 @@ import pytest
 from PySide6.QtCore import QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
     QDialog,
     QLineEdit,
     QTableWidget,
@@ -537,10 +539,73 @@ def test_inventory_preview_show_all_rows_dialog(qtbot, tmp_path, pool):
     window.show_preview_rows_dialog()
     assert window.preview_rows_dialog is not None
     assert window.preview_rows_dialog.isVisible()
-    table = window.preview_rows_dialog.findChild(QTableWidget)
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
     assert table is not None
     assert table.rowCount() == 1
     assert table.item(0, 0).text() == "create:unifi:a"
+    window.preview_rows_dialog.close()
+
+
+def test_inventory_preview_rows_dialog_filters(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                ),
+                InventoryPreviewRow(
+                    device_key="unifi:b->netbox:2",
+                    action="update",
+                    source_label="switch-b",
+                    target_label="switch-b-old",
+                    selected_fields="name",
+                    executable="No",
+                ),
+                InventoryPreviewRow(
+                    device_key="target-only:netbox:3",
+                    action="target_only",
+                    source_label="",
+                    target_label="switch-c",
+                    selected_fields="",
+                    executable="No",
+                ),
+            ),
+        )
+    )
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    action_filter = window.preview_rows_dialog.findChild(
+        QComboBox, "preview_rows_action_filter"
+    )
+    executable_filter = window.preview_rows_dialog.findChild(
+        QCheckBox, "preview_rows_executable_filter"
+    )
+    assert table is not None
+    assert action_filter is not None
+    assert executable_filter is not None
+
+    assert table.rowCount() == 3
+    action_filter.setCurrentIndex(action_filter.findData("update"))
+    qtbot.waitUntil(lambda: table.rowCount() == 1)
+    assert table.item(0, 1).text() == "update"
+
+    action_filter.setCurrentIndex(action_filter.findData(""))
+    executable_filter.setChecked(True)
+    qtbot.waitUntil(lambda: table.rowCount() == 1)
+    assert table.item(0, 5).text() == "Yes"
     window.preview_rows_dialog.close()
 
 

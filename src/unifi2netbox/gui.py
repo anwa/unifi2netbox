@@ -936,7 +936,24 @@ class MainWindow(QMainWindow):
         dialog.setWindowTitle("Inventory Preview Rows")
         dialog.resize(980, 520)
         layout = QVBoxLayout(dialog)
+
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(plain_label("Action filter"))
+        action_filter = QComboBox(dialog)
+        action_filter.setObjectName("preview_rows_action_filter")
+        action_filter.addItem("All actions", "")
+        action_filter.addItem("Create", "create")
+        action_filter.addItem("Update", "update")
+        action_filter.addItem("Target only", "target_only")
+        filter_row.addWidget(action_filter)
+        executable_only = QCheckBox("Executable only", dialog)
+        executable_only.setObjectName("preview_rows_executable_filter")
+        filter_row.addWidget(executable_only)
+        filter_row.addStretch()
+        layout.addLayout(filter_row)
+
         table = QTableWidget(dialog)
+        table.setObjectName("preview_rows_table")
         table.setColumnCount(6)
         table.setHorizontalHeaderLabels(
             [
@@ -948,20 +965,35 @@ class MainWindow(QMainWindow):
                 "Executable",
             ]
         )
-        table.setRowCount(len(self.preview_rows))
-        for row_index, row in enumerate(self.preview_rows):
-            values = (
-                row.device_key,
-                row.action,
-                row.source_label,
-                row.target_label,
-                row.selected_fields,
-                row.executable,
-            )
-            for column_index, value in enumerate(values):
-                table.setItem(row_index, column_index, QTableWidgetItem(value))
 
-        table.resizeColumnsToContents()
+        def populate_table() -> None:
+            action_value = str(action_filter.currentData() or "")
+            executable_enabled = executable_only.isChecked()
+            visible_rows = [
+                row
+                for row in self.preview_rows
+                if (not action_value or row.action == action_value)
+                and (not executable_enabled or row.executable == "Yes")
+            ]
+
+            table.setRowCount(len(visible_rows))
+            for row_index, row in enumerate(visible_rows):
+                values = (
+                    row.device_key,
+                    row.action,
+                    row.source_label,
+                    row.target_label,
+                    row.selected_fields,
+                    row.executable,
+                )
+                for column_index, value in enumerate(values):
+                    table.setItem(row_index, column_index, QTableWidgetItem(value))
+            table.resizeColumnsToContents()
+
+        action_filter.currentIndexChanged.connect(lambda _index: populate_table())
+        executable_only.toggled.connect(lambda _checked: populate_table())
+        populate_table()
+
         table.setAlternatingRowColors(True)
         layout.addWidget(table)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
