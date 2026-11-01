@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QStyle,
     QTabWidget,
@@ -645,7 +647,7 @@ class MainWindow(QMainWindow):
         self.settings_action.setToolTip("Edit NetBox and UniFi Network settings")
         self.settings_action.triggered.connect(self.open_settings)
         self.preview_action = QAction(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
+            self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogInfoView),
             "Refresh Inventory Preview",
             self,
         )
@@ -689,7 +691,14 @@ class MainWindow(QMainWindow):
         )
         self.preview_plan = plain_label("Preview rows: 0 | Executable operations: 0")
         self.preview_checked_at = plain_label("Not refreshed")
-        self.preview_detail_lines = plain_label("No preview details yet.")
+        self.preview_detail_list = QListWidget(self)
+        self.preview_detail_list.setSelectionMode(
+            QListWidget.SelectionMode.SingleSelection
+        )
+        self.preview_detail_list.currentItemChanged.connect(
+            self.preview_detail_changed
+        )
+        self.preview_detail_text = plain_label("No preview details yet.")
         preview_grid.addWidget(plain_label("Status"), 0, 0)
         preview_grid.addWidget(self.preview_status, 0, 1)
         preview_grid.addWidget(plain_label("Counts"), 1, 0)
@@ -701,7 +710,9 @@ class MainWindow(QMainWindow):
         preview_grid.addWidget(plain_label("Last refresh"), 4, 0)
         preview_grid.addWidget(self.preview_checked_at, 4, 1)
         preview_grid.addWidget(plain_label("Highlights"), 5, 0)
-        preview_grid.addWidget(self.preview_detail_lines, 5, 1)
+        preview_grid.addWidget(self.preview_detail_list, 5, 1)
+        preview_grid.addWidget(plain_label("Highlight detail"), 6, 0)
+        preview_grid.addWidget(self.preview_detail_text, 6, 1)
         preview_grid.setColumnStretch(1, 1)
         layout.addLayout(preview_grid)
         layout.addStretch()
@@ -773,12 +784,26 @@ class MainWindow(QMainWindow):
             f". {result.details}"
         )
         self.preview_checked_at.setText(result.last_updated or "Not available")
-        self.preview_detail_lines.setText(
-            "\n".join(result.detail_lines)
-            if result.detail_lines
-            else "No preview details yet."
-        )
+        self.preview_detail_list.clear()
+        for line in result.detail_lines:
+            self.preview_detail_list.addItem(QListWidgetItem(line))
+        if result.detail_lines:
+            self.preview_detail_list.setCurrentRow(0)
+            self.preview_detail_text.setText(result.detail_lines[0])
+        else:
+            self.preview_detail_text.setText("No preview details yet.")
         self.update_check_action()
+
+    def preview_detail_changed(
+        self,
+        current: QListWidgetItem | None,
+        previous: QListWidgetItem | None,
+    ) -> None:
+        del previous
+        if current is None:
+            self.preview_detail_text.setText("No preview details yet.")
+            return
+        self.preview_detail_text.setText(current.text())
 
     def update_check_action(self) -> None:
         self.settings_action.setEnabled(not self.closing)
