@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.11
+
+### Added
+
+- Extend the GUI inventory preview with structured highlight lines for matched
+	pairs, detected conflicts and planned write operations.
+- Keep preview highlights read-only and capped to concise top entries so results
+	remain scannable in the main window.
+
+### Validation
+
+- GUI suite passes with highlight rendering checks: `tests/test_gui.py`.
+- Ruff checks pass for `gui.py` and GUI tests.
+
 ## v0.3.10
 
 ### Added

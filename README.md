@@ -48,6 +48,8 @@ M5 now includes a read-only read-back planner for successful create/update
 operations, preparing deterministic verification reads in later slices.
 The main window now also includes a visible Inventory Preview section and a
 "Refresh Inventory Preview" action to surface M4/M5 service summaries.
+Inventory Preview now also shows structured highlight lines for sample matches,
+conflicts and planned write operations.
 
 ## Goals
 
