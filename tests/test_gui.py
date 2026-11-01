@@ -28,6 +28,7 @@ from unifi2netbox.gui import (
     InventoryPreviewRow,
     MainWindow,
     SettingsDialog,
+    WriteExecutionGuiResult,
     _preview_rows,
     _scope_unmatched_netbox_for_delete,
 )
@@ -490,6 +491,112 @@ def test_inventory_preview_finished_updates_visible_summary(qtbot, tmp_path, poo
     assert "Match unifi:a -> netbox:1" in window.preview_detail_text.text()
     window.preview_detail_list.setCurrentRow(1)
     assert "Plan #1 create_device create:unifi:a" in window.preview_detail_text.text()
+
+
+def test_inventory_preview_enables_execute_when_plan_is_executable(
+    qtbot, tmp_path, pool
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="switch-a", site="HQ"),),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                ),
+            ),
+            difference_preview=diff,
+            write_plan=plan,
+        )
+    )
+
+    assert window.execute_plan_button.isEnabled()
+
+
+def test_execute_write_plan_starts_runner_after_confirmation(
+    qtbot, tmp_path, pool, monkeypatch
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="switch-a", site="HQ"),),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.current_difference_preview = diff
+    window.current_write_plan = plan
+
+    monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    started = {}
+
+    def fake_start(netbox_config, behavior, difference_preview, write_plan, *, dry_run):
+        started["called"] = True
+        started["dry_run"] = dry_run
+        started["plan"] = write_plan
+        return True
+
+    monkeypatch.setattr(window.write_runner, "start", fake_start)
+    window.dry_run_only.setChecked(True)
+
+    window.execute_write_plan_from_preview()
+
+    assert started["called"] is True
+    assert started["dry_run"] is True
+    assert started["plan"] == plan
+
+
+def test_write_execution_finished_updates_preview_details(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.write_execution_finished(
+        WriteExecutionGuiResult(
+            status="Applied",
+            details="Write execution finished: 1 success, 0 failed, 0 skipped.",
+            detail_lines=("Write #1 update_device: success Updated device in NetBox.",),
+        )
+    )
+
+    assert window.preview_status.text() == "Applied"
+    assert "1 success" in window.preview_plan.text()
+    assert window.preview_detail_list.count() == 1
 
 
 def test_inventory_preview_finished_shows_fallback_details_for_partial(

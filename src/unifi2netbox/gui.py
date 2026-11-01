@@ -2,6 +2,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
+from uuid import uuid4
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent
@@ -50,10 +51,16 @@ from unifi2netbox.matching import (
     suggest_device_types_for_unmatched,
 )
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
-from unifi2netbox.preview import build_change_preview, build_difference_preview
+from unifi2netbox.preview import (
+    DifferencePreview,
+    build_change_preview,
+    build_difference_preview,
+)
 from unifi2netbox.refresh import refresh_snapshots
 from unifi2netbox.snapshots import SnapshotStore
-from unifi2netbox.write_plan import build_write_plan
+from unifi2netbox.write_execute import execute_write_plan
+from unifi2netbox.write_journal import summarize_journal
+from unifi2netbox.write_plan import WritePlan, build_write_plan
 
 
 @dataclass(frozen=True)
@@ -81,6 +88,15 @@ class InventoryPreviewResult:
     last_updated: str = ""
     detail_lines: tuple[str, ...] = ()
     rows: tuple[InventoryPreviewRow, ...] = ()
+    difference_preview: DifferencePreview | None = None
+    write_plan: WritePlan | None = None
+
+
+@dataclass(frozen=True)
+class WriteExecutionGuiResult:
+    status: str
+    details: str
+    detail_lines: tuple[str, ...] = ()
 
 
 class InventoryJobSignals(QObject):
@@ -133,6 +149,8 @@ class InventoryPreviewJob(QRunnable):
                         last_updated=refresh.netbox.last_updated
                         or refresh.unifi.last_updated,
                         detail_lines=(partial_detail,),
+                        difference_preview=None,
+                        write_plan=None,
                     )
                 )
                 return
@@ -153,6 +171,8 @@ class InventoryPreviewJob(QRunnable):
                         last_updated=refresh.netbox.last_updated
                         or refresh.unifi.last_updated,
                         detail_lines=(unavailable_detail,),
+                        difference_preview=None,
+                        write_plan=None,
                     )
                 )
                 return
@@ -200,6 +220,8 @@ class InventoryPreviewJob(QRunnable):
                         unifi_device_count=len(unifi_snapshot.devices),
                     ),
                     rows=_preview_rows(diff, change, plan),
+                    difference_preview=diff,
+                    write_plan=plan,
                 )
             )
         except Exception:
@@ -211,8 +233,115 @@ class InventoryPreviewJob(QRunnable):
                         "Inventory preview refresh failed before details were "
                         "available.",
                     ),
+                    difference_preview=None,
+                    write_plan=None,
                 )
             )
+
+
+class WriteExecutionSignals(QObject):
+    finished = Signal(object)
+
+
+class WriteExecutionJob(QRunnable):
+    def __init__(
+        self,
+        netbox_config: NetBoxConfig,
+        behavior: BehaviorConfig,
+        difference_preview: DifferencePreview,
+        write_plan: WritePlan,
+        *,
+        dry_run: bool,
+    ) -> None:
+        super().__init__()
+        self.netbox_config = netbox_config
+        self.behavior = behavior
+        self.difference_preview = difference_preview
+        self.write_plan = write_plan
+        self.dry_run = dry_run
+        self.signals = WriteExecutionSignals()
+
+    @Slot()
+    def run(self) -> None:
+        started = datetime.now().astimezone().isoformat(timespec="seconds")
+        try:
+            result = execute_write_plan(
+                self.write_plan,
+                self.difference_preview,
+                self.netbox_config,
+                self.behavior,
+                run_id=str(uuid4()),
+                started_at=started,
+                finished_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+                dry_run=self.dry_run,
+            )
+            summary = summarize_journal(result.journal)
+            details = (
+                "Write execution finished: "
+                f"{summary.successful} success, {summary.failed} failed, "
+                f"{summary.skipped} skipped."
+            )
+            lines = []
+            for outcome in result.journal.outcomes[:8]:
+                lines.append(
+                    f"Write #{outcome.sequence} {outcome.operation_type}: "
+                    f"{outcome.status} {outcome.message}".strip()
+                )
+            self.signals.finished.emit(
+                WriteExecutionGuiResult(
+                    status="Dry run" if self.dry_run else "Applied",
+                    details=details,
+                    detail_lines=tuple(lines) if lines else (details,),
+                )
+            )
+        except Exception as error:
+            self.signals.finished.emit(
+                WriteExecutionGuiResult(
+                    status="Error",
+                    details="Write execution failed unexpectedly.",
+                    detail_lines=(f"Write execution error: {error}",),
+                )
+            )
+
+
+class WriteExecutionRunner(QObject):
+    finished = Signal(object)
+
+    def __init__(self, pool: QThreadPool, parent=None) -> None:
+        super().__init__(parent)
+        self.pool = pool
+        self.job: WriteExecutionJob | None = None
+
+    @property
+    def busy(self) -> bool:
+        return self.job is not None
+
+    def start(
+        self,
+        netbox_config: NetBoxConfig,
+        behavior: BehaviorConfig,
+        difference_preview: DifferencePreview,
+        write_plan: WritePlan,
+        *,
+        dry_run: bool,
+    ) -> bool:
+        if self.busy:
+            return False
+        self.job = WriteExecutionJob(
+            netbox_config,
+            behavior,
+            difference_preview,
+            write_plan,
+            dry_run=dry_run,
+        )
+        self.job.signals.finished.connect(self._finished)
+        self.pool.start(self.job)
+        return True
+
+    @Slot(object)
+    def _finished(self, result: WriteExecutionGuiResult) -> None:
+        self.job = None
+        self.finished.emit(result)
 
 
 def _preview_detail_lines(
@@ -823,6 +952,10 @@ class MainWindow(QMainWindow):
         self.closing = False
         self.inventory_runner = InventoryPreviewRunner(pool, config_path, self)
         self.inventory_runner.finished.connect(self.inventory_preview_finished)
+        self.write_runner = WriteExecutionRunner(pool, self)
+        self.write_runner.finished.connect(self.write_execution_finished)
+        self.current_difference_preview: DifferencePreview | None = None
+        self.current_write_plan: WritePlan | None = None
         try:
             self.behavior = load_behavior_config(config_path)
         except ConfigError:
@@ -914,8 +1047,14 @@ class MainWindow(QMainWindow):
         self.show_rows_button = QPushButton("Show all rows", self)
         self.show_rows_button.clicked.connect(self.show_preview_rows_dialog)
         self.show_rows_button.setEnabled(False)
+        self.dry_run_only = QCheckBox("Dry run only", self)
+        self.execute_plan_button = QPushButton("Execute write plan", self)
+        self.execute_plan_button.clicked.connect(self.execute_write_plan_from_preview)
+        self.execute_plan_button.setEnabled(False)
         copy_row = QHBoxLayout()
         copy_row.addWidget(self.show_rows_button)
+        copy_row.addWidget(self.dry_run_only)
+        copy_row.addWidget(self.execute_plan_button)
         copy_row.addWidget(self.copy_selected_button)
         copy_row.addWidget(self.copy_all_button)
         copy_row.addStretch()
@@ -1015,7 +1154,12 @@ class MainWindow(QMainWindow):
         )
         self.preview_checked_at.setText(result.last_updated or "Not available")
         self.preview_rows = result.rows
+        self.current_difference_preview = result.difference_preview
+        self.current_write_plan = result.write_plan
         self.show_rows_button.setEnabled(bool(self.preview_rows))
+        self.execute_plan_button.setEnabled(
+            bool(self.current_write_plan and self.current_write_plan.executable)
+        )
         self.preview_detail_list.clear()
         for line in result.detail_lines:
             self.preview_detail_list.addItem(QListWidgetItem(line))
@@ -1024,6 +1168,66 @@ class MainWindow(QMainWindow):
             self.preview_detail_text.setText(result.detail_lines[0])
         else:
             self.preview_detail_text.setText("No preview details yet.")
+        self.update_check_action()
+
+    def execute_write_plan_from_preview(self) -> None:
+        if self.write_runner.busy or self.closing:
+            return
+        if self.current_difference_preview is None or self.current_write_plan is None:
+            self.statusBar().showMessage("Refresh inventory preview before apply.")
+            return
+        if not self.current_write_plan.executable:
+            self.statusBar().showMessage(
+                "Current write plan is not executable. Resolve blockers first."
+            )
+            return
+
+        confirm = QDialog(self)
+        confirm.setWindowTitle("Confirm write execution")
+        layout = QVBoxLayout(confirm)
+        layout.addWidget(
+            plain_label(self.current_write_plan.summary.confirmation_message)
+        )
+        layout.addWidget(
+            plain_label(
+                "Writes target NetBox only. UniFi remains read-only. "
+                "Review preview rows before confirming."
+            )
+        )
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            confirm,
+        )
+        buttons.accepted.connect(confirm.accept)
+        buttons.rejected.connect(confirm.reject)
+        layout.addWidget(buttons)
+
+        if confirm.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.preview_status.setText("Applying...")
+        self.preview_plan.setText("Executing write plan in background...")
+        self.write_runner.start(
+            self.netbox.config,
+            self.behavior,
+            self.current_difference_preview,
+            self.current_write_plan,
+            dry_run=self.dry_run_only.isChecked(),
+        )
+        self.update_check_action()
+
+    def write_execution_finished(self, result: WriteExecutionGuiResult) -> None:
+        self.preview_status.setText(result.status)
+        self.preview_plan.setText(result.details)
+        self.preview_detail_list.clear()
+        for line in result.detail_lines:
+            self.preview_detail_list.addItem(QListWidgetItem(line))
+        if result.detail_lines:
+            self.preview_detail_list.setCurrentRow(0)
+            self.preview_detail_text.setText(result.detail_lines[0])
+        else:
+            self.preview_detail_text.setText("No preview details yet.")
+        self.statusBar().showMessage(result.details)
         self.update_check_action()
 
     def preview_detail_changed(
@@ -1150,7 +1354,14 @@ class MainWindow(QMainWindow):
         self.preview_action.setEnabled(
             not self.closing
             and not self.inventory_runner.busy
+            and not self.write_runner.busy
             and not (self.netbox.runner.busy or self.unifi.runner.busy)
+        )
+        self.execute_plan_button.setEnabled(
+            not self.closing
+            and not self.inventory_runner.busy
+            and not self.write_runner.busy
+            and bool(self.current_write_plan and self.current_write_plan.executable)
         )
 
     def finish_close(self) -> None:
@@ -1158,6 +1369,7 @@ class MainWindow(QMainWindow):
             self.netbox.runner.busy
             or self.unifi.runner.busy
             or self.inventory_runner.busy
+            or self.write_runner.busy
         ):
             self.close()
 
@@ -1170,6 +1382,7 @@ class MainWindow(QMainWindow):
             self.netbox.runner.busy
             or self.unifi.runner.busy
             or self.inventory_runner.busy
+            or self.write_runner.busy
         ):
             event.ignore()
             return

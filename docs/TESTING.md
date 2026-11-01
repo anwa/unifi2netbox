@@ -283,6 +283,9 @@ The focused tests validate that:
 
 GUI/config coverage also validates the delete-scope behavior toggle in Settings
 and the default site-scoped filtering of NetBox-only delete proposals.
+GUI coverage now also validates apply-flow behavior: enabling write execution
+for executable plans, confirmation-triggered runner start and visible write
+result rendering in preview highlights.
 
 Run the focused read-back checks:
 

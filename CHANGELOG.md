@@ -6,6 +6,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.22
+
+### Added
+
+- Integrate write execution into the main GUI preview section with a dedicated
+	"Execute write plan" action, one confirmation dialog and optional dry-run mode.
+- Surface write execution outcomes directly in preview highlights so success,
+	failure and skipped operations are visible without leaving the main window.
+
+### Validation
+
+- GUI apply-flow coverage added in `tests/test_gui.py`.
+
 ## v0.3.21
 
 ### Added

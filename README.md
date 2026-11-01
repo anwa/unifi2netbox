@@ -71,6 +71,9 @@ active UniFi site context; Settings now provide an explicit option to include
 all NetBox devices in delete proposals.
 Settings also include a default NetBox device role name used by the device-create
 write executor to resolve create prerequisites deterministically.
+The preview section now includes an `Execute write plan` action with one
+confirmation step and an optional `Dry run only` toggle that records outcome
+journal entries without mutating NetBox.
 
 ## Goals
 
