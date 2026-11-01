@@ -240,8 +240,10 @@ def test_unifi_inventory_is_paginated_and_normalized(unifi_api):
     assert [device.source_id for device in snapshot.devices] == ["dev-1", "dev-2"]
     assert snapshot.devices[0].serial == "ABC123"
     assert snapshot.devices[0].mac_address == "00:11:22:33:44:55"
+    assert snapshot.devices[0].manufacturer == "Ubiquiti"
     assert snapshot.devices[1].name == "ap-2"
     assert snapshot.devices[1].mac_address == "66:55:44:33:22:11"
+    assert snapshot.devices[1].manufacturer == "Ubiquiti"
 
     assert [request.url.path for request in calls] == [
         "/proxy/network/integration/v1/info",

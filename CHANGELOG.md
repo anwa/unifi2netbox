@@ -6,6 +6,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.26
+
+### Changed
+
+- Default UniFi device manufacturer values to `Ubiquiti` when the local API
+	payload does not provide a manufacturer field, preventing false
+	`missing manufacturer` create blockers.
+
 ## v0.3.25
 
 ### Changed

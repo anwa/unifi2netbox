@@ -301,11 +301,22 @@ def _select_site(config: UniFiConfig, sites: list[dict[str, str]]) -> dict[str, 
 
 
 def _normalize_unifi_device(row: dict[str, object], site_name: str) -> InventoryDevice:
+    manufacturer = ""
+    manufacturer_value = row.get("manufacturer")
+    if isinstance(manufacturer_value, dict):
+        manufacturer = _text(manufacturer_value.get("name"))
+    else:
+        manufacturer = _text(manufacturer_value)
+    if not manufacturer:
+        # UniFi Network devices belong to the Ubiquiti vendor family.
+        manufacturer = "Ubiquiti"
+
     return InventoryDevice(
         source_id=_text(row.get("id")) or _text(row.get("_id")),
         name=_text(row.get("name")) or _text(row.get("hostname")),
         serial=_text(row.get("serial")).upper(),
         model=_text(row.get("model")),
+        manufacturer=manufacturer,
         mac_address=_normalize_mac(row.get("macAddress") or row.get("mac")),
         site=site_name,
     )
