@@ -751,6 +751,46 @@ def test_inventory_preview_rows_dialog_filters(qtbot, tmp_path, pool):
     window.preview_rows_dialog.close()
 
 
+def test_inventory_preview_rows_dialog_shows_blocked_reason(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="switch-a", site=""),),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=_preview_rows(diff, change, plan),
+            difference_preview=diff,
+            write_plan=plan,
+        )
+    )
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    assert table is not None
+    assert table.rowCount() == 1
+    assert table.item(0, 5).text() == "No"
+    assert "dependency requirements" in table.item(0, 6).text()
+    window.preview_rows_dialog.close()
+
+
 def test_inventory_preview_rows_dialog_execute_selected_row(
     qtbot, tmp_path, pool, monkeypatch
 ):

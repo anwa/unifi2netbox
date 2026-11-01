@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.24
+
+### Added
+
+- Add a `Reason` column in the `Show all rows` dialog so non-executable preview
+	rows explain why execution is blocked.
+- Show the same row-specific reason in the status bar when executing a selected
+	non-executable row is attempted.
+
+### Validation
+
+- Extended GUI coverage for blocked-row reason rendering in
+	`tests/test_gui.py`.
+
 ## v0.3.22
 
 ### Added

@@ -342,6 +342,7 @@ Clipboard copy behavior (`Copy selected` / `Copy all`) is covered as well.
 The non-modal `Show all rows` dialog and table population are covered too.
 Row filtering in that dialog (action + executable-only) is covered as well.
 A dedicated regression check ensures row hits remain visible after filtering.
+Blocked-row reason rendering in the dialog is covered as well.
 Matching coverage now includes ordered criteria evaluation (name -> serial ->
 MAC), ambiguity handling per active criterion and NetBox device-type catalog
 ingestion for unmatched create suggestions.

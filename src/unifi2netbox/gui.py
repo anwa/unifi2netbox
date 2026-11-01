@@ -76,6 +76,7 @@ class InventoryPreviewRow:
     target_label: str
     selected_fields: str
     executable: str
+    blocked_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -416,13 +417,35 @@ def _preview_detail_lines(
 def _preview_rows(diff, change, plan) -> tuple[InventoryPreviewRow, ...]:
     change_by_key = {item.device_key: item for item in change.devices}
     executable_by_key = {item.device_key: item.executable for item in change.devices}
+    issue_by_key = {item.device_key: item.message for item in plan.issues}
 
     rows: list[InventoryPreviewRow] = []
     for device in diff.devices:
         selected_fields = ""
+        blocked_reason = ""
         change_item = change_by_key.get(device.device_key)
         if change_item is not None and change_item.selected_fields:
             selected_fields = ", ".join(change_item.selected_fields)
+
+        if device.device_key in issue_by_key:
+            blocked_reason = issue_by_key[device.device_key]
+        elif not executable_by_key.get(device.device_key, False):
+            if change_item is None:
+                blocked_reason = "No change preview entry is available."
+            else:
+                unsatisfied = [
+                    dependency
+                    for dependency in change_item.dependencies
+                    if not dependency.satisfied
+                ]
+                if unsatisfied:
+                    top = unsatisfied[0]
+                    if top.missing_fields:
+                        blocked_reason = (
+                            f"{top.name}: missing {', '.join(top.missing_fields)}"
+                        )
+                    else:
+                        blocked_reason = top.description
 
         rows.append(
             InventoryPreviewRow(
@@ -434,6 +457,7 @@ def _preview_rows(diff, change, plan) -> tuple[InventoryPreviewRow, ...]:
                 executable=(
                     "Yes" if executable_by_key.get(device.device_key, False) else "No"
                 ),
+                blocked_reason=blocked_reason,
             )
         )
     return tuple(rows)
@@ -1348,7 +1372,7 @@ class MainWindow(QMainWindow):
         table.setObjectName("preview_rows_table")
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        table.setColumnCount(6)
+        table.setColumnCount(7)
         table.setHorizontalHeaderLabels(
             [
                 "Device key",
@@ -1357,6 +1381,7 @@ class MainWindow(QMainWindow):
                 "Target",
                 "Selected fields",
                 "Executable",
+                "Reason",
             ]
         )
 
@@ -1379,6 +1404,7 @@ class MainWindow(QMainWindow):
                     row.target_label,
                     row.selected_fields,
                     row.executable,
+                    row.blocked_reason,
                 )
                 for column_index, value in enumerate(values):
                     table.setItem(row_index, column_index, QTableWidgetItem(value))
@@ -1406,7 +1432,13 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Selected preview row is invalid.")
                 return
             if executable_item.text() != "Yes":
-                self.statusBar().showMessage("Selected preview row is not executable.")
+                reason_item = table.item(row_index, 6)
+                reason = (
+                    reason_item.text()
+                    if reason_item is not None and reason_item.text().strip()
+                    else "Selected preview row is not executable."
+                )
+                self.statusBar().showMessage(reason)
                 return
             self.execute_selected_preview_row(device_item.text())
 
@@ -1482,7 +1514,7 @@ def _single_operation_plan(write_plan: WritePlan, device_key: str) -> WritePlan 
         blocked_device_keys=(),
         requires_confirmation=True,
         confirmation_message=(
-            "Confirm execution of 1 operation " f"({operation.device_key})."
+            f"Confirm execution of 1 operation ({operation.device_key})."
         ),
     )
     return WritePlan(

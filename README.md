@@ -60,6 +60,8 @@ The GUI also provides a `Show all rows` dialog to inspect the full current
 difference-preview table directly from the main window.
 Inside that dialog, action and executable filters help narrow larger result
 sets without rerunning the refresh.
+Rows that cannot be executed now include a `Reason` value so blockers are
+visible without leaving the dialog.
 The rows dialog regression that could hide all row hits after filtering has
 been fixed.
 Matching now runs in passes: confirmed mappings first, then ranked candidate
@@ -75,7 +77,8 @@ The preview section now includes an `Execute write plan` action with one
 confirmation step and an optional `Dry run only` toggle that records outcome
 journal entries without mutating NetBox.
 The `Show all rows` dialog also supports executing one selected executable row,
-which helps when global plan blockers prevent full-batch execution.
+which helps when global plan blockers prevent full-batch execution; selecting a
+blocked row reports its specific reason in the status bar.
 
 ## Goals
 
