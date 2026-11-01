@@ -294,6 +294,12 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
+For GUI preview visibility checks introduced after M5 service slices, run:
+
+```powershell
+python -m pytest -q tests/test_gui.py
+```
+
 Default tests block socket connections. API tests exercise the real pynetbox
 request construction against a synthetic requests transport. No infrastructure
 tokens, live hosts or external services are needed. Test credentials are synthetic.

@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.10
+
+### Added
+
+- Add a visible Inventory Preview section in the main GUI with counts for
+	NetBox/UniFi devices, matches, conflicts, preview rows and executable
+	operations.
+- Add a background "Refresh Inventory Preview" action that reads snapshots,
+	computes dedup/preview/write-plan summaries and updates UI state safely.
+
+### Validation
+
+- GUI suite passes with new preview-state tests: `tests/test_gui.py`.
+- Ruff checks pass for `gui.py` and GUI tests.
+
 ## v0.3.9
 
 ### Added
