@@ -60,6 +60,8 @@ The GUI also provides a `Show all rows` dialog to inspect the full current
 difference-preview table directly from the main window.
 Inside that dialog, action and executable filters help narrow larger result
 sets without rerunning the refresh.
+The rows dialog regression that could hide all row hits after filtering has
+been fixed.
 
 ## Goals
 

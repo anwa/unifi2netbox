@@ -307,6 +307,7 @@ Fallback highlight behavior for partial refresh states is also covered.
 Clipboard copy behavior (`Copy selected` / `Copy all`) is covered as well.
 The non-modal `Show all rows` dialog and table population are covered too.
 Row filtering in that dialog (action + executable-only) is covered as well.
+A dedicated regression check ensures row hits remain visible after filtering.
 
 Default tests block socket connections. API tests exercise the real pynetbox
 request construction against a synthetic requests transport. No infrastructure

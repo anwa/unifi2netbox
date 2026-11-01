@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.17
+
+### Fixed
+
+- Fix preview-row generation in the GUI by using executable state from
+	change-preview items instead of a non-existent write-plan attribute.
+- Restore row results in the `Show all rows` dialog after the previous commit
+	regression that could suppress all matches/rows.
+
+### Validation
+
+- GUI suite passes with dedicated regression coverage: `tests/test_gui.py`.
+- Ruff checks pass for `gui.py` and GUI tests.
+
 ## v0.3.16
 
 ### Added
