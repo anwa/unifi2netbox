@@ -41,7 +41,10 @@ from unifi2netbox.config import (
     save_connections,
 )
 from unifi2netbox.connections import Checker, ConnectionRunner, check_unifi_connection
-from unifi2netbox.matching import deduplicate_inventory
+from unifi2netbox.matching import (
+    deduplicate_inventory,
+    suggest_device_types_for_unmatched,
+)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
 from unifi2netbox.preview import build_change_preview, build_difference_preview
 from unifi2netbox.refresh import refresh_snapshots
@@ -149,6 +152,9 @@ class InventoryPreviewJob(QRunnable):
                 return
 
             dedup = deduplicate_inventory(netbox_snapshot, unifi_snapshot)
+            suggestions = suggest_device_types_for_unmatched(
+                dedup, netbox_snapshot, unifi_snapshot
+            )
             diff = build_difference_preview(netbox_snapshot, unifi_snapshot, dedup)
             change = build_change_preview(diff)
             plan = build_write_plan(diff, change)
@@ -174,6 +180,7 @@ class InventoryPreviewJob(QRunnable):
                     detail_lines=_preview_detail_lines(
                         dedup,
                         plan,
+                        suggestions=suggestions,
                         netbox_device_count=len(netbox_snapshot.devices),
                         unifi_device_count=len(unifi_snapshot.devices),
                     ),
@@ -196,6 +203,7 @@ class InventoryPreviewJob(QRunnable):
 def _preview_detail_lines(
     dedup,
     plan,
+    suggestions,
     *,
     netbox_device_count: int,
     unifi_device_count: int,
@@ -228,6 +236,16 @@ def _preview_detail_lines(
             "Plan "
             f"#{operation.sequence} {operation.operation_type} "
             f"{operation.device_key}"
+        )
+
+    for suggestion in suggestions[:3]:
+        if not suggestion.candidates:
+            continue
+        top = suggestion.candidates[0]
+        lines.append(
+            "Create template suggestion "
+            f"{suggestion.unifi_observation_id}: "
+            f"{top.manufacturer} {top.model} (score={top.score})"
         )
 
     if plan.issues:

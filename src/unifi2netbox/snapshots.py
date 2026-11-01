@@ -4,7 +4,12 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryDeviceType,
+    InventorySnapshot,
+    InventorySource,
+)
 
 SNAPSHOT_SCHEMA_VERSION = 1
 
@@ -111,6 +116,7 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "source_version": snapshot.source_version,
         "scope": snapshot.scope,
         "devices": [asdict(device) for device in snapshot.devices],
+        "device_types": [asdict(item) for item in snapshot.device_types],
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -124,10 +130,16 @@ def _decode(raw: str) -> InventorySnapshot:
         isinstance(item, dict) for item in devices
     ):
         raise ValueError
+    device_types = payload.get("device_types", [])
+    if not isinstance(device_types, list) or not all(
+        isinstance(item, dict) for item in device_types
+    ):
+        raise ValueError
     return InventorySnapshot(
         source=InventorySource(payload["source"]),
         captured_at=str(payload["captured_at"]),
         source_version=str(payload.get("source_version", "")),
         scope=str(payload.get("scope", "")),
         devices=tuple(InventoryDevice(**item) for item in devices),
+        device_types=tuple(InventoryDeviceType(**item) for item in device_types),
     )

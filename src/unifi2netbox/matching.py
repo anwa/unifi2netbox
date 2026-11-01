@@ -9,7 +9,8 @@ from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, Inventory
 
 class MatchReason(StrEnum):
     CONFIRMED = "confirmed"
-    IDENTITY = "identity"
+    SERIAL = "serial"
+    MAC = "mac"
     NAME = "name"
 
 
@@ -76,7 +77,9 @@ def deduplicate_inventory(
     unifi = _observations(unifi_snapshot)
 
     netbox_by_id = {item.observation_id: item for item in netbox}
-    netbox_by_identity = _index_by_identity(netbox)
+    netbox_by_name = _index_by_name(netbox)
+    netbox_by_serial = _index_by_serial(netbox)
+    netbox_by_mac = _index_by_mac(netbox)
 
     pairs: list[MatchPair] = []
     conflicts: list[IdentityConflict] = []
@@ -117,77 +120,27 @@ def deduplicate_inventory(
         paired_unifi.add(source.observation_id)
         paired_netbox.add(target.observation_id)
 
-    # Pass 2: identity-based matching for unpaired UniFi observations.
+    # Pass 2: ordered matching for unpaired UniFi observations.
+    # Priority is name -> serial -> mac. Ambiguity in any pass is treated as conflict.
     for source in unifi:
         if source.observation_id in paired_unifi:
             continue
-        candidates = _candidates_for(source, netbox_by_identity)
-        candidates = [
-            item for item in candidates if item.observation_id not in paired_netbox
-        ]
-        if not candidates:
-            continue
-        if len(candidates) > 1:
-            conflicts.append(
-                IdentityConflict(
-                    reason=ConflictReason.AMBIGUOUS_CANDIDATES,
-                    observation_ids=(
-                        source.observation_id,
-                        *(item.observation_id for item in candidates),
-                    ),
-                    message="UniFi observation matches multiple NetBox candidates.",
-                )
-            )
-            continue
-        target = candidates[0]
-        pairs.append(
-            MatchPair(
-                unifi_observation_id=source.observation_id,
-                netbox_observation_id=target.observation_id,
-                reason=MatchReason.IDENTITY,
-            )
+        matched = _try_ranked_match(
+            source,
+            paired_netbox,
+            netbox_by_name,
+            netbox_by_serial,
+            netbox_by_mac,
+            conflicts,
         )
-        paired_unifi.add(source.observation_id)
-        paired_netbox.add(target.observation_id)
-
-    # Pass 3: normalized-name fallback for still-unpaired observations.
-    netbox_by_name = _index_by_name(
-        [item for item in netbox if item.observation_id not in paired_netbox]
-    )
-    for source in unifi:
-        if source.observation_id in paired_unifi:
+        if matched is None:
             continue
-        key = _normalize_name(source.name)
-        if not key:
-            continue
-        candidates = [
-            item
-            for item in netbox_by_name.get(key, ())
-            if item.observation_id not in paired_netbox
-        ]
-        if not candidates:
-            continue
-        if len(candidates) > 1:
-            conflicts.append(
-                IdentityConflict(
-                    reason=ConflictReason.AMBIGUOUS_CANDIDATES,
-                    observation_ids=(
-                        source.observation_id,
-                        *(item.observation_id for item in candidates),
-                    ),
-                    message=(
-                        "UniFi observation matches multiple NetBox candidates by "
-                        "name."
-                    ),
-                )
-            )
-            continue
-        target = candidates[0]
+        target, reason = matched
         pairs.append(
             MatchPair(
                 unifi_observation_id=source.observation_id,
                 netbox_observation_id=target.observation_id,
-                reason=MatchReason.NAME,
+                reason=reason,
             )
         )
         paired_unifi.add(source.observation_id)
@@ -292,6 +245,28 @@ def _index_by_identity(
     return index
 
 
+def _index_by_serial(
+    observations: list[DeviceObservation],
+) -> dict[str, list[DeviceObservation]]:
+    index: dict[str, list[DeviceObservation]] = {}
+    for item in observations:
+        if not item.serial:
+            continue
+        index.setdefault(item.serial, []).append(item)
+    return index
+
+
+def _index_by_mac(
+    observations: list[DeviceObservation],
+) -> dict[str, list[DeviceObservation]]:
+    index: dict[str, list[DeviceObservation]] = {}
+    for item in observations:
+        if not item.mac_address:
+            continue
+        index.setdefault(item.mac_address, []).append(item)
+    return index
+
+
 def _index_by_name(
     observations: list[DeviceObservation],
 ) -> dict[str, list[DeviceObservation]]:
@@ -315,6 +290,52 @@ def _candidates_for(
     return list(candidates.values())
 
 
+def _try_ranked_match(
+    source: DeviceObservation,
+    paired_netbox: set[str],
+    netbox_by_name: dict[str, list[DeviceObservation]],
+    netbox_by_serial: dict[str, list[DeviceObservation]],
+    netbox_by_mac: dict[str, list[DeviceObservation]],
+    conflicts: list[IdentityConflict],
+) -> tuple[DeviceObservation, MatchReason] | None:
+    ranked_criteria: tuple[
+        tuple[str, MatchReason, str, dict[str, list[DeviceObservation]]], ...
+    ] = (
+        ("name", MatchReason.NAME, _normalize_name(source.name), netbox_by_name),
+        ("serial", MatchReason.SERIAL, source.serial, netbox_by_serial),
+        ("mac", MatchReason.MAC, source.mac_address, netbox_by_mac),
+    )
+
+    for label, reason, key, index in ranked_criteria:
+        if not key:
+            continue
+        candidates = [
+            item
+            for item in index.get(key, ())
+            if item.observation_id not in paired_netbox
+        ]
+        if not candidates:
+            continue
+        if len(candidates) > 1:
+            conflicts.append(
+                IdentityConflict(
+                    reason=ConflictReason.AMBIGUOUS_CANDIDATES,
+                    observation_ids=(
+                        source.observation_id,
+                        *(item.observation_id for item in candidates),
+                    ),
+                    message=(
+                        "UniFi observation matches multiple NetBox candidates by "
+                        f"{label}."
+                    ),
+                )
+            )
+            return None
+        return (candidates[0], reason)
+
+    return None
+
+
 def _identity_keys(observation: DeviceObservation) -> tuple[str, ...]:
     keys = []
     if observation.serial:
@@ -333,6 +354,14 @@ def _build_type_catalog(
 ) -> tuple[tuple[str, str], ...]:
     if netbox_snapshot is None:
         return ()
+
+    if netbox_snapshot.device_types:
+        return tuple(
+            (item.manufacturer, item.model)
+            for item in netbox_snapshot.device_types
+            if item.manufacturer.strip() and item.model.strip()
+        )
+
     seen: set[tuple[str, str]] = set()
     catalog: list[tuple[str, str]] = []
     for device in netbox_snapshot.devices:

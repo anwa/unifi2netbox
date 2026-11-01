@@ -31,12 +31,20 @@ class InventoryDevice:
 
 
 @dataclass(frozen=True)
+class InventoryDeviceType:
+    source_id: str
+    manufacturer: str
+    model: str
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     source: InventorySource
     captured_at: str
     source_version: str = ""
     scope: str = ""
     devices: tuple[InventoryDevice, ...] = ()
+    device_types: tuple[InventoryDeviceType, ...] = ()
 
 
 def _text(value: object) -> str:
@@ -104,6 +112,67 @@ def _normalize_netbox_device(row: dict[str, object]) -> InventoryDevice:
     )
 
 
+def _normalize_netbox_device_type(row: dict[str, object]) -> InventoryDeviceType | None:
+    manufacturer = ""
+    vendor = row.get("manufacturer")
+    if isinstance(vendor, dict):
+        manufacturer = _text(vendor.get("name"))
+    model = _text(row.get("model"))
+    source_id = str(row.get("id", "")).strip()
+    if not manufacturer or not model or not source_id:
+        return None
+    return InventoryDeviceType(
+        source_id=source_id,
+        manufacturer=manufacturer,
+        model=model,
+    )
+
+
+def _netbox_paginated_rows(
+    session: requests.Session,
+    config: NetBoxConfig,
+    path: str,
+    *,
+    page_size: int,
+    max_pages: int,
+    limit_error: str,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    offset = 0
+    pages = 0
+
+    while pages < max_pages:
+        payload = _netbox_json(
+            session,
+            config,
+            f"{path}?limit={page_size}&offset={offset}",
+        )
+        count = payload.get("count")
+        page_rows = payload.get("results")
+        if (
+            type(count) is not int
+            or count < 0
+            or not isinstance(page_rows, list)
+            or not all(isinstance(row, dict) for row in page_rows)
+            or len(page_rows) > page_size
+            or offset + len(page_rows) > count
+        ):
+            raise InventoryError("NetBox returned an invalid paginated payload.")
+        rows.extend(page_rows)
+        pages += 1
+        if offset + len(page_rows) >= count:
+            break
+        if not page_rows:
+            raise InventoryError(
+                "NetBox pagination stopped unexpectedly before count was reached."
+            )
+        offset += len(page_rows)
+    else:
+        raise InventoryError(limit_error)
+
+    return rows
+
+
 def read_netbox_inventory(
     config: NetBoxConfig,
     *,
@@ -117,46 +186,39 @@ def read_netbox_inventory(
         raise InventoryError("Pagination bounds must be positive.")
 
     devices: list[InventoryDevice] = []
-    offset = 0
-    pages = 0
+    device_types: list[InventoryDeviceType] = []
     version = ""
     try:
         with ReadOnlySession(config) as session:
             status = _netbox_json(session, config, "/api/status/")
             version = _text(status.get("netbox-version"))
-            while pages < max_pages:
-                payload = _netbox_json(
-                    session,
-                    config,
-                    f"/api/dcim/devices/?limit={page_size}&offset={offset}",
-                )
-                count = payload.get("count")
-                rows = payload.get("results")
-                if (
-                    type(count) is not int
-                    or count < 0
-                    or not isinstance(rows, list)
-                    or not all(isinstance(row, dict) for row in rows)
-                    or len(rows) > page_size
-                    or offset + len(rows) > count
-                ):
-                    raise InventoryError(
-                        "NetBox returned an invalid paginated payload."
-                    )
-                devices.extend(_normalize_netbox_device(row) for row in rows)
-                pages += 1
-                if offset + len(rows) >= count:
-                    break
-                if not rows:
-                    raise InventoryError(
-                        "NetBox pagination stopped unexpectedly before count was "
-                        "reached."
-                    )
-                offset += len(rows)
-            else:
-                raise InventoryError(
+            device_rows = _netbox_paginated_rows(
+                session,
+                config,
+                "/api/dcim/devices/",
+                page_size=page_size,
+                max_pages=max_pages,
+                limit_error=(
                     "NetBox pagination exceeded the configured page safety limit."
-                )
+                ),
+            )
+            devices.extend(_normalize_netbox_device(row) for row in device_rows)
+
+            type_rows = _netbox_paginated_rows(
+                session,
+                config,
+                "/api/dcim/device-types/",
+                page_size=page_size,
+                max_pages=max_pages,
+                limit_error=(
+                    "NetBox device-type pagination exceeded the configured page "
+                    "safety limit."
+                ),
+            )
+            for row in type_rows:
+                item = _normalize_netbox_device_type(row)
+                if item is not None:
+                    device_types.append(item)
     except RedirectError as error:
         raise InventoryError(
             "Redirect refused. Configure the final NetBox URL explicitly."
@@ -171,6 +233,7 @@ def read_netbox_inventory(
         captured_at=_timestamp(captured_at),
         source_version=version,
         devices=tuple(devices),
+        device_types=tuple(device_types),
     )
 
 
