@@ -62,6 +62,8 @@ Inside that dialog, action and executable filters help narrow larger result
 sets without rerunning the refresh.
 The rows dialog regression that could hide all row hits after filtering has
 been fixed.
+Matching now runs in passes: confirmed mappings first, then serial/MAC identity,
+then a normalized-name fallback for still-unpaired observations.
 
 ## Goals
 

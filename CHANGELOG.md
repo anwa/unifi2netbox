@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.18
+
+### Added
+
+- Extend deduplication with a normalized-name fallback pass for still-unpaired
+	UniFi observations after confirmed and serial/MAC identity passes.
+- Keep fallback safe by emitting ambiguity conflicts instead of auto-pairing
+	when multiple NetBox devices share the same normalized name.
+
+### Validation
+
+- Matching and GUI suites pass with new name-fallback tests:
+	`tests/test_matching.py`, `tests/test_gui.py`.
+- Ruff checks pass for matching and GUI modules/tests.
+
 ## v0.3.17
 
 ### Fixed
