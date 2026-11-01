@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.8
+
+### Added
+
+- Add a write-journal reconcile helper that flags ambiguous successful create
+	outcomes when NetBox object IDs are missing or duplicated.
+- Keep reconcile evaluation read-only and deterministic for later manual
+	resolution and read-back slices.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_write_journal.py`.
+- Ruff checks pass for `write_journal.py` and journal tests.
+
 ## v0.3.7
 
 ### Added

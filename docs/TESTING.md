@@ -254,6 +254,7 @@ The focused tests validate that:
 - journal initialization creates pending outcomes for planned operations,
 - per-operation updates are immutable and sequence-safe,
 - unknown operation sequence updates fail fast,
+- ambiguous successful creates are flagged when object IDs are missing or duplicated,
 - finalization marks a run as completed/cancelled with stable summaries.
 
 Run the focused journal checks:

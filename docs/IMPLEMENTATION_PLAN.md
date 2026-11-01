@@ -183,8 +183,8 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
   (service-level preflight blockers, deterministic operation ordering and
   immutable plan summaries with confirmation readiness on 2026-11-01).
 - [ ] Journal outcomes, reconcile ambiguous creates and read back successful writes.
-  (journal outcome model and offline contract tests implemented on 2026-11-01;
-  reconcile/read-back logic remains open)
+  (journal outcome model, ambiguous-create reconcile helper and offline contract
+  tests implemented on 2026-11-01; read-back logic remains open)
 - [ ] Test zero writes on Cancel, partial failures, concurrent edits and idempotence.
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are

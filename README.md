@@ -42,6 +42,8 @@ M5 now also adds one immutable confirmation summary per plan, including
 operation totals, blocker visibility and confirmation-readiness hints.
 M5 now adds an immutable write-journal model for operation outcomes and run
 summary counters, still without performing NetBox mutations.
+M5 now also flags ambiguous successful create outcomes when NetBox object IDs
+are missing or duplicated, keeping manual reconciliation explicit.
 
 ## Goals
 
