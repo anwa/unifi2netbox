@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unifi2netbox"
-version = "0.3.2"
-description = "Review UniFi inventory changes before applying them to NetBox"
+version = "0.3.7"
+description = "Review UniFi inventory differences before applying selected changes to NetBox"
 readme = "README.md"
 requires-python = ">=3.15.1"
 license = "MIT"

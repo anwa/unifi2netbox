@@ -30,6 +30,18 @@ confirmed mappings and cross-source deduplication between NetBox and UniFi
 observations.
 M4 now also adds read-only ranked Device Type suggestions for unmatched UniFi
 devices based on existing NetBox manufacturer/model combinations.
+M4 now includes a service-level difference preview model with source/target
+values, provenance, configured/operational field categories, unsupported field
+markers and immutable batch/device/field selection helpers.
+M4 now also includes an immutable change preview dependency model that keeps
+write prerequisites explicit without performing any writes.
+M5 has now started with a read-only write-planning layer that turns approved
+change previews into deterministic create/update operation sequences and
+preflight blockers, still without executing NetBox mutations.
+M5 now also adds one immutable confirmation summary per plan, including
+operation totals, blocker visibility and confirmation-readiness hints.
+M5 now adds an immutable write-journal model for operation outcomes and run
+summary counters, still without performing NetBox mutations.
 
 ## Goals
 

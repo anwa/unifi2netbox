@@ -183,6 +183,87 @@ python -m pytest -q tests/test_matching.py
 
 This slice remains fully offline and uses synthetic fixtures only.
 
+## M4 Difference Preview Contracts
+
+The third M4 slice adds a service-level difference preview model that includes:
+
+- source/target field values with explicit provenance,
+- configured versus operational field categories,
+- unsupported field markers for preview-only visibility,
+- immutable batch/device/field selection helpers.
+
+The focused tests validate matched/create/target-only rows and selection state
+transitions without write paths.
+
+Run the focused preview checks:
+
+```powershell
+python -m pytest -q tests/test_preview.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M4 Immutable Change Preview Contracts
+
+The fourth M4 slice adds immutable change-preview summaries with explicit
+dependencies and write-readiness states, still without any write execution.
+
+The focused tests validate that:
+
+- target-only rows are always non-executable,
+- create actions require selected non-empty `name` and `site` values,
+- selected `model` updates depend on selected `manufacturer` updates.
+
+Run the focused dependency checks:
+
+```powershell
+python -m pytest -q tests/test_preview.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M5 Write-Plan Contracts
+
+The first M5 slice adds a read-only write-planning layer that converts selected
+immutable change previews into ordered write operations with preflight blockers,
+without executing NetBox API mutations.
+
+The focused tests validate that:
+
+- create operations are ordered before updates,
+- dependency-blocked selections are not considered executable,
+- duplicate create/update targets are surfaced as explicit blockers,
+- one immutable summary confirmation is generated per plan with stable counts,
+- target-only rows never produce write operations.
+
+Run the focused write-plan checks:
+
+```powershell
+python -m pytest -q tests/test_write_plan.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M5 Write-Journal Contracts
+
+The next M5 micro-slice adds an immutable write-journal model for operation
+outcomes and run summaries, still without executing NetBox writes.
+
+The focused tests validate that:
+
+- journal initialization creates pending outcomes for planned operations,
+- per-operation updates are immutable and sequence-safe,
+- unknown operation sequence updates fail fast,
+- finalization marks a run as completed/cancelled with stable summaries.
+
+Run the focused journal checks:
+
+```powershell
+python -m pytest -q tests/test_write_journal.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

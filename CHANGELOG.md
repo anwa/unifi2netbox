@@ -6,6 +6,80 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.7
+
+### Added
+
+- Add an immutable write journal model for M5 operation outcomes (`pending`,
+	`success`, `failed`, `skipped`) without introducing API write execution.
+- Add journal initialization, per-operation result updates, finalization and
+	summary counters for later M5 execution/reconciliation slices.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_write_journal.py`.
+- Ruff checks pass for `write_journal.py` and journal tests.
+
+## v0.3.6
+
+### Added
+
+- Add a write-plan confirmation summary model with operation totals, blocker
+	counts, blocked device keys and a single user-facing confirmation message.
+- Keep M5 execution planning immutable and read-only while making confirmation
+	readiness explicit (`requires_confirmation` vs `executable`).
+
+### Validation
+
+- Focused offline suite passes: `tests/test_write_plan.py`.
+- Ruff checks pass for `write_plan.py` and write-plan tests.
+
+## v0.3.5
+
+### Added
+
+- Add a read-only write-planning service model that derives ordered create/update
+	operations from immutable M4 change previews.
+- Add M5 preflight blockers for dependency failures, duplicate create labels and
+	duplicate update targets before any write execution layer exists.
+- Add deterministic operation sequencing (create before update) to prepare a
+	single summary confirmation flow in later M5 slices.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_write_plan.py`.
+- Ruff checks pass for `write_plan.py` and write-plan tests.
+
+## v0.3.4
+
+### Added
+
+- Add immutable change-preview summaries with explicit dependency contracts per
+	device action.
+- Add create prerequisites (`name`, `site`) and model/manufacturer dependency
+	rules without introducing write paths.
+- Add executable versus blocked change state to expose write readiness decisions.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_preview.py`.
+- Ruff checks pass for `preview.py` and preview tests.
+
+## v0.3.3
+
+### Added
+
+- Add a difference-preview service model with source/target values and explicit
+	provenance for matched, create and target-only device views.
+- Add configured/operational field categories and unsupported field markers for
+	preview-only visibility.
+- Add batch, device and field selection helpers for immutable preview state.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_preview.py`.
+- Ruff checks pass for `preview.py` and preview tests.
+
 ## v0.3.2
 
 ### Added

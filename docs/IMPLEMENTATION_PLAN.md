@@ -164,9 +164,11 @@ Branch: `feature/diff-and-device-matching`; depends on M3.
   2026-10-28).
 - [x] Suggest existing manufacturer/model Device Types only for missing devices
   (read-only ranked suggestions and offline contract tests on 2026-10-28).
-- [ ] Display source/target values, provenance, operational/configured category,
-  unsupported fields and field/device/batch checkboxes.
-- [ ] Create immutable change previews with explicit dependencies, without writes.
+- [x] Display source/target values, provenance, operational/configured category,
+  unsupported fields and field/device/batch checkboxes (service-level preview
+  model and offline contract tests on 2026-10-28).
+- [x] Create immutable change previews with explicit dependencies, without writes
+  (service-level dependency model and offline contract tests on 2026-10-28).
 
 Acceptance: ambiguous matches never auto-apply; unavailable values never erase
 targets; selecting a device selects eligible displayed fields, with exceptions.
@@ -175,9 +177,14 @@ targets; selecting a device selects eligible displayed fields, with exceptions.
 
 Branch: `feature/approved-netbox-writes`; depends on M4.
 
-- [ ] Implement creation prerequisites and selected standard inventory updates.
-- [ ] Add preflight conflicts, one summary confirmation and ordered execution.
+- [x] Implement creation prerequisites and selected standard inventory updates
+  (service-level write-plan model and offline contract tests on 2026-11-01).
+- [x] Add preflight conflicts, one summary confirmation and ordered execution
+  (service-level preflight blockers, deterministic operation ordering and
+  immutable plan summaries with confirmation readiness on 2026-11-01).
 - [ ] Journal outcomes, reconcile ambiguous creates and read back successful writes.
+  (journal outcome model and offline contract tests implemented on 2026-11-01;
+  reconcile/read-back logic remains open)
 - [ ] Test zero writes on Cancel, partial failures, concurrent edits and idempotence.
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
