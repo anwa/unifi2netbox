@@ -1,11 +1,14 @@
 import pytest
 
 from unifi2netbox.config import (
+    BehaviorConfig,
     ConfigError,
     NetBoxConfig,
     UniFiConfig,
+    load_behavior_config,
     load_config,
     load_unifi_config,
+    save_behavior_config,
     save_config,
     save_connections,
     save_unifi_config,
@@ -95,10 +98,12 @@ def test_combined_save_replaces_file_once_and_preserves_unrelated_data(
         original_replace(source, target)
 
     monkeypatch.setattr("unifi2netbox.config.os.replace", replace)
-    save_connections(path, netbox, unifi)
+    behavior = BehaviorConfig(include_all_netbox_delete_candidates=True)
+    save_connections(path, netbox, unifi, behavior)
     assert replaced == [path]
     assert load_config(path) == netbox
     assert load_unifi_config(path) == unifi
+    assert load_behavior_config(path) == behavior
     assert "# preserve" in path.read_text(encoding="utf-8")
     assert "[future]" in path.read_text(encoding="utf-8")
 
@@ -120,3 +125,16 @@ def test_combined_save_failure_preserves_both_connections(tmp_path, monkeypatch)
         )
     assert path.read_bytes() == previous
     assert not list(tmp_path.glob(".config-*"))
+
+
+def test_behavior_section_roundtrip_and_defaults(tmp_path):
+    path = tmp_path / "config.toml"
+    assert load_behavior_config(path) == BehaviorConfig()
+    config = BehaviorConfig(include_all_netbox_delete_candidates=True)
+    save_behavior_config(path, config)
+    assert load_behavior_config(path) == config
+
+
+def test_invalid_behavior_settings_are_rejected():
+    with pytest.raises(ConfigError):
+        BehaviorConfig(include_all_netbox_delete_candidates="yes")

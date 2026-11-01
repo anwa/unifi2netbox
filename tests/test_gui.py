@@ -13,8 +13,10 @@ from PySide6.QtWidgets import (
 )
 
 from unifi2netbox.config import (
+    BehaviorConfig,
     NetBoxConfig,
     UniFiConfig,
+    load_behavior_config,
     load_config,
     load_unifi_config,
     save_config,
@@ -27,6 +29,7 @@ from unifi2netbox.gui import (
     MainWindow,
     SettingsDialog,
     _preview_rows,
+    _scope_unmatched_netbox_for_delete,
 )
 from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
 from unifi2netbox.matching import deduplicate_inventory
@@ -348,6 +351,29 @@ def test_unifi_settings_cancel_preserves_saved_values(qtbot, tmp_path, pool):
     assert load_unifi_config(path) == config
 
 
+def test_settings_save_persists_delete_scope_behavior(qtbot, tmp_path, pool):
+    path = tmp_path / "config.toml"
+    widget = SettingsDialog(
+        path,
+        NetBoxConfig("https://netbox.invalid", "netbox-synthetic"),
+        pool,
+        online,
+        unifi_config=UniFiConfig("https://console.invalid", "unifi-synthetic"),
+        unifi_checker=unifi_online,
+    )
+    qtbot.addWidget(widget)
+    widget.include_all_netbox_delete_candidates.setChecked(True)
+    widget.save()
+
+    assert widget.result() == QDialog.DialogCode.Accepted
+    assert widget.saved_behavior_config == BehaviorConfig(
+        include_all_netbox_delete_candidates=True
+    )
+    assert load_behavior_config(path) == BehaviorConfig(
+        include_all_netbox_delete_candidates=True
+    )
+
+
 def test_old_unifi_result_cannot_replace_new_settings(qtbot, tmp_path, pool):
     release = Event()
     running = Event()
@@ -636,6 +662,61 @@ def test_preview_rows_uses_change_executable_state_without_plan_devices():
     assert len(rows) == 1
     assert rows[0].action == "create"
     assert rows[0].executable == "Yes"
+
+
+def test_delete_scope_filters_unmatched_netbox_by_unifi_site_by_default():
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="1", name="nb-hq", site="HQ"),
+            InventoryDevice(source_id="2", name="nb-branch", site="Branch"),
+        ),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="uf-a", site="HQ"),),
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    scoped, hidden = _scope_unmatched_netbox_for_delete(
+        dedup,
+        netbox,
+        unifi,
+        include_all_netbox_delete_candidates=False,
+    )
+
+    assert len(dedup.unmatched_netbox) == 2
+    assert scoped.unmatched_netbox == ("netbox:1",)
+    assert hidden == 1
+
+
+def test_delete_scope_can_include_all_unmatched_netbox_devices():
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="1", name="nb-hq", site="HQ"),
+            InventoryDevice(source_id="2", name="nb-branch", site="Branch"),
+        ),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="uf-a", site="HQ"),),
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    scoped, hidden = _scope_unmatched_netbox_for_delete(
+        dedup,
+        netbox,
+        unifi,
+        include_all_netbox_delete_candidates=True,
+    )
+
+    assert scoped.unmatched_netbox == dedup.unmatched_netbox
+    assert hidden == 0
 
 
 def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):

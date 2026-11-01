@@ -281,6 +281,9 @@ The focused tests validate that:
 - cancelled runs without successful outcomes produce zero read-back requests,
 - missing operation sequences are skipped explicitly (concurrent-edit safety).
 
+GUI/config coverage also validates the delete-scope behavior toggle in Settings
+and the default site-scoped filtering of NetBox-only delete proposals.
+
 Run the focused read-back checks:
 
 ```powershell

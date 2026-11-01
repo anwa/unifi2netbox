@@ -66,6 +66,9 @@ Matching now runs in passes: confirmed mappings first, then ranked candidate
 checks per UniFi device in this order: normalized name, serial number, MAC
 address. A hit in any pass is a candidate match; multiple hits in the same pass
 are treated as ambiguity conflicts and are not auto-matched.
+Delete proposals for NetBox-only devices are scope-limited by default to the
+active UniFi site context; Settings now provide an explicit option to include
+all NetBox devices in delete proposals.
 
 ## Goals
 

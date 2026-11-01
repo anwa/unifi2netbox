@@ -33,15 +33,19 @@ from PySide6.QtWidgets import (
 )
 
 from unifi2netbox.config import (
+    BehaviorConfig,
     ConfigError,
     NetBoxConfig,
     UniFiConfig,
+    load_behavior_config,
     load_config,
     load_unifi_config,
     save_connections,
 )
 from unifi2netbox.connections import Checker, ConnectionRunner, check_unifi_connection
+from unifi2netbox.inventory import InventoryDevice, InventorySource
 from unifi2netbox.matching import (
+    DeduplicationResult,
     deduplicate_inventory,
     suggest_device_types_for_unmatched,
 )
@@ -89,11 +93,13 @@ class InventoryPreviewJob(QRunnable):
         config_path: Path,
         netbox_config: NetBoxConfig,
         unifi_config: UniFiConfig,
+        include_all_netbox_delete_candidates: bool,
     ) -> None:
         super().__init__()
         self.config_path = config_path
         self.netbox_config = netbox_config
         self.unifi_config = unifi_config
+        self.include_all_netbox_delete_candidates = include_all_netbox_delete_candidates
         self.signals = InventoryJobSignals()
 
     @Slot()
@@ -152,6 +158,14 @@ class InventoryPreviewJob(QRunnable):
                 return
 
             dedup = deduplicate_inventory(netbox_snapshot, unifi_snapshot)
+            dedup, hidden_unmatched_netbox = _scope_unmatched_netbox_for_delete(
+                dedup,
+                netbox_snapshot,
+                unifi_snapshot,
+                include_all_netbox_delete_candidates=(
+                    self.include_all_netbox_delete_candidates
+                ),
+            )
             suggestions = suggest_device_types_for_unmatched(
                 dedup, netbox_snapshot, unifi_snapshot
             )
@@ -181,6 +195,7 @@ class InventoryPreviewJob(QRunnable):
                         dedup,
                         plan,
                         suggestions=suggestions,
+                        hidden_unmatched_netbox=hidden_unmatched_netbox,
                         netbox_device_count=len(netbox_snapshot.devices),
                         unifi_device_count=len(unifi_snapshot.devices),
                     ),
@@ -204,6 +219,7 @@ def _preview_detail_lines(
     dedup,
     plan,
     suggestions,
+    hidden_unmatched_netbox,
     *,
     netbox_device_count: int,
     unifi_device_count: int,
@@ -220,6 +236,12 @@ def _preview_detail_lines(
         lines.append(f"Unmatched UniFi observations: {len(dedup.unmatched_unifi)}")
     if dedup.unmatched_netbox:
         lines.append(f"Unmatched NetBox observations: {len(dedup.unmatched_netbox)}")
+    if hidden_unmatched_netbox:
+        lines.append(
+            "Delete scope hides "
+            f"{hidden_unmatched_netbox} NetBox-only observation(s). "
+            "Enable the settings option to include all NetBox devices."
+        )
 
     for pair in dedup.pairs[:3]:
         lines.append(
@@ -283,6 +305,51 @@ def _preview_rows(diff, change, plan) -> tuple[InventoryPreviewRow, ...]:
     return tuple(rows)
 
 
+def _scope_unmatched_netbox_for_delete(
+    dedup: DeduplicationResult,
+    netbox_snapshot,
+    unifi_snapshot,
+    *,
+    include_all_netbox_delete_candidates: bool,
+) -> tuple[DeduplicationResult, int]:
+    if include_all_netbox_delete_candidates:
+        return dedup, 0
+    if netbox_snapshot is None or unifi_snapshot is None:
+        return dedup, 0
+
+    unifi_sites = {
+        device.site.strip().lower()
+        for device in unifi_snapshot.devices
+        if device.site.strip()
+    }
+    by_observation_id = {
+        _snapshot_observation_id(netbox_snapshot.source, device): device
+        for device in netbox_snapshot.devices
+    }
+
+    scoped_unmatched = tuple(
+        observation_id
+        for observation_id in dedup.unmatched_netbox
+        if observation_id in by_observation_id
+        and by_observation_id[observation_id].site.strip().lower() in unifi_sites
+    )
+    hidden = len(dedup.unmatched_netbox) - len(scoped_unmatched)
+    return (
+        DeduplicationResult(
+            pairs=dedup.pairs,
+            conflicts=dedup.conflicts,
+            unmatched_unifi=dedup.unmatched_unifi,
+            unmatched_netbox=scoped_unmatched,
+        ),
+        hidden,
+    )
+
+
+def _snapshot_observation_id(source: InventorySource, device: InventoryDevice) -> str:
+    key = device.source_id.strip() or device.name.strip() or "unnamed"
+    return f"{source}:{key}"
+
+
 class InventoryPreviewRunner(QObject):
     finished = Signal(object)
 
@@ -296,10 +363,21 @@ class InventoryPreviewRunner(QObject):
     def busy(self) -> bool:
         return self.job is not None
 
-    def start(self, netbox: NetBoxConfig, unifi: UniFiConfig) -> bool:
+    def start(
+        self,
+        netbox: NetBoxConfig,
+        unifi: UniFiConfig,
+        *,
+        include_all_netbox_delete_candidates: bool,
+    ) -> bool:
         if self.busy:
             return False
-        self.job = InventoryPreviewJob(self.config_path, netbox, unifi)
+        self.job = InventoryPreviewJob(
+            self.config_path,
+            netbox,
+            unifi,
+            include_all_netbox_delete_candidates,
+        )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
         return True
@@ -475,7 +553,12 @@ class SettingsDialog(QDialog):
         self.path = path
         self.saved_config: NetBoxConfig | None = None
         self.saved_unifi_config: UniFiConfig | None = None
+        self.saved_behavior_config: BehaviorConfig | None = None
         self.close_pending = False
+        try:
+            self.behavior = load_behavior_config(path)
+        except ConfigError:
+            self.behavior = BehaviorConfig()
         self.setWindowTitle("Settings")
         self.resize(640, 520)
         self.setMinimumSize(500, 460)
@@ -492,6 +575,13 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self.netbox, "NetBox")
         self.tabs.addTab(self.unifi, "UniFi Network")
         layout.addWidget(self.tabs)
+        self.include_all_netbox_delete_candidates = QCheckBox(
+            "Include all NetBox devices for delete proposals"
+        )
+        self.include_all_netbox_delete_candidates.setChecked(
+            self.behavior.include_all_netbox_delete_candidates
+        )
+        layout.addWidget(self.include_all_netbox_delete_candidates)
         layout.addWidget(plain_label("Local token storage: plaintext"))
         layout.addWidget(plain_label(str(path)))
         self.outcome = plain_label()
@@ -525,12 +615,18 @@ class SettingsDialog(QDialog):
             unifi = self.unifi.config_from_fields()
             if not isinstance(unifi, UniFiConfig):
                 raise ConfigError("UniFi settings are invalid.")
-            save_connections(self.path, netbox, unifi)
+            behavior = BehaviorConfig(
+                include_all_netbox_delete_candidates=(
+                    self.include_all_netbox_delete_candidates.isChecked()
+                )
+            )
+            save_connections(self.path, netbox, unifi, behavior)
         except ConfigError as error:
             self.outcome.setText(str(error))
             return
         self.saved_config = netbox
         self.saved_unifi_config = unifi
+        self.saved_behavior_config = behavior
         self.accept()
 
     def test_connections(self) -> None:
@@ -715,6 +811,10 @@ class MainWindow(QMainWindow):
         self.closing = False
         self.inventory_runner = InventoryPreviewRunner(pool, config_path, self)
         self.inventory_runner.finished.connect(self.inventory_preview_finished)
+        try:
+            self.behavior = load_behavior_config(config_path)
+        except ConfigError:
+            self.behavior = BehaviorConfig()
         self.netbox = ConnectionPanel(config_path, pool, checker)
         self.unifi = ConnectionPanel(config_path, pool, unifi_checker, unifi=True)
         self.setWindowTitle(f"unifi2netbox {version('unifi2netbox')}")
@@ -853,6 +953,8 @@ class MainWindow(QMainWindow):
         ):
             self.netbox.apply_config(dialog.saved_config)
             self.unifi.apply_config(dialog.saved_unifi_config)
+            if dialog.saved_behavior_config is not None:
+                self.behavior = dialog.saved_behavior_config
         dialog.deleteLater()
 
     def apply_config(self, config: NetBoxConfig) -> None:
@@ -873,7 +975,13 @@ class MainWindow(QMainWindow):
             return
         self.preview_status.setText("Refreshing...")
         self.preview_plan.setText("Collecting inventory snapshots in background...")
-        self.inventory_runner.start(self.netbox.config, self.unifi.config)
+        self.inventory_runner.start(
+            self.netbox.config,
+            self.unifi.config,
+            include_all_netbox_delete_candidates=(
+                self.behavior.include_all_netbox_delete_candidates
+            ),
+        )
         self.update_check_action()
 
     def inventory_preview_finished(self, result: InventoryPreviewResult) -> None:

@@ -191,6 +191,8 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
 visible; live write tests require explicit narrow test scope and separate opt-in.
+For delete proposals, default scope remains safety-first (site-scoped NetBox-only
+devices), with an explicit user setting to include all NetBox devices when needed.
 
 ### M6: Switch Ports and VLANs -> v0.6.0
 

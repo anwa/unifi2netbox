@@ -11,6 +11,9 @@ only on explicit user instruction. Documentation-only changes have no release ta
 - Extend M5 offline contract coverage for write-plan/read-back behavior:
 	idempotent planning, partial-failure read-back filtering, zero read-back on
 	cancel without successes, and explicit skips for missing operation sequences.
+- Add a behavior setting to include all NetBox devices for delete proposals;
+	default behavior keeps NetBox-only delete candidates limited to UniFi site
+	scope for safer device-lifecycle review.
 
 ### Documentation
 
