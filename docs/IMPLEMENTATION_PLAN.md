@@ -186,7 +186,8 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
 - [x] Journal outcomes, reconcile ambiguous creates and read back successful writes.
   (journal outcome model, ambiguous-create reconcile helper, read-back planner
   and offline contract tests implemented on 2026-11-01)
-- [ ] Test zero writes on Cancel, partial failures, concurrent edits and idempotence.
+- [x] Test zero writes on Cancel, partial failures, concurrent edits and idempotence
+  (service-level journal/read-back/write-plan contract tests on 2026-11-01).
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
 visible; live write tests require explicit narrow test scope and separate opt-in.

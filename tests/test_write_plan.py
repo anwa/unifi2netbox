@@ -135,3 +135,26 @@ def test_write_plan_ignores_target_only_rows():
     assert plan.summary.total_operations == 0
     assert plan.summary.requires_confirmation is False
     assert "No eligible operations selected" in plan.summary.confirmation_message
+
+
+def test_write_plan_is_idempotent_for_same_preview_inputs():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [InventoryDevice(source_id="1", name="switch-a", serial="S1", site="HQ")],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(source_id="a", name="switch-a-new", serial="S1", site="HQ"),
+            InventoryDevice(source_id="b", name="switch-b", serial="S2", site="HQ"),
+        ],
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+
+    first = build_write_plan(diff, change)
+    second = build_write_plan(diff, change)
+
+    assert first == second

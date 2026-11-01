@@ -1,8 +1,11 @@
+from dataclasses import replace
+
 from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
 from unifi2netbox.matching import deduplicate_inventory
 from unifi2netbox.preview import build_change_preview, build_difference_preview
 from unifi2netbox.write_journal import (
     OperationOutcomeStatus,
+    finalize_journal,
     initialize_journal,
     record_operation_result,
 )
@@ -110,6 +113,105 @@ def test_readback_plan_skips_successful_create_without_object_id():
     )
 
     readback = build_readback_plan(plan, journal)
+
+    assert readback.requests == ()
+    assert readback.skipped_sequences == (1,)
+
+
+def test_readback_plan_includes_only_successes_on_partial_failure():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [InventoryDevice(source_id="1", name="switch-a", serial="S1", site="HQ")],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(source_id="a", name="switch-a-new", serial="S1", site="HQ"),
+            InventoryDevice(source_id="b", name="switch-b", serial="S2", site="HQ"),
+        ],
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    preview = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(preview)
+    plan = build_write_plan(preview, change)
+
+    journal = initialize_journal(
+        plan, run_id="run-rb-4", started_at="2026-11-01T13:30:00+00:00"
+    )
+    journal = record_operation_result(
+        journal,
+        sequence=1,
+        status=OperationOutcomeStatus.SUCCESS,
+        netbox_object_id="601",
+    )
+    journal = record_operation_result(
+        journal,
+        sequence=2,
+        status=OperationOutcomeStatus.FAILED,
+        message="simulated write failure",
+    )
+
+    readback = build_readback_plan(plan, journal)
+
+    assert len(readback.requests) == 1
+    assert readback.requests[0].sequence == 1
+    assert readback.requests[0].netbox_object_id == "601"
+    assert readback.skipped_sequences == ()
+
+
+def test_readback_plan_stays_empty_on_cancel_without_successes():
+    netbox = snapshot(InventorySource.NETBOX, [])
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="switch-a", site="HQ")],
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    preview = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(preview)
+    plan = build_write_plan(preview, change)
+
+    journal = initialize_journal(
+        plan, run_id="run-rb-5", started_at="2026-11-01T13:40:00+00:00"
+    )
+    cancelled = finalize_journal(
+        journal,
+        finished_at="2026-11-01T13:41:00+00:00",
+        cancelled=True,
+    )
+
+    readback = build_readback_plan(plan, cancelled)
+
+    assert readback.requests == ()
+    assert readback.skipped_sequences == ()
+
+
+def test_readback_plan_skips_success_with_missing_plan_operation_sequence():
+    netbox = snapshot(InventorySource.NETBOX, [])
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="switch-a", site="HQ")],
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    preview = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(preview)
+    plan = build_write_plan(preview, change)
+
+    journal = initialize_journal(
+        plan, run_id="run-rb-6", started_at="2026-11-01T13:50:00+00:00"
+    )
+    journal = record_operation_result(
+        journal,
+        sequence=1,
+        status=OperationOutcomeStatus.SUCCESS,
+        netbox_object_id="701",
+    )
+
+    trimmed_plan = replace(plan, operations=())
+
+    readback = build_readback_plan(trimmed_plan, journal)
 
     assert readback.requests == ()
     assert readback.skipped_sequences == (1,)

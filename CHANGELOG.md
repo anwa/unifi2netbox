@@ -6,6 +6,17 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Added
+
+- Extend M5 offline contract coverage for write-plan/read-back behavior:
+	idempotent planning, partial-failure read-back filtering, zero read-back on
+	cancel without successes, and explicit skips for missing operation sequences.
+
+### Documentation
+
+- Update implementation/testing docs to mark the M5 cancel/partial-failure/
+	concurrent-edit/idempotence test item as completed with focused offline tests.
+
 ## v0.3.19
 
 ### Changed

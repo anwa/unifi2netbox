@@ -234,7 +234,8 @@ The focused tests validate that:
 - dependency-blocked selections are not considered executable,
 - duplicate create/update targets are surfaced as explicit blockers,
 - one immutable summary confirmation is generated per plan with stable counts,
-- target-only rows never produce write operations.
+- target-only rows never produce write operations,
+- repeated planning over identical inputs is idempotent.
 
 Run the focused write-plan checks:
 
@@ -274,7 +275,11 @@ The focused tests validate that:
 
 - successful create outcomes with object IDs produce read-back requests,
 - successful updates derive target object IDs deterministically from device keys,
-- successful create outcomes without object IDs are skipped explicitly.
+- successful create outcomes without object IDs are skipped explicitly,
+- partial-failure journals generate read-back requests only for successful
+	operations,
+- cancelled runs without successful outcomes produce zero read-back requests,
+- missing operation sequences are skipped explicitly (concurrent-edit safety).
 
 Run the focused read-back checks:
 
