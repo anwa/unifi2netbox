@@ -6,6 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QPushButton,
     QStyle,
     QTabWidget,
     QToolBar,
@@ -739,6 +741,14 @@ class MainWindow(QMainWindow):
         self.preview_detail_list.setMinimumHeight(96)
         self.preview_detail_list.currentItemChanged.connect(self.preview_detail_changed)
         self.preview_detail_text = plain_label("No preview details yet.")
+        self.copy_selected_button = QPushButton("Copy selected", self)
+        self.copy_selected_button.clicked.connect(self.copy_selected_highlight)
+        self.copy_all_button = QPushButton("Copy all", self)
+        self.copy_all_button.clicked.connect(self.copy_all_highlights)
+        copy_row = QHBoxLayout()
+        copy_row.addWidget(self.copy_selected_button)
+        copy_row.addWidget(self.copy_all_button)
+        copy_row.addStretch()
         preview_grid.addWidget(plain_label("Status"), 0, 0)
         preview_grid.addWidget(self.preview_status, 0, 1)
         preview_grid.addWidget(plain_label("Counts"), 1, 0)
@@ -753,6 +763,8 @@ class MainWindow(QMainWindow):
         preview_grid.addWidget(self.preview_detail_list, 5, 1)
         preview_grid.addWidget(plain_label("Highlight detail"), 6, 0)
         preview_grid.addWidget(self.preview_detail_text, 6, 1)
+        preview_grid.addWidget(plain_label("Clipboard"), 7, 0)
+        preview_grid.addLayout(copy_row, 7, 1)
         preview_grid.setColumnStretch(1, 1)
         layout.addLayout(preview_grid)
         layout.addStretch()
@@ -844,6 +856,26 @@ class MainWindow(QMainWindow):
             self.preview_detail_text.setText("No preview details yet.")
             return
         self.preview_detail_text.setText(current.text())
+
+    def copy_selected_highlight(self) -> None:
+        current = self.preview_detail_list.currentItem()
+        text = current.text() if current is not None else ""
+        if not text:
+            self.statusBar().showMessage("No highlight selected to copy.")
+            return
+        QApplication.clipboard().setText(text)
+        self.statusBar().showMessage("Copied selected highlight.")
+
+    def copy_all_highlights(self) -> None:
+        lines = [
+            self.preview_detail_list.item(index).text()
+            for index in range(self.preview_detail_list.count())
+        ]
+        if not lines:
+            self.statusBar().showMessage("No highlights available to copy.")
+            return
+        QApplication.clipboard().setText("\n".join(lines))
+        self.statusBar().showMessage(f"Copied {len(lines)} highlight line(s).")
 
     def update_check_action(self) -> None:
         self.settings_action.setEnabled(not self.closing)

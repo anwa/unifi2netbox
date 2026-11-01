@@ -2,7 +2,7 @@ from threading import Event
 
 import pytest
 from PySide6.QtCore import QThreadPool, QTimer
-from PySide6.QtWidgets import QDialog, QLineEdit, QToolBar
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QToolBar
 
 from unifi2netbox.config import (
     NetBoxConfig,
@@ -462,6 +462,41 @@ def test_inventory_preview_finished_shows_fallback_details_for_partial(
 
     assert window.preview_detail_list.count() == 1
     assert "partial" in window.preview_detail_text.text().lower()
+
+
+def test_inventory_preview_copy_selected_highlight(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            detail_lines=("Line A", "Line B"),
+        )
+    )
+    window.preview_detail_list.setCurrentRow(1)
+    window.copy_selected_highlight()
+
+    assert QApplication.clipboard().text() == "Line B"
+
+
+def test_inventory_preview_copy_all_highlights(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            detail_lines=("First", "Second", "Third"),
+        )
+    )
+    window.copy_all_highlights()
+
+    assert QApplication.clipboard().text() == "First\nSecond\nThird"
 
 
 def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
