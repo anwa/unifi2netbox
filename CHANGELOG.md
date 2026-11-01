@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.25
+
+### Changed
+
+- Improve non-executable row diagnostics to prefer row-specific dependency
+  context (for example missing required identity fields) over generic plan
+  blocker wording.
+
+### Added
+
+- Add per-row `Suggested Device Types` output for create rows in the
+  `Show all rows` dialog, based on unmatched UniFi observations and the current
+  NetBox device-type catalog.
+
 ## v0.3.24
 
 ### Added

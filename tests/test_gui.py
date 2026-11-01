@@ -33,8 +33,16 @@ from unifi2netbox.gui import (
     _preview_rows,
     _scope_unmatched_netbox_for_delete,
 )
-from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
-from unifi2netbox.matching import deduplicate_inventory
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryDeviceType,
+    InventorySnapshot,
+    InventorySource,
+)
+from unifi2netbox.matching import (
+    deduplicate_inventory,
+    suggest_device_types_for_unmatched,
+)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
 from unifi2netbox.preview import build_change_preview, build_difference_preview
 from unifi2netbox.write_plan import build_write_plan
@@ -787,7 +795,68 @@ def test_inventory_preview_rows_dialog_shows_blocked_reason(qtbot, tmp_path, poo
     assert table is not None
     assert table.rowCount() == 1
     assert table.item(0, 5).text() == "No"
-    assert "dependency requirements" in table.item(0, 6).text()
+    assert "create_required_identity" in table.item(0, 6).text()
+    window.preview_rows_dialog.close()
+
+
+def test_inventory_preview_rows_dialog_shows_create_device_type_suggestions(
+    qtbot, tmp_path, pool
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+        device_types=(
+            InventoryDeviceType(
+                source_id="101",
+                manufacturer="Ubiquiti",
+                model="USW-Pro-24",
+            ),
+        ),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(
+                source_id="a",
+                name="switch-a",
+                manufacturer="Ubiquiti",
+                model="USW-Pro-24",
+                site="HQ",
+            ),
+        ),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=_preview_rows(
+                diff,
+                change,
+                plan,
+                suggestions=suggest_device_types_for_unmatched(dedup, netbox, unifi),
+            ),
+            difference_preview=diff,
+            write_plan=plan,
+        )
+    )
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    assert table is not None
+    assert table.rowCount() == 1
+    assert "Ubiquiti USW-Pro-24" in table.item(0, 7).text()
     window.preview_rows_dialog.close()
 
 

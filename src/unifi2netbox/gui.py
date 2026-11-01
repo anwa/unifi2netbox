@@ -77,6 +77,7 @@ class InventoryPreviewRow:
     selected_fields: str
     executable: str
     blocked_reason: str = ""
+    suggested_device_types: str = ""
 
 
 @dataclass(frozen=True)
@@ -225,7 +226,7 @@ class InventoryPreviewJob(QRunnable):
                         netbox_device_count=len(netbox_snapshot.devices),
                         unifi_device_count=len(unifi_snapshot.devices),
                     ),
-                    rows=_preview_rows(diff, change, plan),
+                    rows=_preview_rows(diff, change, plan, suggestions=suggestions),
                     difference_preview=diff,
                     write_plan=plan,
                 )
@@ -414,22 +415,35 @@ def _preview_detail_lines(
     return tuple(lines)
 
 
-def _preview_rows(diff, change, plan) -> tuple[InventoryPreviewRow, ...]:
+def _preview_rows(
+    diff, change, plan, *, suggestions=()
+) -> tuple[InventoryPreviewRow, ...]:
     change_by_key = {item.device_key: item for item in change.devices}
     executable_by_key = {item.device_key: item.executable for item in change.devices}
     issue_by_key = {item.device_key: item.message for item in plan.issues}
+    suggestions_by_observation = {
+        item.unifi_observation_id: item.candidates for item in suggestions
+    }
 
     rows: list[InventoryPreviewRow] = []
     for device in diff.devices:
         selected_fields = ""
         blocked_reason = ""
+        suggested_device_types = ""
         change_item = change_by_key.get(device.device_key)
         if change_item is not None and change_item.selected_fields:
             selected_fields = ", ".join(change_item.selected_fields)
 
-        if device.device_key in issue_by_key:
-            blocked_reason = issue_by_key[device.device_key]
-        elif not executable_by_key.get(device.device_key, False):
+        if device.action == "create" and device.device_key.startswith("create:"):
+            observation_id = device.device_key.split(":", maxsplit=1)[1]
+            candidates = suggestions_by_observation.get(observation_id, ())
+            if candidates:
+                suggested_device_types = "; ".join(
+                    f"{candidate.manufacturer} {candidate.model} ({candidate.score})"
+                    for candidate in candidates[:3]
+                )
+
+        if not executable_by_key.get(device.device_key, False):
             if change_item is None:
                 blocked_reason = "No change preview entry is available."
             else:
@@ -446,6 +460,10 @@ def _preview_rows(diff, change, plan) -> tuple[InventoryPreviewRow, ...]:
                         )
                     else:
                         blocked_reason = top.description
+                elif device.device_key in issue_by_key:
+                    blocked_reason = issue_by_key[device.device_key]
+        elif device.device_key in issue_by_key:
+            blocked_reason = issue_by_key[device.device_key]
 
         rows.append(
             InventoryPreviewRow(
@@ -458,6 +476,7 @@ def _preview_rows(diff, change, plan) -> tuple[InventoryPreviewRow, ...]:
                     "Yes" if executable_by_key.get(device.device_key, False) else "No"
                 ),
                 blocked_reason=blocked_reason,
+                suggested_device_types=suggested_device_types,
             )
         )
     return tuple(rows)
@@ -1372,7 +1391,7 @@ class MainWindow(QMainWindow):
         table.setObjectName("preview_rows_table")
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        table.setColumnCount(7)
+        table.setColumnCount(8)
         table.setHorizontalHeaderLabels(
             [
                 "Device key",
@@ -1382,6 +1401,7 @@ class MainWindow(QMainWindow):
                 "Selected fields",
                 "Executable",
                 "Reason",
+                "Suggested Device Types",
             ]
         )
 
@@ -1405,6 +1425,7 @@ class MainWindow(QMainWindow):
                     row.selected_fields,
                     row.executable,
                     row.blocked_reason,
+                    row.suggested_device_types,
                 )
                 for column_index, value in enumerate(values):
                     table.setItem(row_index, column_index, QTableWidgetItem(value))

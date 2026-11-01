@@ -62,6 +62,8 @@ Inside that dialog, action and executable filters help narrow larger result
 sets without rerunning the refresh.
 Rows that cannot be executed now include a `Reason` value so blockers are
 visible without leaving the dialog.
+Create rows also include `Suggested Device Types` candidates derived from the
+current NetBox device-type catalog.
 The rows dialog regression that could hide all row hits after filtering has
 been fixed.
 Matching now runs in passes: confirmed mappings first, then ranked candidate
