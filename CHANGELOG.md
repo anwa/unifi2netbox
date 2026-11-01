@@ -6,6 +6,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.14
+
+### Added
+
+- Add `Copy selected` and `Copy all` actions for inventory preview highlights.
+- Write copied highlight text directly to the system clipboard and report the
+	action in the status bar for immediate feedback.
+
+### Validation
+
+- GUI suite passes with clipboard interaction tests: `tests/test_gui.py`.
+- Ruff checks pass for `gui.py` and GUI tests.
+
 ## v0.3.13
 
 ### Added

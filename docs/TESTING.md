@@ -304,6 +304,7 @@ The GUI check includes inventory-preview highlight rendering for sample match,
 conflict and planned-operation lines.
 It also validates interactive highlight selection and detail-field updates.
 Fallback highlight behavior for partial refresh states is also covered.
+Clipboard copy behavior (`Copy selected` / `Copy all`) is covered as well.
 
 Default tests block socket connections. API tests exercise the real pynetbox
 request construction against a synthetic requests transport. No infrastructure
