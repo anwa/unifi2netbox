@@ -314,7 +314,13 @@ def read_netbox_inventory(
                 if site is not None:
                     sites.append(site)
 
-            device_statuses.extend(_netbox_device_statuses(session, config))
+            try:
+                # Device status choices are optional enrichment for create defaults.
+                # Inventory refresh must still succeed when this endpoint is missing
+                # or restricted on a specific NetBox deployment/version.
+                device_statuses.extend(_netbox_device_statuses(session, config))
+            except InventoryError:
+                device_statuses = []
     except RedirectError as error:
         raise InventoryError(
             "Redirect refused. Configure the final NetBox URL explicitly."

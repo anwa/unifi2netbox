@@ -282,6 +282,23 @@ def test_netbox_inventory_page_limit_is_bounded(netbox_transport):
         )
 
 
+def test_netbox_inventory_succeeds_when_status_choices_endpoint_is_unavailable(
+    netbox_transport,
+):
+    _, responses = netbox_transport
+    responses[-1] = (404, {"detail": "Not found."})
+
+    snapshot = read_netbox_inventory(
+        NetBoxConfig("https://netbox.invalid", "synthetic-token"),
+        page_size=1,
+    )
+
+    assert snapshot.source == InventorySource.NETBOX
+    assert [device.source_id for device in snapshot.devices] == ["7", "8"]
+    assert [item.source_id for item in snapshot.sites] == ["301", "302"]
+    assert snapshot.device_statuses == ()
+
+
 def test_unifi_inventory_is_paginated_and_normalized(unifi_api):
     calls, _, transport = unifi_api
     captured_at = datetime(2026, 10, 28, 13, 0, 0, tzinfo=UTC)
