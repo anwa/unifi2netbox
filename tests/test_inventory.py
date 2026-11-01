@@ -74,6 +74,36 @@ def netbox_transport(monkeypatch):
                 ],
             },
         ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": "https://netbox.invalid/api/dcim/device-types/?limit=1&offset=1",
+                "previous": None,
+                "results": [
+                    {
+                        "id": 101,
+                        "model": "USW-24",
+                        "manufacturer": {"name": "Ubiquiti"},
+                    }
+                ],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": None,
+                "previous": "https://netbox.invalid/api/dcim/device-types/?limit=1&offset=0",
+                "results": [
+                    {
+                        "id": 102,
+                        "model": "U7-Pro",
+                        "manufacturer": {"name": "Ubiquiti"},
+                    }
+                ],
+            },
+        ),
     ]
 
     def send(session, request, **kwargs):
@@ -174,6 +204,9 @@ def test_netbox_inventory_is_paginated_and_normalized(netbox_transport):
     assert snapshot.devices[0].mac_address == "00:11:22:33:44:55"
     assert snapshot.devices[0].manufacturer == "Ubiquiti"
     assert snapshot.devices[1].name == "edge-b"
+    assert [item.source_id for item in snapshot.device_types] == ["101", "102"]
+    assert snapshot.device_types[0].manufacturer == "Ubiquiti"
+    assert snapshot.device_types[1].model == "U7-Pro"
 
     for request, options in calls:
         assert request.method == "GET"

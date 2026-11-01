@@ -58,7 +58,7 @@ def test_preview_contains_provenance_categories_and_unsupported_fields():
     device = next(
         item for item in preview.devices if item.action == DeviceAction.UPDATE
     )
-    assert "Matched by identity." in device.provenance[0]
+    assert "Matched by serial." in device.provenance[0]
     name_field = next(field for field in device.fields if field.name == "name")
     assert name_field.category == FieldCategory.CONFIGURED
     assert name_field.changed is True

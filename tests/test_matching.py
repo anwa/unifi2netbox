@@ -1,4 +1,9 @@
-from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryDeviceType,
+    InventorySnapshot,
+    InventorySource,
+)
 from unifi2netbox.matching import (
     ConflictReason,
     MatchReason,
@@ -30,7 +35,7 @@ def unifi_device(device_id: str, serial: str = "", mac: str = "") -> InventoryDe
     )
 
 
-def test_identity_match_pairs_unique_candidate():
+def test_serial_match_pairs_unique_candidate():
     netbox = snapshot(
         InventorySource.NETBOX,
         [netbox_device("1", serial="ABC123", mac="00:11:22:33:44:55")],
@@ -43,7 +48,7 @@ def test_identity_match_pairs_unique_candidate():
     result = deduplicate_inventory(netbox, unifi)
 
     assert len(result.pairs) == 1
-    assert result.pairs[0].reason == MatchReason.IDENTITY
+    assert result.pairs[0].reason == MatchReason.SERIAL
     assert result.conflicts == ()
     assert result.unmatched_unifi == ()
     assert result.unmatched_netbox == ()
@@ -127,6 +132,123 @@ def test_name_fallback_matches_unique_name_when_identity_missing():
     assert result.conflicts == ()
     assert result.unmatched_unifi == ()
     assert result.unmatched_netbox == ()
+
+
+def test_name_match_precedes_serial_and_mac_matches():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [
+            InventoryDevice(
+                source_id="1",
+                name="HG-DG-R1-UDM",
+                serial="WRONG",
+                mac_address="AA:AA:AA:AA:AA:AA",
+            ),
+            InventoryDevice(
+                source_id="2",
+                name="other",
+                serial="SERIAL-1",
+                mac_address="11:22:33:44:55:66",
+            ),
+        ],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(
+                source_id="a",
+                name="HG-DG-R1-UDM",
+                serial="SERIAL-1",
+                mac_address="11:22:33:44:55:66",
+            )
+        ],
+    )
+
+    result = deduplicate_inventory(netbox, unifi)
+
+    assert len(result.pairs) == 1
+    assert result.pairs[0].netbox_observation_id == "netbox:1"
+    assert result.pairs[0].reason == MatchReason.NAME
+
+
+def test_ambiguous_name_blocks_serial_and_mac_fallback():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [
+            InventoryDevice(source_id="1", name="dup-name", serial="SERIAL-1"),
+            InventoryDevice(source_id="2", name="dup-name", serial="OTHER"),
+        ],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="dup-name", serial="SERIAL-1")],
+    )
+
+    result = deduplicate_inventory(netbox, unifi)
+
+    assert result.pairs == ()
+    assert len(result.conflicts) == 1
+    assert result.conflicts[0].reason == ConflictReason.AMBIGUOUS_CANDIDATES
+
+
+def test_serial_match_precedes_mac_match():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [
+            InventoryDevice(
+                source_id="1",
+                name="nb-1",
+                serial="SERIAL-1",
+                mac_address="AA:BB:CC:DD:EE:FF",
+            ),
+            InventoryDevice(
+                source_id="2",
+                name="nb-2",
+                serial="OTHER",
+                mac_address="11:22:33:44:55:66",
+            ),
+        ],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(
+                source_id="a",
+                name="uf-a",
+                serial="SERIAL-1",
+                mac_address="11:22:33:44:55:66",
+            )
+        ],
+    )
+
+    result = deduplicate_inventory(netbox, unifi)
+
+    assert len(result.pairs) == 1
+    assert result.pairs[0].netbox_observation_id == "netbox:1"
+    assert result.pairs[0].reason == MatchReason.SERIAL
+
+
+def test_mac_match_is_used_when_name_and_serial_do_not_match():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [InventoryDevice(source_id="1", name="nb-1", mac_address="11:22:33:44:55:66")],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(
+                source_id="a",
+                name="uf-a",
+                serial="SERIAL-1",
+                mac_address="11:22:33:44:55:66",
+            )
+        ],
+    )
+
+    result = deduplicate_inventory(netbox, unifi)
+
+    assert len(result.pairs) == 1
+    assert result.pairs[0].reason == MatchReason.MAC
 
 
 def test_name_fallback_reports_ambiguous_candidates():
@@ -244,3 +366,38 @@ def test_type_suggestions_are_explainable_and_ranked():
 def test_type_suggestions_require_catalog_and_positive_limit():
     result = deduplicate_inventory(None, None)
     assert suggest_device_types_for_unmatched(result, None, None) == ()
+
+
+def test_type_suggestions_prefer_netbox_device_type_templates():
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-10-28T15:00:00+00:00",
+        source_version="x",
+        devices=(),
+        device_types=(
+            InventoryDeviceType(
+                source_id="101", manufacturer="Ubiquiti", model="USW-24"
+            ),
+            InventoryDeviceType(
+                source_id="102", manufacturer="Ubiquiti", model="U7-Pro"
+            ),
+        ),
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(
+                source_id="u1",
+                name="switch-1",
+                manufacturer="Ubiquiti",
+                model="U7 Pro",
+            )
+        ],
+    )
+
+    result = deduplicate_inventory(netbox, unifi)
+    suggestions = suggest_device_types_for_unmatched(result, netbox, unifi)
+
+    assert len(suggestions) == 1
+    assert suggestions[0].candidates[0].manufacturer == "Ubiquiti"
+    assert suggestions[0].candidates[0].model == "U7-Pro"

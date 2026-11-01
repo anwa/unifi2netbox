@@ -623,9 +623,7 @@ def test_preview_rows_uses_change_executable_state_without_plan_devices():
     unifi = InventorySnapshot(
         source=InventorySource.UNIFI_NETWORK,
         captured_at="2026-11-01T10:00:00+00:00",
-        devices=(
-            InventoryDevice(source_id="a", name="switch-a", site="HQ"),
-        ),
+        devices=(InventoryDevice(source_id="a", name="switch-a", site="HQ"),),
     )
 
     dedup = deduplicate_inventory(netbox, unifi)

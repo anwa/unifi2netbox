@@ -2,7 +2,12 @@ import sqlite3
 
 import pytest
 
-from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryDeviceType,
+    InventorySnapshot,
+    InventorySource,
+)
 from unifi2netbox.snapshots import (
     SNAPSHOT_SCHEMA_VERSION,
     SnapshotStore,
@@ -24,6 +29,13 @@ def netbox_snapshot(captured: str, serial: str) -> InventorySnapshot:
                 manufacturer="Ubiquiti",
                 mac_address="00:11:22:33:44:55",
                 site="HQ",
+            ),
+        ),
+        device_types=(
+            InventoryDeviceType(
+                source_id="101",
+                manufacturer="Ubiquiti",
+                model="USW-24",
             ),
         ),
     )
