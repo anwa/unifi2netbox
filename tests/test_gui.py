@@ -2,7 +2,13 @@ from threading import Event
 
 import pytest
 from PySide6.QtCore import QThreadPool, QTimer
-from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QToolBar
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QLineEdit,
+    QTableWidget,
+    QToolBar,
+)
 
 from unifi2netbox.config import (
     NetBoxConfig,
@@ -13,7 +19,12 @@ from unifi2netbox.config import (
     save_unifi_config,
 )
 from unifi2netbox.connections import ConnectionRunner
-from unifi2netbox.gui import InventoryPreviewResult, MainWindow, SettingsDialog
+from unifi2netbox.gui import (
+    InventoryPreviewResult,
+    InventoryPreviewRow,
+    MainWindow,
+    SettingsDialog,
+)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
 
 
@@ -497,6 +508,40 @@ def test_inventory_preview_copy_all_highlights(qtbot, tmp_path, pool):
     window.copy_all_highlights()
 
     assert QApplication.clipboard().text() == "First\nSecond\nThird"
+
+
+def test_inventory_preview_show_all_rows_dialog(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            detail_lines=("Line A",),
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                ),
+            ),
+        )
+    )
+
+    assert window.show_rows_button.isEnabled()
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    assert window.preview_rows_dialog.isVisible()
+    table = window.preview_rows_dialog.findChild(QTableWidget)
+    assert table is not None
+    assert table.rowCount() == 1
+    assert table.item(0, 0).text() == "create:unifi:a"
+    window.preview_rows_dialog.close()
 
 
 def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):

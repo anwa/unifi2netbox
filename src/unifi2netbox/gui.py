@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QStyle,
+    QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QToolBar,
     QToolButton,
@@ -48,6 +50,16 @@ from unifi2netbox.write_plan import build_write_plan
 
 
 @dataclass(frozen=True)
+class InventoryPreviewRow:
+    device_key: str
+    action: str
+    source_label: str
+    target_label: str
+    selected_fields: str
+    executable: str
+
+
+@dataclass(frozen=True)
 class InventoryPreviewResult:
     status: str
     details: str
@@ -61,6 +73,7 @@ class InventoryPreviewResult:
     executable_operations: int = 0
     last_updated: str = ""
     detail_lines: tuple[str, ...] = ()
+    rows: tuple[InventoryPreviewRow, ...] = ()
 
 
 class InventoryJobSignals(QObject):
@@ -89,8 +102,7 @@ class InventoryPreviewJob(QRunnable):
             message = " ".join(item for item in diagnostics if item)
             if refresh.netbox.error or refresh.unifi.error:
                 partial_detail = (
-                    message
-                    or "Inventory refresh is partial; check source diagnostics."
+                    message or "Inventory refresh is partial; check source diagnostics."
                 )
                 self.signals.finished.emit(
                     InventoryPreviewResult(
@@ -120,8 +132,7 @@ class InventoryPreviewJob(QRunnable):
             unifi_snapshot = refresh.unifi.snapshot
             if netbox_snapshot is None or unifi_snapshot is None:
                 unavailable_detail = (
-                    message
-                    or "Inventory snapshots are not available for both sources."
+                    message or "Inventory snapshots are not available for both sources."
                 )
                 self.signals.finished.emit(
                     InventoryPreviewResult(
@@ -166,6 +177,7 @@ class InventoryPreviewJob(QRunnable):
                         netbox_device_count=len(netbox_snapshot.devices),
                         unifi_device_count=len(unifi_snapshot.devices),
                     ),
+                    rows=_preview_rows(diff, change, plan),
                 )
             )
         except Exception:
@@ -197,13 +209,9 @@ def _preview_detail_lines(
         )
 
     if dedup.unmatched_unifi:
-        lines.append(
-            f"Unmatched UniFi observations: {len(dedup.unmatched_unifi)}"
-        )
+        lines.append(f"Unmatched UniFi observations: {len(dedup.unmatched_unifi)}")
     if dedup.unmatched_netbox:
-        lines.append(
-            f"Unmatched NetBox observations: {len(dedup.unmatched_netbox)}"
-        )
+        lines.append(f"Unmatched NetBox observations: {len(dedup.unmatched_netbox)}")
 
     for pair in dedup.pairs[:3]:
         lines.append(
@@ -229,6 +237,32 @@ def _preview_detail_lines(
     if not lines:
         lines.append("No preview detail entries are currently available.")
     return tuple(lines)
+
+
+def _preview_rows(diff, change, plan) -> tuple[InventoryPreviewRow, ...]:
+    change_by_key = {item.device_key: item for item in change.devices}
+    executable_by_key = {item.device_key: item.executable for item in plan.devices}
+
+    rows: list[InventoryPreviewRow] = []
+    for device in diff.devices:
+        selected_fields = ""
+        change_item = change_by_key.get(device.device_key)
+        if change_item is not None and change_item.selected_fields:
+            selected_fields = ", ".join(change_item.selected_fields)
+
+        rows.append(
+            InventoryPreviewRow(
+                device_key=device.device_key,
+                action=str(device.action),
+                source_label=device.source_label,
+                target_label=device.target_label,
+                selected_fields=selected_fields,
+                executable=(
+                    "Yes" if executable_by_key.get(device.device_key, False) else "No"
+                ),
+            )
+        )
+    return tuple(rows)
 
 
 class InventoryPreviewRunner(QObject):
@@ -741,11 +775,17 @@ class MainWindow(QMainWindow):
         self.preview_detail_list.setMinimumHeight(96)
         self.preview_detail_list.currentItemChanged.connect(self.preview_detail_changed)
         self.preview_detail_text = plain_label("No preview details yet.")
+        self.preview_rows: tuple[InventoryPreviewRow, ...] = ()
+        self.preview_rows_dialog: QDialog | None = None
         self.copy_selected_button = QPushButton("Copy selected", self)
         self.copy_selected_button.clicked.connect(self.copy_selected_highlight)
         self.copy_all_button = QPushButton("Copy all", self)
         self.copy_all_button.clicked.connect(self.copy_all_highlights)
+        self.show_rows_button = QPushButton("Show all rows", self)
+        self.show_rows_button.clicked.connect(self.show_preview_rows_dialog)
+        self.show_rows_button.setEnabled(False)
         copy_row = QHBoxLayout()
+        copy_row.addWidget(self.show_rows_button)
         copy_row.addWidget(self.copy_selected_button)
         copy_row.addWidget(self.copy_all_button)
         copy_row.addStretch()
@@ -836,6 +876,8 @@ class MainWindow(QMainWindow):
             f". {result.details}"
         )
         self.preview_checked_at.setText(result.last_updated or "Not available")
+        self.preview_rows = result.rows
+        self.show_rows_button.setEnabled(bool(self.preview_rows))
         self.preview_detail_list.clear()
         for line in result.detail_lines:
             self.preview_detail_list.addItem(QListWidgetItem(line))
@@ -876,6 +918,59 @@ class MainWindow(QMainWindow):
             return
         QApplication.clipboard().setText("\n".join(lines))
         self.statusBar().showMessage(f"Copied {len(lines)} highlight line(s).")
+
+    def show_preview_rows_dialog(self) -> None:
+        if not self.preview_rows:
+            self.statusBar().showMessage("No preview rows available.")
+            return
+
+        if (
+            self.preview_rows_dialog is not None
+            and self.preview_rows_dialog.isVisible()
+        ):
+            self.preview_rows_dialog.raise_()
+            self.preview_rows_dialog.activateWindow()
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Inventory Preview Rows")
+        dialog.resize(980, 520)
+        layout = QVBoxLayout(dialog)
+        table = QTableWidget(dialog)
+        table.setColumnCount(6)
+        table.setHorizontalHeaderLabels(
+            [
+                "Device key",
+                "Action",
+                "Source",
+                "Target",
+                "Selected fields",
+                "Executable",
+            ]
+        )
+        table.setRowCount(len(self.preview_rows))
+        for row_index, row in enumerate(self.preview_rows):
+            values = (
+                row.device_key,
+                row.action,
+                row.source_label,
+                row.target_label,
+                row.selected_fields,
+                row.executable,
+            )
+            for column_index, value in enumerate(values):
+                table.setItem(row_index, column_index, QTableWidgetItem(value))
+
+        table.resizeColumnsToContents()
+        table.setAlternatingRowColors(True)
+        layout.addWidget(table)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        self.preview_rows_dialog = dialog
+        dialog.setModal(False)
+        dialog.show()
 
     def update_check_action(self) -> None:
         self.settings_action.setEnabled(not self.closing)
