@@ -7,6 +7,7 @@ from unifi2netbox.write_journal import (
     OperationOutcomeStatus,
     finalize_journal,
     initialize_journal,
+    reconcile_ambiguous_creates,
     record_operation_result,
     summarize_journal,
 )
@@ -137,3 +138,72 @@ def test_finalize_journal_marks_run_finished():
     summary = summarize_journal(finished)
     assert finished.cancelled is True
     assert summary.finished is True
+
+
+def test_reconcile_ambiguous_creates_flags_missing_object_id():
+    netbox = snapshot(InventorySource.NETBOX, [])
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="switch-a", site="HQ")],
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    preview = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(preview)
+    plan = build_write_plan(preview, change)
+
+    journal = initialize_journal(
+        plan, run_id="run-5", started_at="2026-11-01T12:40:00+00:00"
+    )
+    journal = record_operation_result(
+        journal,
+        sequence=1,
+        status=OperationOutcomeStatus.SUCCESS,
+        message="created",
+    )
+
+    ambiguous = reconcile_ambiguous_creates(plan, journal)
+
+    assert len(ambiguous) == 1
+    assert ambiguous[0].reason == "missing_object_id"
+    assert ambiguous[0].sequence == 1
+
+
+def test_reconcile_ambiguous_creates_flags_duplicate_object_id():
+    netbox = snapshot(InventorySource.NETBOX, [])
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(source_id="a", name="switch-a", site="HQ"),
+            InventoryDevice(source_id="b", name="switch-b", site="HQ"),
+        ],
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    preview = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(preview)
+    plan = build_write_plan(preview, change)
+
+    journal = initialize_journal(
+        plan, run_id="run-6", started_at="2026-11-01T12:50:00+00:00"
+    )
+    journal = record_operation_result(
+        journal,
+        sequence=1,
+        status=OperationOutcomeStatus.SUCCESS,
+        message="created",
+        netbox_object_id="42",
+    )
+    journal = record_operation_result(
+        journal,
+        sequence=2,
+        status=OperationOutcomeStatus.SUCCESS,
+        message="created",
+        netbox_object_id="42",
+    )
+
+    ambiguous = reconcile_ambiguous_creates(plan, journal)
+
+    assert len(ambiguous) == 2
+    assert {item.reason for item in ambiguous} == {"duplicate_object_id"}
+    assert all(item.candidate_object_ids == ("42",) for item in ambiguous)

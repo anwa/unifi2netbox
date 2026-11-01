@@ -44,6 +44,14 @@ class JournalSummary:
     finished: bool
 
 
+@dataclass(frozen=True)
+class AmbiguousCreate:
+    sequence: int
+    device_key: str
+    reason: str
+    candidate_object_ids: tuple[str, ...] = ()
+
+
 def initialize_journal(
     write_plan: WritePlan, run_id: str, started_at: str
 ) -> WriteJournal:
@@ -136,3 +144,52 @@ def summarize_journal(journal: WriteJournal) -> JournalSummary:
         blockers=len(journal.blocker_issues),
         finished=bool(journal.finished_at),
     )
+
+
+def reconcile_ambiguous_creates(
+    write_plan: WritePlan,
+    journal: WriteJournal,
+) -> tuple[AmbiguousCreate, ...]:
+    create_sequences = {
+        operation.sequence
+        for operation in write_plan.operations
+        if operation.operation_type == OperationType.CREATE_DEVICE
+    }
+
+    successful_creates = [
+        item
+        for item in journal.outcomes
+        if item.sequence in create_sequences
+        and item.status == OperationOutcomeStatus.SUCCESS
+    ]
+
+    object_id_counts: dict[str, int] = {}
+    for item in successful_creates:
+        if not item.netbox_object_id:
+            continue
+        object_id_counts[item.netbox_object_id] = (
+            object_id_counts.get(item.netbox_object_id, 0) + 1
+        )
+
+    ambiguous: list[AmbiguousCreate] = []
+    for item in successful_creates:
+        if not item.netbox_object_id:
+            ambiguous.append(
+                AmbiguousCreate(
+                    sequence=item.sequence,
+                    device_key=item.device_key,
+                    reason="missing_object_id",
+                )
+            )
+            continue
+        if object_id_counts[item.netbox_object_id] > 1:
+            ambiguous.append(
+                AmbiguousCreate(
+                    sequence=item.sequence,
+                    device_key=item.device_key,
+                    reason="duplicate_object_id",
+                    candidate_object_ids=(item.netbox_object_id,),
+                )
+            )
+
+    return tuple(sorted(ambiguous, key=lambda item: item.sequence))
