@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.16
+
+### Added
+
+- Add filtering controls to the `Show all rows` dialog: action filter
+	(`All/Create/Update/Target only`) and `Executable only` toggle.
+- Keep filtering local to the dialog so users can quickly narrow larger
+	preview tables without refreshing inventory data.
+
+### Validation
+
+- GUI suite passes with row-filter behavior checks: `tests/test_gui.py`.
+- Ruff checks pass for `gui.py` and GUI tests.
+
 ## v0.3.15
 
 ### Added
