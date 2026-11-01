@@ -6,6 +6,24 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.19
+
+### Changed
+
+- Change deduplication pass order for UniFi observations to strict candidate
+	lookup by name, then serial, then MAC (after optional confirmed mappings).
+- Treat duplicate candidates inside the active pass as ambiguity conflicts and
+	stop fallback escalation for that observation.
+- Extend NetBox inventory reads to include paginated `dcim/device-types` data
+	and use that template catalog for unmatched create suggestions.
+
+### Validation
+
+- Matching/preview/inventory/snapshot suites cover ordered matching reasons,
+	ambiguity behavior and device-type ingestion:
+	`tests/test_matching.py`, `tests/test_preview.py`, `tests/test_inventory.py`,
+	`tests/test_snapshots.py`.
+
 ## v0.3.18
 
 ### Added

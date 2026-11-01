@@ -43,12 +43,13 @@ passed on 2026-10-25. Linux/exact-platform verification remains open.
 2. Later startup may show the last complete snapshot, clearly timestamped/stale.
    Refresh retrieves current data without writing. Failed/partial scans preserve
    the last complete baseline and never imply deletion.
-3. Normalize serial/MAC/source IDs and deduplicate cross-application observations.
-   One nonempty identity can find a candidate, but contradictory/duplicate
-   identities block automatic matching. Names/IP/model similarity are suggestions.
+3. Deduplicate cross-application observations per UniFi device in strict order:
+  normalized name, then serial, then MAC. One nonempty criterion can yield a
+  candidate; duplicate candidates in the active pass are ambiguity conflicts.
 4. Only unmatched devices receive Device Type suggestions, ranked by manufacturer,
-   exact model, aliases and explainable fuzzy similarity. No type match means an
-   explicit missing-type state, not an invented type or external catalog import.
+  exact model, aliases and explainable fuzzy similarity using NetBox Device
+  Templates (dcim device types). No type match means an explicit missing-type
+  state, not an invented type or external catalog import.
 5. Select existing NetBox site, role, type, VLAN group and IP scope as needed.
    Missing prerequisite taxonomy blocks creation with an actionable message.
 6. Keep configured values separate from operational values. Link down must not

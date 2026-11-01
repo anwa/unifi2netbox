@@ -62,16 +62,19 @@ Inside that dialog, action and executable filters help narrow larger result
 sets without rerunning the refresh.
 The rows dialog regression that could hide all row hits after filtering has
 been fixed.
-Matching now runs in passes: confirmed mappings first, then serial/MAC identity,
-then a normalized-name fallback for still-unpaired observations.
+Matching now runs in passes: confirmed mappings first, then ranked candidate
+checks per UniFi device in this order: normalized name, serial number, MAC
+address. A hit in any pass is a candidate match; multiple hits in the same pass
+are treated as ambiguity conflicts and are not auto-matched.
 
 ## Goals
 
  - Read local UniFi APIs; never modify UniFi.
  - Display and approve individual fields, devices or batches before NetBox writes.
 	 Approving a device does not prompt again for every field.
- - Match stable identities and expose conflicts; suggest manufacturer/model-based
-	 NetBox Device Types only for devices not already mapped.
+ - Match UniFi devices against NetBox in ranked order (name, serial, MAC), expose
+	 ambiguity conflicts and suggest NetBox Device Templates (Device Types) only
+	 for devices not already mapped.
  - Cover port profiles/overrides, native/tagged VLANs, interfaces, IP/MAC, PoE,
 	 LAG and LLDP where verified API data and standard NetBox fields allow it.
  - Separate configuration from operational state. No automatic deletions or
