@@ -43,6 +43,7 @@ def netbox_transport(monkeypatch):
                         "id": 7,
                         "name": "edge-a",
                         "serial": " abcd1234 ",
+                        "status": {"value": "active", "label": "Active"},
                         "primary_mac_address": "00-11-22-33-44-55",
                         "device_type": {
                             "model": "USW-24",
@@ -64,6 +65,7 @@ def netbox_transport(monkeypatch):
                         "id": 8,
                         "name": "edge-b",
                         "serial": "xyz",
+                        "status": {"value": "planned", "label": "Planned"},
                         "primary_mac_address": "66:55:44:33:22:11",
                         "device_type": {
                             "model": "U7-Pro",
@@ -296,7 +298,7 @@ def test_netbox_inventory_succeeds_when_status_choices_endpoint_is_unavailable(
     assert snapshot.source == InventorySource.NETBOX
     assert [device.source_id for device in snapshot.devices] == ["7", "8"]
     assert [item.source_id for item in snapshot.sites] == ["301", "302"]
-    assert snapshot.device_statuses == ()
+    assert [item.value for item in snapshot.device_statuses] == ["active", "planned"]
 
 
 def test_unifi_inventory_is_paginated_and_normalized(unifi_api):

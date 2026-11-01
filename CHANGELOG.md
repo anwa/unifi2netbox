@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.30
+
+### Changed
+
+- Keep NetBox inventory refresh successful when `dcim/devices/_choices/` is
+	unavailable or restricted; treat status-choice loading as optional enrichment.
+- Infer available device status values from NetBox device rows as a fallback,
+	so the create-row `Device status` selector can still be populated in
+	read-only/restricted API setups.
+
+### Validation
+
+- Added regression coverage for unavailable status-choice endpoint with
+	successful refresh and inferred status catalog fallback.
+
 ## v0.3.29
 
 ### Added

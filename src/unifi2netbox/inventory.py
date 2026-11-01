@@ -188,6 +188,30 @@ def _netbox_device_statuses(
     return values
 
 
+def _netbox_device_statuses_from_devices(
+    device_rows: list[dict[str, object]],
+) -> list[InventoryDeviceStatus]:
+    inferred: dict[str, str] = {}
+    for row in device_rows:
+        status = row.get("status")
+        value = ""
+        label = ""
+        if isinstance(status, dict):
+            value = _text(status.get("value"))
+            label = _text(status.get("label")) or _text(status.get("name"))
+        elif isinstance(status, str):
+            value = _text(status)
+        if not value:
+            continue
+        if not label:
+            label = value
+        inferred[value] = label
+    return [
+        InventoryDeviceStatus(value=value, label=inferred[value])
+        for value in sorted(inferred)
+    ]
+
+
 def _netbox_paginated_rows(
     session: requests.Session,
     config: NetBoxConfig,
@@ -266,6 +290,7 @@ def read_netbox_inventory(
                 ),
             )
             devices.extend(_normalize_netbox_device(row) for row in device_rows)
+            device_statuses.extend(_netbox_device_statuses_from_devices(device_rows))
 
             type_rows = _netbox_paginated_rows(
                 session,
@@ -318,9 +343,11 @@ def read_netbox_inventory(
                 # Device status choices are optional enrichment for create defaults.
                 # Inventory refresh must still succeed when this endpoint is missing
                 # or restricted on a specific NetBox deployment/version.
-                device_statuses.extend(_netbox_device_statuses(session, config))
+                endpoint_statuses = _netbox_device_statuses(session, config)
+                if endpoint_statuses:
+                    device_statuses = endpoint_statuses
             except InventoryError:
-                device_statuses = []
+                pass
     except RedirectError as error:
         raise InventoryError(
             "Redirect refused. Configure the final NetBox URL explicitly."

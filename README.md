@@ -74,6 +74,9 @@ NetBox `dcim/sites`; the selected site is used for create writes.
 Create rows also expose a `Device status` dropdown in `Show all rows`, fed
 from NetBox `dcim/devices/_choices`; the selected status is used for create
 writes.
+If that choices endpoint is unavailable for a restricted/read-only token,
+status values are inferred from observed NetBox device rows so refresh remains
+successful and the selector can still be populated from existing statuses.
 The rows dialog regression that could hide all row hits after filtering has
 been fixed.
 Matching now runs in passes: confirmed mappings first, then ranked candidate

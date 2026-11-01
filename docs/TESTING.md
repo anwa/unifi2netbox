@@ -349,6 +349,9 @@ NetBox site catalog ingestion and create-row site selection/override execution
 are covered as well.
 NetBox device-status choice ingestion and create-row status selection/override
 execution are covered as well.
+Coverage also includes fallback behavior when the NetBox
+`dcim/devices/_choices/` endpoint is unavailable, ensuring refresh still
+succeeds and status values can be inferred from device rows.
 Matching coverage now includes ordered criteria evaluation (name -> serial ->
 MAC), ambiguity handling per active criterion and NetBox device-type catalog
 ingestion for unmatched create suggestions.
