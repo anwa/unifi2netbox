@@ -427,6 +427,10 @@ def test_inventory_preview_finished_updates_visible_summary(qtbot, tmp_path, poo
             preview_rows=6,
             executable_operations=5,
             last_updated="2026-11-01T14:00:00+00:00",
+            detail_lines=(
+                "Match unifi:a -> netbox:1 (identity)",
+                "Plan #1 create_device create:unifi:a",
+            ),
         )
     )
 
@@ -435,6 +439,7 @@ def test_inventory_preview_finished_updates_visible_summary(qtbot, tmp_path, poo
     assert "Matched: 8" in window.preview_matches.text()
     assert "Executable operations: 5" in window.preview_plan.text()
     assert window.preview_checked_at.text() == "2026-11-01T14:00:00+00:00"
+    assert "Match unifi:a -> netbox:1" in window.preview_detail_lines.text()
 
 
 def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):

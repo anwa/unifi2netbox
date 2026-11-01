@@ -56,6 +56,7 @@ class InventoryPreviewResult:
     preview_rows: int = 0
     executable_operations: int = 0
     last_updated: str = ""
+    detail_lines: tuple[str, ...] = ()
 
 
 class InventoryJobSignals(QObject):
@@ -102,6 +103,7 @@ class InventoryPreviewJob(QRunnable):
                         ),
                         last_updated=refresh.netbox.last_updated
                         or refresh.unifi.last_updated,
+                        detail_lines=(message,) if message else (),
                     )
                 )
                 return
@@ -145,6 +147,7 @@ class InventoryPreviewJob(QRunnable):
                     ),
                     last_updated=refresh.netbox.last_updated
                     or refresh.unifi.last_updated,
+                    detail_lines=_preview_detail_lines(dedup, plan),
                 )
             )
         except Exception:
@@ -152,8 +155,35 @@ class InventoryPreviewJob(QRunnable):
                 InventoryPreviewResult(
                     status="Error",
                     details="Inventory preview refresh failed unexpectedly.",
+                    detail_lines=(
+                        "Inventory preview refresh failed before details were "
+                        "available.",
+                    ),
                 )
             )
+
+
+def _preview_detail_lines(dedup, plan) -> tuple[str, ...]:
+    lines: list[str] = []
+    for pair in dedup.pairs[:3]:
+        lines.append(
+            "Match "
+            f"{pair.unifi_observation_id} -> {pair.netbox_observation_id} "
+            f"({pair.reason})"
+        )
+    for conflict in dedup.conflicts[:3]:
+        lines.append(
+            f"Conflict {conflict.reason}: {', '.join(conflict.observation_ids[:3])}"
+        )
+    for operation in plan.operations[:3]:
+        lines.append(
+            "Plan "
+            f"#{operation.sequence} {operation.operation_type} "
+            f"{operation.device_key}"
+        )
+    if not lines:
+        lines.append("No preview detail entries are currently available.")
+    return tuple(lines)
 
 
 class InventoryPreviewRunner(QObject):
@@ -659,6 +689,7 @@ class MainWindow(QMainWindow):
         )
         self.preview_plan = plain_label("Preview rows: 0 | Executable operations: 0")
         self.preview_checked_at = plain_label("Not refreshed")
+        self.preview_detail_lines = plain_label("No preview details yet.")
         preview_grid.addWidget(plain_label("Status"), 0, 0)
         preview_grid.addWidget(self.preview_status, 0, 1)
         preview_grid.addWidget(plain_label("Counts"), 1, 0)
@@ -669,6 +700,8 @@ class MainWindow(QMainWindow):
         preview_grid.addWidget(self.preview_plan, 3, 1)
         preview_grid.addWidget(plain_label("Last refresh"), 4, 0)
         preview_grid.addWidget(self.preview_checked_at, 4, 1)
+        preview_grid.addWidget(plain_label("Highlights"), 5, 0)
+        preview_grid.addWidget(self.preview_detail_lines, 5, 1)
         preview_grid.setColumnStretch(1, 1)
         layout.addLayout(preview_grid)
         layout.addStretch()
@@ -740,6 +773,11 @@ class MainWindow(QMainWindow):
             f". {result.details}"
         )
         self.preview_checked_at.setText(result.last_updated or "Not available")
+        self.preview_detail_lines.setText(
+            "\n".join(result.detail_lines)
+            if result.detail_lines
+            else "No preview details yet."
+        )
         self.update_check_action()
 
     def update_check_action(self) -> None:
