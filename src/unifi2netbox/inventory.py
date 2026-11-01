@@ -38,6 +38,12 @@ class InventoryDeviceType:
 
 
 @dataclass(frozen=True)
+class InventoryDeviceRole:
+    source_id: str
+    name: str
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     source: InventorySource
     captured_at: str
@@ -45,6 +51,7 @@ class InventorySnapshot:
     scope: str = ""
     devices: tuple[InventoryDevice, ...] = ()
     device_types: tuple[InventoryDeviceType, ...] = ()
+    device_roles: tuple[InventoryDeviceRole, ...] = ()
 
 
 def _text(value: object) -> str:
@@ -128,6 +135,14 @@ def _normalize_netbox_device_type(row: dict[str, object]) -> InventoryDeviceType
     )
 
 
+def _normalize_netbox_device_role(row: dict[str, object]) -> InventoryDeviceRole | None:
+    source_id = str(row.get("id", "")).strip()
+    name = _text(row.get("name"))
+    if not source_id or not name:
+        return None
+    return InventoryDeviceRole(source_id=source_id, name=name)
+
+
 def _netbox_paginated_rows(
     session: requests.Session,
     config: NetBoxConfig,
@@ -187,6 +202,7 @@ def read_netbox_inventory(
 
     devices: list[InventoryDevice] = []
     device_types: list[InventoryDeviceType] = []
+    device_roles: list[InventoryDeviceRole] = []
     version = ""
     try:
         with ReadOnlySession(config) as session:
@@ -219,6 +235,22 @@ def read_netbox_inventory(
                 item = _normalize_netbox_device_type(row)
                 if item is not None:
                     device_types.append(item)
+
+            role_rows = _netbox_paginated_rows(
+                session,
+                config,
+                "/api/dcim/device-roles/",
+                page_size=page_size,
+                max_pages=max_pages,
+                limit_error=(
+                    "NetBox device-role pagination exceeded the configured page "
+                    "safety limit."
+                ),
+            )
+            for row in role_rows:
+                role = _normalize_netbox_device_role(row)
+                if role is not None:
+                    device_roles.append(role)
     except RedirectError as error:
         raise InventoryError(
             "Redirect refused. Configure the final NetBox URL explicitly."
@@ -234,6 +266,7 @@ def read_netbox_inventory(
         source_version=version,
         devices=tuple(devices),
         device_types=tuple(device_types),
+        device_roles=tuple(device_roles),
     )
 
 

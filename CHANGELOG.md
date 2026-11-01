@@ -6,6 +6,25 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.27
+
+### Added
+
+- Read NetBox device roles from `dcim/device-roles` during inventory refresh
+	and persist them in snapshot state.
+- Add a per-row `Device role` dropdown for create rows in `Show all rows`,
+	populated from the current NetBox role catalog.
+
+### Changed
+
+- Use the selected row role for create execution as an explicit override;
+	fallback to the configured default role when no row-specific role is set.
+
+### Validation
+
+- Extended inventory, GUI and write-execution tests for role ingestion,
+	row-level role selection and create-role override execution.
+
 ## v0.3.26
 
 ### Changed

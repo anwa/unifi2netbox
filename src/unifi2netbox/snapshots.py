@@ -6,6 +6,7 @@ from pathlib import Path
 
 from unifi2netbox.inventory import (
     InventoryDevice,
+    InventoryDeviceRole,
     InventoryDeviceType,
     InventorySnapshot,
     InventorySource,
@@ -117,6 +118,7 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "scope": snapshot.scope,
         "devices": [asdict(device) for device in snapshot.devices],
         "device_types": [asdict(item) for item in snapshot.device_types],
+        "device_roles": [asdict(item) for item in snapshot.device_roles],
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -135,6 +137,11 @@ def _decode(raw: str) -> InventorySnapshot:
         isinstance(item, dict) for item in device_types
     ):
         raise ValueError
+    device_roles = payload.get("device_roles", [])
+    if not isinstance(device_roles, list) or not all(
+        isinstance(item, dict) for item in device_roles
+    ):
+        raise ValueError
     return InventorySnapshot(
         source=InventorySource(payload["source"]),
         captured_at=str(payload["captured_at"]),
@@ -142,4 +149,5 @@ def _decode(raw: str) -> InventorySnapshot:
         scope=str(payload.get("scope", "")),
         devices=tuple(InventoryDevice(**item) for item in devices),
         device_types=tuple(InventoryDeviceType(**item) for item in device_types),
+        device_roles=tuple(InventoryDeviceRole(**item) for item in device_roles),
     )

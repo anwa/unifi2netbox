@@ -48,6 +48,7 @@ def execute_write_plan(
     started_at: str,
     finished_at: str,
     dry_run: bool = False,
+    role_overrides: dict[str, str] | None = None,
     backend: NetBoxWriteBackend | None = None,
 ) -> WriteExecutionResult:
     journal = initialize_journal(write_plan, run_id=run_id, started_at=started_at)
@@ -58,6 +59,7 @@ def execute_write_plan(
 
     device_by_key = {item.device_key: item for item in difference_preview.devices}
     resolved_backend = backend or RequestsNetBoxWriteBackend(netbox)
+    resolved_role_overrides = role_overrides or {}
 
     for operation in write_plan.operations:
         device = device_by_key.get(operation.device_key)
@@ -71,7 +73,15 @@ def execute_write_plan(
             continue
 
         try:
-            payload = _build_payload(operation, device, behavior, resolved_backend)
+            payload = _build_payload(
+                operation,
+                device,
+                behavior,
+                resolved_backend,
+                role_name_override=resolved_role_overrides.get(
+                    operation.device_key, ""
+                ),
+            )
         except WriteExecutionError as error:
             journal = record_operation_result(
                 journal,
@@ -135,6 +145,8 @@ def _build_payload(
     device: DevicePreview,
     behavior: BehaviorConfig,
     backend: NetBoxWriteBackend,
+    *,
+    role_name_override: str = "",
 ) -> dict[str, object]:
     source_values = {
         field.name: field.source_value.strip()
@@ -164,7 +176,9 @@ def _build_payload(
         return payload
 
     if operation.operation_type == OperationType.CREATE_DEVICE:
-        role_name = behavior.default_device_role_name.strip()
+        role_name = (
+            role_name_override.strip() or behavior.default_device_role_name.strip()
+        )
         if not role_name:
             raise WriteExecutionError(
                 "Create requires a default NetBox device role in settings."
@@ -277,8 +291,7 @@ class RequestsNetBoxWriteBackend:
         matches = [item for item in matches if item]
         if len(matches) != 1:
             raise WriteExecutionError(
-                "Expected exactly one NetBox device type for "
-                f"'{manufacturer} {model}'."
+                f"Expected exactly one NetBox device type for '{manufacturer} {model}'."
             )
         return matches[0]
 

@@ -95,6 +95,7 @@ class InventoryPreviewResult:
     last_updated: str = ""
     detail_lines: tuple[str, ...] = ()
     rows: tuple[InventoryPreviewRow, ...] = ()
+    netbox_device_roles: tuple[str, ...] = ()
     difference_preview: DifferencePreview | None = None
     write_plan: WritePlan | None = None
 
@@ -227,6 +228,15 @@ class InventoryPreviewJob(QRunnable):
                         unifi_device_count=len(unifi_snapshot.devices),
                     ),
                     rows=_preview_rows(diff, change, plan, suggestions=suggestions),
+                    netbox_device_roles=tuple(
+                        sorted(
+                            {
+                                item.name.strip()
+                                for item in netbox_snapshot.device_roles
+                                if item.name.strip()
+                            }
+                        )
+                    ),
                     difference_preview=diff,
                     write_plan=plan,
                 )
@@ -257,6 +267,7 @@ class WriteExecutionJob(QRunnable):
         behavior: BehaviorConfig,
         difference_preview: DifferencePreview,
         write_plan: WritePlan,
+        role_overrides: dict[str, str],
         *,
         dry_run: bool,
     ) -> None:
@@ -265,6 +276,7 @@ class WriteExecutionJob(QRunnable):
         self.behavior = behavior
         self.difference_preview = difference_preview
         self.write_plan = write_plan
+        self.role_overrides = role_overrides
         self.dry_run = dry_run
         self.signals = WriteExecutionSignals()
 
@@ -281,6 +293,7 @@ class WriteExecutionJob(QRunnable):
                 started_at=started,
                 finished_at=datetime.now().astimezone().isoformat(timespec="seconds"),
                 dry_run=self.dry_run,
+                role_overrides=self.role_overrides,
             )
             summary = summarize_journal(result.journal)
             details = (
@@ -329,6 +342,7 @@ class WriteExecutionRunner(QObject):
         behavior: BehaviorConfig,
         difference_preview: DifferencePreview,
         write_plan: WritePlan,
+        role_overrides: dict[str, str],
         *,
         dry_run: bool,
     ) -> bool:
@@ -339,6 +353,7 @@ class WriteExecutionRunner(QObject):
             behavior,
             difference_preview,
             write_plan,
+            role_overrides,
             dry_run=dry_run,
         )
         self.job.signals.finished.connect(self._finished)
@@ -1087,6 +1102,8 @@ class MainWindow(QMainWindow):
         self.preview_detail_list.currentItemChanged.connect(self.preview_detail_changed)
         self.preview_detail_text = plain_label("No preview details yet.")
         self.preview_rows: tuple[InventoryPreviewRow, ...] = ()
+        self.netbox_device_roles: tuple[str, ...] = ()
+        self.create_role_by_device_key: dict[str, str] = {}
         self.preview_rows_dialog: QDialog | None = None
         self.copy_selected_button = QPushButton("Copy selected", self)
         self.copy_selected_button.clicked.connect(self.copy_selected_highlight)
@@ -1202,6 +1219,18 @@ class MainWindow(QMainWindow):
         )
         self.preview_checked_at.setText(result.last_updated or "Not available")
         self.preview_rows = result.rows
+        self.netbox_device_roles = result.netbox_device_roles
+        self.create_role_by_device_key = {}
+        default_role = self.behavior.default_device_role_name.strip()
+        for row in self.preview_rows:
+            if row.action != "create":
+                continue
+            if default_role and default_role in self.netbox_device_roles:
+                self.create_role_by_device_key[row.device_key] = default_role
+            elif self.netbox_device_roles:
+                self.create_role_by_device_key[row.device_key] = (
+                    self.netbox_device_roles[0]
+                )
         self.current_difference_preview = result.difference_preview
         self.current_write_plan = result.write_plan
         self.show_rows_button.setEnabled(bool(self.preview_rows))
@@ -1260,6 +1289,7 @@ class MainWindow(QMainWindow):
             self.behavior,
             self.current_difference_preview,
             self.current_write_plan,
+            self._create_role_overrides(self.current_write_plan),
             dry_run=self.dry_run_only.isChecked(),
         )
         self.update_check_action()
@@ -1305,6 +1335,7 @@ class MainWindow(QMainWindow):
             self.behavior,
             self.current_difference_preview,
             single_plan,
+            self._create_role_overrides(single_plan),
             dry_run=self.dry_run_only.isChecked(),
         )
         self.update_check_action()
@@ -1391,7 +1422,7 @@ class MainWindow(QMainWindow):
         table.setObjectName("preview_rows_table")
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        table.setColumnCount(8)
+        table.setColumnCount(9)
         table.setHorizontalHeaderLabels(
             [
                 "Device key",
@@ -1400,6 +1431,7 @@ class MainWindow(QMainWindow):
                 "Target",
                 "Selected fields",
                 "Executable",
+                "Device role",
                 "Reason",
                 "Suggested Device Types",
             ]
@@ -1417,18 +1449,40 @@ class MainWindow(QMainWindow):
 
             table.setRowCount(len(visible_rows))
             for row_index, row in enumerate(visible_rows):
-                values = (
-                    row.device_key,
-                    row.action,
-                    row.source_label,
-                    row.target_label,
-                    row.selected_fields,
-                    row.executable,
-                    row.blocked_reason,
-                    row.suggested_device_types,
+                table.setItem(row_index, 0, QTableWidgetItem(row.device_key))
+                table.setItem(row_index, 1, QTableWidgetItem(row.action))
+                table.setItem(row_index, 2, QTableWidgetItem(row.source_label))
+                table.setItem(row_index, 3, QTableWidgetItem(row.target_label))
+                table.setItem(row_index, 4, QTableWidgetItem(row.selected_fields))
+                table.setItem(row_index, 5, QTableWidgetItem(row.executable))
+                table.setItem(row_index, 7, QTableWidgetItem(row.blocked_reason))
+                table.setItem(
+                    row_index, 8, QTableWidgetItem(row.suggested_device_types)
                 )
-                for column_index, value in enumerate(values):
-                    table.setItem(row_index, column_index, QTableWidgetItem(value))
+
+                if row.action == "create":
+                    role_combo = QComboBox(table)
+                    if self.netbox_device_roles:
+                        for role_name in self.netbox_device_roles:
+                            role_combo.addItem(role_name)
+                        selected_role = self.create_role_by_device_key.get(
+                            row.device_key, self.netbox_device_roles[0]
+                        )
+                        if selected_role not in self.netbox_device_roles:
+                            selected_role = self.netbox_device_roles[0]
+                        self.create_role_by_device_key[row.device_key] = selected_role
+                        role_combo.setCurrentText(selected_role)
+                        role_combo.currentTextChanged.connect(
+                            lambda role, key=row.device_key: self._set_create_role(
+                                key, role
+                            )
+                        )
+                    else:
+                        role_combo.addItem("No roles available")
+                        role_combo.setEnabled(False)
+                    table.setCellWidget(row_index, 6, role_combo)
+                else:
+                    table.setItem(row_index, 6, QTableWidgetItem(""))
             table.resizeColumnsToContents()
             if visible_rows and table.currentRow() < 0:
                 table.setCurrentCell(0, 0)
@@ -1453,7 +1507,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("Selected preview row is invalid.")
                 return
             if executable_item.text() != "Yes":
-                reason_item = table.item(row_index, 6)
+                reason_item = table.item(row_index, 7)
                 reason = (
                     reason_item.text()
                     if reason_item is not None and reason_item.text().strip()
@@ -1514,6 +1568,21 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         super().closeEvent(event)
+
+    def _create_role_overrides(self, write_plan: WritePlan) -> dict[str, str]:
+        create_keys = {
+            operation.device_key
+            for operation in write_plan.operations
+            if operation.operation_type == OperationType.CREATE_DEVICE
+        }
+        return {
+            key: role
+            for key, role in self.create_role_by_device_key.items()
+            if key in create_keys and role.strip()
+        }
+
+    def _set_create_role(self, device_key: str, role_name: str) -> None:
+        self.create_role_by_device_key[device_key] = role_name.strip()
 
 
 def _single_operation_plan(write_plan: WritePlan, device_key: str) -> WritePlan | None:

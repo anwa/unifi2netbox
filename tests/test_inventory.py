@@ -104,6 +104,24 @@ def netbox_transport(monkeypatch):
                 ],
             },
         ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": "https://netbox.invalid/api/dcim/device-roles/?limit=1&offset=1",
+                "previous": None,
+                "results": [{"id": 201, "name": "Network Device"}],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": None,
+                "previous": "https://netbox.invalid/api/dcim/device-roles/?limit=1&offset=0",
+                "results": [{"id": 202, "name": "Wireless"}],
+            },
+        ),
     ]
 
     def send(session, request, **kwargs):
@@ -207,6 +225,9 @@ def test_netbox_inventory_is_paginated_and_normalized(netbox_transport):
     assert [item.source_id for item in snapshot.device_types] == ["101", "102"]
     assert snapshot.device_types[0].manufacturer == "Ubiquiti"
     assert snapshot.device_types[1].model == "U7-Pro"
+    assert [item.source_id for item in snapshot.device_roles] == ["201", "202"]
+    assert snapshot.device_roles[0].name == "Network Device"
+    assert snapshot.device_roles[1].name == "Wireless"
 
     for request, options in calls:
         assert request.method == "GET"

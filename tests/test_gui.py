@@ -574,10 +574,19 @@ def test_execute_write_plan_starts_runner_after_confirmation(
     monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
     started = {}
 
-    def fake_start(netbox_config, behavior, difference_preview, write_plan, *, dry_run):
+    def fake_start(
+        netbox_config,
+        behavior,
+        difference_preview,
+        write_plan,
+        role_overrides,
+        *,
+        dry_run,
+    ):
         started["called"] = True
         started["dry_run"] = dry_run
         started["plan"] = write_plan
+        started["role_overrides"] = role_overrides
         return True
 
     monkeypatch.setattr(window.write_runner, "start", fake_start)
@@ -588,6 +597,7 @@ def test_execute_write_plan_starts_runner_after_confirmation(
     assert started["called"] is True
     assert started["dry_run"] is True
     assert started["plan"] == plan
+    assert isinstance(started["role_overrides"], dict)
 
 
 def test_write_execution_finished_updates_preview_details(qtbot, tmp_path, pool):
@@ -795,7 +805,7 @@ def test_inventory_preview_rows_dialog_shows_blocked_reason(qtbot, tmp_path, poo
     assert table is not None
     assert table.rowCount() == 1
     assert table.item(0, 5).text() == "No"
-    assert "create_required_identity" in table.item(0, 6).text()
+    assert "create_required_identity" in table.item(0, 7).text()
     window.preview_rows_dialog.close()
 
 
@@ -856,7 +866,45 @@ def test_inventory_preview_rows_dialog_shows_create_device_type_suggestions(
     table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
     assert table is not None
     assert table.rowCount() == 1
-    assert "Ubiquiti USW-Pro-24" in table.item(0, 7).text()
+    assert "Ubiquiti USW-Pro-24" in table.item(0, 8).text()
+    window.preview_rows_dialog.close()
+
+
+def test_inventory_preview_rows_dialog_shows_role_dropdown_for_create_rows(
+    qtbot, tmp_path, pool
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                ),
+            ),
+            netbox_device_roles=("Network Device", "Wireless"),
+        )
+    )
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    assert table is not None
+
+    role_widget = table.cellWidget(0, 6)
+    assert isinstance(role_widget, QComboBox)
+    assert role_widget.count() == 2
+    assert role_widget.itemText(0) == "Network Device"
+    assert role_widget.itemText(1) == "Wireless"
     window.preview_rows_dialog.close()
 
 
@@ -900,10 +948,19 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
     monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
     started = {}
 
-    def fake_start(netbox_config, behavior, difference_preview, write_plan, *, dry_run):
+    def fake_start(
+        netbox_config,
+        behavior,
+        difference_preview,
+        write_plan,
+        role_overrides,
+        *,
+        dry_run,
+    ):
         started["called"] = True
         started["count"] = len(write_plan.operations)
         started["device_key"] = write_plan.operations[0].device_key
+        started["role_overrides"] = role_overrides
         return True
 
     monkeypatch.setattr(window.write_runner, "start", fake_start)
@@ -924,6 +981,7 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
     assert started["called"] is True
     assert started["count"] == 1
     assert started["device_key"] == table.item(0, 0).text()
+    assert isinstance(started["role_overrides"], dict)
     window.preview_rows_dialog.close()
 
 
