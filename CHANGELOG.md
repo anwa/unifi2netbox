@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.9
+
+### Added
+
+- Add a read-only read-back planner for successful M5 operations that resolves
+	NetBox object IDs for create/update verification reads.
+- Skip successful create outcomes without object IDs so unresolved results stay
+	explicit and can be reconciled manually.
+
+### Validation
+
+- Focused offline suite passes: `tests/test_write_readback.py`.
+- Ruff checks pass for `write_readback.py` and read-back tests.
+
 ## v0.3.8
 
 ### Added

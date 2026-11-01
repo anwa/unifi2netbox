@@ -265,6 +265,25 @@ python -m pytest -q tests/test_write_journal.py
 
 This slice remains fully offline and uses synthetic fixtures only.
 
+## M5 Read-back Planner Contracts
+
+The next M5 micro-slice adds a read-only read-back planner for successful
+operations, still without executing NetBox writes.
+
+The focused tests validate that:
+
+- successful create outcomes with object IDs produce read-back requests,
+- successful updates derive target object IDs deterministically from device keys,
+- successful create outcomes without object IDs are skipped explicitly.
+
+Run the focused read-back checks:
+
+```powershell
+python -m pytest -q tests/test_write_readback.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

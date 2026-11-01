@@ -44,6 +44,8 @@ M5 now adds an immutable write-journal model for operation outcomes and run
 summary counters, still without performing NetBox mutations.
 M5 now also flags ambiguous successful create outcomes when NetBox object IDs
 are missing or duplicated, keeping manual reconciliation explicit.
+M5 now includes a read-only read-back planner for successful create/update
+operations, preparing deterministic verification reads in later slices.
 
 ## Goals
 
