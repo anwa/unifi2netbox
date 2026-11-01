@@ -26,8 +26,13 @@ from unifi2netbox.gui import (
     InventoryPreviewRow,
     MainWindow,
     SettingsDialog,
+    _preview_rows,
 )
+from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
+from unifi2netbox.matching import deduplicate_inventory
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
+from unifi2netbox.preview import build_change_preview, build_difference_preview
+from unifi2netbox.write_plan import build_write_plan
 
 
 @pytest.fixture
@@ -607,6 +612,32 @@ def test_inventory_preview_rows_dialog_filters(qtbot, tmp_path, pool):
     qtbot.waitUntil(lambda: table.rowCount() == 1)
     assert table.item(0, 5).text() == "Yes"
     window.preview_rows_dialog.close()
+
+
+def test_preview_rows_uses_change_executable_state_without_plan_devices():
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="a", name="switch-a", site="HQ"),
+        ),
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    rows = _preview_rows(diff, change, plan)
+
+    assert len(rows) == 1
+    assert rows[0].action == "create"
+    assert rows[0].executable == "Yes"
 
 
 def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):

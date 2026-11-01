@@ -241,7 +241,7 @@ def _preview_detail_lines(
 
 def _preview_rows(diff, change, plan) -> tuple[InventoryPreviewRow, ...]:
     change_by_key = {item.device_key: item for item in change.devices}
-    executable_by_key = {item.device_key: item.executable for item in plan.devices}
+    executable_by_key = {item.device_key: item.executable for item in change.devices}
 
     rows: list[InventoryPreviewRow] = []
     for device in diff.devices:
