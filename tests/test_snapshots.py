@@ -81,6 +81,14 @@ def test_sources_are_stored_independently(tmp_path):
         source_version="10.6.100",
         scope="Default (site)",
         devices=(InventoryDevice(source_id="u1", name="ap-1"),),
+        unifi_api_feedback=(
+            {
+                "endpoint": "info",
+                "params": {},
+                "payload": {"applicationVersion": "10.6.100"},
+            },
+        ),
+        unifi_raw_devices=({"id": "u1", "name": "ap-1"},),
     )
 
     store.save_current(netbox)

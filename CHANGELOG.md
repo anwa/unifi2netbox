@@ -6,6 +6,25 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.33
+
+### Added
+
+- Add export of full UniFi Network API feedback from the current preview state
+	as JSON dump (`api_feedback` plus raw device rows).
+- Add per-row UniFi raw payload export in `Show all rows` for selected
+	UniFi-backed preview rows.
+
+### Changed
+
+- UniFi inventory snapshots now retain raw API page payloads and raw device
+	entries to support post-refresh dump export workflows.
+
+### Validation
+
+- Extended inventory, snapshot and GUI tests for raw payload persistence and
+	UniFi row/source-id mapping helpers used by row-level dump export.
+
 ## v0.3.32
 
 ### Changed

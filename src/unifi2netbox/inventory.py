@@ -66,6 +66,8 @@ class InventorySnapshot:
     device_roles: tuple[InventoryDeviceRole, ...] = ()
     sites: tuple[InventorySite, ...] = ()
     device_statuses: tuple[InventoryDeviceStatus, ...] = ()
+    unifi_api_feedback: tuple[dict[str, object], ...] = ()
+    unifi_raw_devices: tuple[dict[str, object], ...] = ()
 
 
 def _text(value: object) -> str:
@@ -474,6 +476,8 @@ def read_unifi_inventory(
     site_scope = ""
     version = ""
     devices: list[InventoryDevice] = []
+    api_feedback: list[dict[str, object]] = []
+    raw_devices: list[dict[str, object]] = []
     try:
         with httpx.Client(
             base_url=config.url.rstrip("/") + "/proxy/network/integration/v1/",
@@ -486,6 +490,7 @@ def read_unifi_inventory(
             transport=transport,
         ) as client:
             info = _unifi_json(client, "info")
+            api_feedback.append({"endpoint": "info", "params": {}, "payload": info})
             version = _text(info.get("applicationVersion"))
 
             sites: list[dict[str, str]] = []
@@ -493,6 +498,13 @@ def read_unifi_inventory(
             for _ in range(max_pages):
                 offset = len(sites)
                 site_payload = _unifi_json(client, "sites", offset=offset, limit=200)
+                api_feedback.append(
+                    {
+                        "endpoint": "sites",
+                        "params": {"offset": offset, "limit": 200},
+                        "payload": site_payload,
+                    }
+                )
                 rows = _unifi_page(site_payload, offset, 200)
                 for row in rows:
                     site_id = _text(row.get("id"))
@@ -523,7 +535,15 @@ def read_unifi_inventory(
                     offset=offset,
                     limit=page_size,
                 )
+                api_feedback.append(
+                    {
+                        "endpoint": f"sites/{site['id']}/devices",
+                        "params": {"offset": offset, "limit": page_size},
+                        "payload": payload,
+                    }
+                )
                 rows = _unifi_page(payload, offset, page_size)
+                raw_devices.extend(rows)
                 devices.extend(
                     _normalize_unifi_device(row, site["name"]) for row in rows
                 )
@@ -546,4 +566,6 @@ def read_unifi_inventory(
         source_version=version,
         scope=site_scope,
         devices=tuple(devices),
+        unifi_api_feedback=tuple(api_feedback),
+        unifi_raw_devices=tuple(raw_devices),
     )

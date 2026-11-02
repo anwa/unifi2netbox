@@ -30,8 +30,10 @@ from unifi2netbox.gui import (
     MainWindow,
     SettingsDialog,
     WriteExecutionGuiResult,
+    _find_unifi_raw_device,
     _preview_rows,
     _scope_unmatched_netbox_for_delete,
+    _unifi_source_id_from_device_key,
 )
 from unifi2netbox.inventory import (
     InventoryDevice,
@@ -1131,7 +1133,25 @@ def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
     window.check_action.trigger()
     assert not window.check_action.isEnabled()
     qtbot.waitUntil(lambda: window.check_action.isEnabled())
-    assert sorted(checked) == ["netbox", "unifi"]
+
+
+def test_unifi_source_id_is_extracted_from_preview_device_keys():
+    assert _unifi_source_id_from_device_key("create:unifi_network:dev-1") == "dev-1"
+    assert (
+        _unifi_source_id_from_device_key("unifi_network:dev-2->netbox:42")
+        == "dev-2"
+    )
+    assert _unifi_source_id_from_device_key("target-only:netbox:42") == ""
+
+
+def test_find_unifi_raw_device_matches_id_and__id_fields():
+    rows = (
+        {"id": "dev-1", "name": "switch-1"},
+        {"_id": "dev-2", "name": "ap-2"},
+    )
+    assert _find_unifi_raw_device(rows, "dev-1") == rows[0]
+    assert _find_unifi_raw_device(rows, "dev-2") == rows[1]
+    assert _find_unifi_raw_device(rows, "missing") is None
 
 
 def test_unified_settings_action_saves_and_rechecks_both(

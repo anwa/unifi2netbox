@@ -354,6 +354,8 @@ Coverage also includes fallback behavior when the NetBox
 succeeds and status values can be inferred from device rows.
 Create-row device-type selection and write execution with explicit NetBox
 device-type ID overrides are covered as well.
+UniFi raw API feedback capture and persistence plus row/source-id mapping
+helpers used for full-dump and row-level dump export are covered as well.
 Matching coverage now includes ordered criteria evaluation (name -> serial ->
 MAC), ambiguity handling per active criterion and NetBox device-type catalog
 ingestion for unmatched create suggestions.

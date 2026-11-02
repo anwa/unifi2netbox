@@ -123,6 +123,8 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "device_roles": [asdict(item) for item in snapshot.device_roles],
         "sites": [asdict(item) for item in snapshot.sites],
         "device_statuses": [asdict(item) for item in snapshot.device_statuses],
+        "unifi_api_feedback": list(snapshot.unifi_api_feedback),
+        "unifi_raw_devices": list(snapshot.unifi_raw_devices),
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -154,6 +156,16 @@ def _decode(raw: str) -> InventorySnapshot:
         isinstance(item, dict) for item in device_statuses
     ):
         raise ValueError
+    unifi_api_feedback = payload.get("unifi_api_feedback", [])
+    if not isinstance(unifi_api_feedback, list) or not all(
+        isinstance(item, dict) for item in unifi_api_feedback
+    ):
+        raise ValueError
+    unifi_raw_devices = payload.get("unifi_raw_devices", [])
+    if not isinstance(unifi_raw_devices, list) or not all(
+        isinstance(item, dict) for item in unifi_raw_devices
+    ):
+        raise ValueError
     return InventorySnapshot(
         source=InventorySource(payload["source"]),
         captured_at=str(payload["captured_at"]),
@@ -166,4 +178,6 @@ def _decode(raw: str) -> InventorySnapshot:
         device_statuses=tuple(
             InventoryDeviceStatus(**item) for item in device_statuses
         ),
+        unifi_api_feedback=tuple(unifi_api_feedback),
+        unifi_raw_devices=tuple(unifi_raw_devices),
     )

@@ -101,6 +101,8 @@ only the HTTP status code.
 The `Show all rows` dialog also supports executing one selected executable row,
 which helps when global plan blockers prevent full-batch execution; selecting a
 blocked row reports its specific reason in the status bar.
+The preview also supports exporting full UniFi API feedback as JSON as well as
+exporting the raw UniFi payload for one selected preview row.
 
 ## Goals
 

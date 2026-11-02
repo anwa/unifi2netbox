@@ -1,3 +1,4 @@
+import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from importlib.metadata import version
@@ -95,6 +96,11 @@ class InventoryPreviewResult:
     last_updated: str = ""
     detail_lines: tuple[str, ...] = ()
     rows: tuple[InventoryPreviewRow, ...] = ()
+    unifi_captured_at: str = ""
+    unifi_scope: str = ""
+    unifi_version: str = ""
+    unifi_api_feedback: tuple[dict[str, object], ...] = ()
+    unifi_raw_devices: tuple[dict[str, object], ...] = ()
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
     netbox_sites: tuple[str, ...] = ()
@@ -231,6 +237,11 @@ class InventoryPreviewJob(QRunnable):
                         unifi_device_count=len(unifi_snapshot.devices),
                     ),
                     rows=_preview_rows(diff, change, plan, suggestions=suggestions),
+                    unifi_captured_at=unifi_snapshot.captured_at,
+                    unifi_scope=unifi_snapshot.scope,
+                    unifi_version=unifi_snapshot.source_version,
+                    unifi_api_feedback=unifi_snapshot.unifi_api_feedback,
+                    unifi_raw_devices=unifi_snapshot.unifi_raw_devices,
                     netbox_device_types=tuple(
                         sorted(
                             {
@@ -1154,6 +1165,11 @@ class MainWindow(QMainWindow):
         self.preview_detail_list.currentItemChanged.connect(self.preview_detail_changed)
         self.preview_detail_text = plain_label("No preview details yet.")
         self.preview_rows: tuple[InventoryPreviewRow, ...] = ()
+        self.unifi_snapshot_captured_at = ""
+        self.unifi_snapshot_scope = ""
+        self.unifi_snapshot_version = ""
+        self.unifi_api_feedback: tuple[dict[str, object], ...] = ()
+        self.unifi_raw_devices: tuple[dict[str, object], ...] = ()
         self.netbox_device_types: tuple[tuple[str, str, str], ...] = ()
         self.netbox_device_statuses: tuple[str, ...] = ()
         self.netbox_device_roles: tuple[str, ...] = ()
@@ -1170,12 +1186,16 @@ class MainWindow(QMainWindow):
         self.show_rows_button = QPushButton("Show all rows", self)
         self.show_rows_button.clicked.connect(self.show_preview_rows_dialog)
         self.show_rows_button.setEnabled(False)
+        self.export_unifi_dump_button = QPushButton("Export UniFi API dump", self)
+        self.export_unifi_dump_button.clicked.connect(self.export_unifi_api_dump)
+        self.export_unifi_dump_button.setEnabled(False)
         self.dry_run_only = QCheckBox("Dry run only", self)
         self.execute_plan_button = QPushButton("Execute write plan", self)
         self.execute_plan_button.clicked.connect(self.execute_write_plan_from_preview)
         self.execute_plan_button.setEnabled(False)
         copy_row = QHBoxLayout()
         copy_row.addWidget(self.show_rows_button)
+        copy_row.addWidget(self.export_unifi_dump_button)
         copy_row.addWidget(self.dry_run_only)
         copy_row.addWidget(self.execute_plan_button)
         copy_row.addWidget(self.copy_selected_button)
@@ -1277,6 +1297,11 @@ class MainWindow(QMainWindow):
         )
         self.preview_checked_at.setText(result.last_updated or "Not available")
         self.preview_rows = result.rows
+        self.unifi_snapshot_captured_at = result.unifi_captured_at
+        self.unifi_snapshot_scope = result.unifi_scope
+        self.unifi_snapshot_version = result.unifi_version
+        self.unifi_api_feedback = result.unifi_api_feedback
+        self.unifi_raw_devices = result.unifi_raw_devices
         self.netbox_device_types = result.netbox_device_types
         self.netbox_device_statuses = result.netbox_device_statuses
         self.netbox_device_roles = result.netbox_device_roles
@@ -1353,6 +1378,7 @@ class MainWindow(QMainWindow):
         self.current_difference_preview = result.difference_preview
         self.current_write_plan = result.write_plan
         self.show_rows_button.setEnabled(bool(self.preview_rows))
+        self.export_unifi_dump_button.setEnabled(bool(self.unifi_api_feedback))
         self.execute_plan_button.setEnabled(
             bool(self.current_write_plan and self.current_write_plan.executable)
         )
@@ -1705,6 +1731,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(table)
         execute_selected = QPushButton("Execute selected row", dialog)
         execute_selected.setObjectName("preview_rows_execute_selected")
+        export_selected_dump = QPushButton("Export selected UniFi row dump", dialog)
+        export_selected_dump.setObjectName("preview_rows_export_selected_dump")
+        export_full_dump = QPushButton("Export full UniFi API dump", dialog)
+        export_full_dump.setObjectName("preview_rows_export_full_dump")
 
         def run_selected_row() -> None:
             row_index = table.currentRow()
@@ -1729,6 +1759,22 @@ class MainWindow(QMainWindow):
 
         execute_selected.clicked.connect(run_selected_row)
         layout.addWidget(execute_selected)
+        
+        def export_selected_row_dump() -> None:
+            row_index = table.currentRow()
+            if row_index < 0:
+                self.statusBar().showMessage("No preview row selected.")
+                return
+            device_item = table.item(row_index, 0)
+            if device_item is None or not device_item.text().strip():
+                self.statusBar().showMessage("Selected preview row is invalid.")
+                return
+            self.export_unifi_row_dump(device_item.text().strip())
+
+        export_selected_dump.clicked.connect(export_selected_row_dump)
+        export_full_dump.clicked.connect(self.export_unifi_api_dump)
+        layout.addWidget(export_selected_dump)
+        layout.addWidget(export_full_dump)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, dialog)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
@@ -1843,6 +1889,77 @@ class MainWindow(QMainWindow):
         else:
             self.create_device_type_by_device_key.pop(device_key, None)
 
+    def export_unifi_api_dump(self) -> None:
+        if not self.unifi_api_feedback:
+            self.statusBar().showMessage("No UniFi API feedback available to export.")
+            return
+        default_name = (
+            f"unifi-api-dump-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        )
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save UniFi API dump",
+            default_name,
+            "JSON files (*.json)",
+        )
+        if not filename:
+            return
+        payload = {
+            "schema_version": 1,
+            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "snapshot": {
+                "captured_at": self.unifi_snapshot_captured_at,
+                "scope": self.unifi_snapshot_scope,
+                "source_version": self.unifi_snapshot_version,
+            },
+            "api_feedback": list(self.unifi_api_feedback),
+            "raw_devices": list(self.unifi_raw_devices),
+        }
+        self._write_json_dump(Path(filename), payload)
+
+    def export_unifi_row_dump(self, device_key: str) -> None:
+        source_id = _unifi_source_id_from_device_key(device_key)
+        if not source_id:
+            self.statusBar().showMessage(
+                "Selected row has no UniFi source device to export."
+            )
+            return
+        raw_row = _find_unifi_raw_device(self.unifi_raw_devices, source_id)
+        if raw_row is None:
+            self.statusBar().showMessage(
+                "No UniFi raw payload found for selected row."
+            )
+            return
+        safe_id = "".join(ch for ch in source_id if ch.isalnum() or ch in "-_")
+        default_name = (
+            f"unifi-row-dump-{safe_id or 'device'}-"
+            f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        )
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save UniFi row dump",
+            default_name,
+            "JSON files (*.json)",
+        )
+        if not filename:
+            return
+        payload = {
+            "schema_version": 1,
+            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "device_key": device_key,
+            "unifi_source_id": source_id,
+            "raw_device": raw_row,
+        }
+        self._write_json_dump(Path(filename), payload)
+
+    def _write_json_dump(self, path: Path, payload: dict[str, object]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.statusBar().showMessage(f"Saved dump: {path}")
+
 
 def _single_operation_plan(write_plan: WritePlan, device_key: str) -> WritePlan | None:
     operation = next(
@@ -1872,3 +1989,29 @@ def _single_operation_plan(write_plan: WritePlan, device_key: str) -> WritePlan 
         executable=True,
         summary=summary,
     )
+
+
+def _unifi_source_id_from_device_key(device_key: str) -> str:
+    key = device_key.strip()
+    if key.startswith("create:unifi_network:"):
+        return key.split(":", maxsplit=2)[2].strip()
+    if key.startswith("unifi_network:") and "->" in key:
+        return key.split("->", maxsplit=1)[0].split(":", maxsplit=1)[1].strip()
+    return ""
+
+
+def _find_unifi_raw_device(
+    raw_devices: tuple[dict[str, object], ...], source_id: str
+) -> dict[str, object] | None:
+    needle = source_id.strip()
+    if not needle:
+        return None
+    for row in raw_devices:
+        row_id = ""
+        if "id" in row and isinstance(row.get("id"), str):
+            row_id = str(row.get("id", "")).strip()
+        elif "_id" in row and isinstance(row.get("_id"), str):
+            row_id = str(row.get("_id", "")).strip()
+        if row_id == needle:
+            return row
+    return None
