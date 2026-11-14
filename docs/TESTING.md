@@ -187,6 +187,10 @@ The focused tests validate that:
 - the optional Drive connection reads only the public `/api/system` with GET
 	and without sending the key, accepts UNAS models only, never contacts a
 	console while unconfigured and keeps its own config section,
+- the Drive reader returns the UNAS as one device plus allow-listed drive
+	bays, sends the key only to the storage endpoint, keeps the device when
+	the storage read fails, round-trips through the snapshot store, joins
+	matching only when fresh and lists bays display-only without serials,
 - optional devices merge with precedence Network, Access, Protect; only
 	fresh Access reads join the preview, the pre-write re-read includes
 	Access and tolerates its failure, Access rows never get the default role

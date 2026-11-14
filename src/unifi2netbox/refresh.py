@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from unifi2netbox.config import (
     AccessConfig,
+    DriveConfig,
     NetBoxConfig,
     ProtectConfig,
     UniFiConfig,
@@ -34,6 +35,7 @@ class RefreshResult:
     unifi: RefreshStatus
     protect: RefreshStatus | None = None
     access: RefreshStatus | None = None
+    drive: RefreshStatus | None = None
 
 
 @dataclass(frozen=True)
@@ -57,8 +59,9 @@ def refresh_snapshots(
     store: SnapshotStore,
     protect: ProtectConfig | None = None,
     access: AccessConfig | None = None,
+    drive: DriveConfig | None = None,
 ) -> RefreshResult:
-    """Refresh NetBox and Network, plus Protect and Access when configured."""
+    """Refresh NetBox and Network, plus Protect, Access and Drive when set."""
     netbox_status = _refresh_netbox(netbox, store)
     unifi_status = _refresh_unifi(unifi, store)
     protect_status = (
@@ -71,11 +74,35 @@ def refresh_snapshots(
         if access is not None and access.configured
         else None
     )
+    drive_status = (
+        _refresh_drive(drive, store) if drive is not None and drive.configured else None
+    )
     return RefreshResult(
         netbox=netbox_status,
         unifi=unifi_status,
         protect=protect_status,
         access=access_status,
+        drive=drive_status,
+    )
+
+
+def _refresh_drive(config: DriveConfig, store: SnapshotStore) -> RefreshStatus:
+    # Imported here: drive.py builds on inventory.py helpers.
+    from unifi2netbox.drive import read_drive_inventory
+
+    try:
+        snapshot = read_drive_inventory(config)
+    except InventoryError as error:
+        return _failed_status(
+            store.load_state(InventorySource.UNIFI_DRIVE), str(error), "Drive"
+        )
+    store.save_current(snapshot)
+    state = store.load_state(InventorySource.UNIFI_DRIVE)
+    return RefreshStatus(
+        snapshot=snapshot,
+        previous_snapshot=state.previous,
+        last_updated=state.updated_at,
+        diagnostics=("Drive refresh succeeded.",),
     )
 
 

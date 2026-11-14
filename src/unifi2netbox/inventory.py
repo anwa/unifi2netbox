@@ -26,6 +26,7 @@ class InventorySource(StrEnum):
     UNIFI_NETWORK = "unifi_network"
     UNIFI_PROTECT = "unifi_protect"
     UNIFI_ACCESS = "unifi_access"
+    UNIFI_DRIVE = "unifi_drive"
 
 
 class InventoryError(ValueError):
@@ -155,6 +156,28 @@ class InventoryPrefix:
 
 
 @dataclass(frozen=True)
+class InventoryDisk:
+    """One drive bay of a UNAS (UniFi Drive), from allow-listed fields.
+
+    ``slot``, ``model``, ``serial``, ``firmware``, ``kind`` and ``size_bytes``
+    describe the hardware; ``state``, ``temperature_c``, ``health`` and
+    ``pool`` are operational and display only. Empty bays have no model.
+    """
+
+    device_id: str
+    slot: str
+    model: str = ""
+    serial: str = ""
+    firmware: str = ""
+    kind: str = ""
+    size_bytes: int = 0
+    state: str = ""
+    temperature_c: int | None = None
+    health: int | None = None
+    pool: str = ""
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     source: InventorySource
     captured_at: str
@@ -177,6 +200,8 @@ class InventorySnapshot:
     port_configs: tuple[InventoryPortConfig, ...] = ()
     port_config_error: str = ""
     links: tuple[InventoryLink, ...] = ()
+    disks: tuple[InventoryDisk, ...] = ()
+    disk_error: str = ""
 
 
 def _text(value: object) -> str:

@@ -6,6 +6,31 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.9.2
+
+### Added
+
+- M9 slice 2: Drive inventory. A configured Drive connection is read on every
+  refresh into a `unifi_drive` snapshot: the UNAS as one device (name, model,
+  system MAC from the public system information, manufacturer Ubiquiti) and
+  its drive bays from the internal Drive storage endpoint, read GET-only with
+  the local API key and limited to allow-listed fields (slot, model, serial,
+  firmware, type, size, state, temperature, health, pool). Fresh UNAS data
+  joins matching with the `drive:` prefix after Network, Access and Protect;
+  stale data never authorizes writes and the pre-write re-read includes it.
+  The detail panel lists the drive bays (display only, serials hidden). A
+  failed storage read keeps the device and explains the missing bays. A
+  single role named like "NAS" or "Storage" is preselected.
+
+### Validation
+
+- Added Drive reader, snapshot round trip, refresh, preview, re-read, role
+  and detail-panel tests. Live read-only on 2026-11-14: the UNAS Pro was read
+  as one device with 7 bays (5 HDDs with model, serial and firmware, 2 empty);
+  the preview showed it as a create row with the NetBox type "UNAS Pro"
+  preselected. UniFi OS reports `deviceState` "setup", so the device state is
+  shown as online after a successful read instead.
+
 ## v0.9.1
 
 ### Added

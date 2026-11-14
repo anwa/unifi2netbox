@@ -151,6 +151,16 @@ Network and Protect integration paths return the UniFi OS HTML page.
 | Endpoint | Purpose |
 | --- | --- |
 | `https://<unas>/api/system` | Public UniFi OS system information (model, system MAC); used by the Drive check |
+| `https://<unas>/proxy/drive/api/v2/storage` | Internal Drive endpoint (local API key): drive bays and pools; used for the drive inventory |
+
+With the stored local API key (2026-11-14, application 0.9.1) unknown
+`/proxy/drive/...` paths answer 404 instead of 401, so the key is accepted;
+`/proxy/drive/integration/v1/...` does not exist. The storage endpoint is
+internal and undocumented; only these drive-bay fields are kept: `slotId`,
+`model`, `serial`, `firmware`, `type`, `size`, `state`, `temperature`,
+`healthScore` and `poolId`. SMART counters, throughput, RAID and pool
+details are ignored. On the tested UNAS Pro `healthScore` was 5 for healthy
+disks (scale not documented), empty bays report `state` "empty".
 
 ## Installed-Version Field Capability Matrix
 

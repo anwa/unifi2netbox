@@ -271,7 +271,9 @@ console. UniFi Access is optional too and uses `[unifi_access]` with the Access
 API URL (port 12445 of the console running Access) and an Access API token
 with device-read permission. UniFi Drive is optional as well and uses
 `[unifi_drive]` with the UNAS console URL and a local API key; until Ubiquiti
-documents a Drive API only the public system information is read.
+documents a Drive API only the public system information and the internal
+storage endpoint (drive bays: model, serial, firmware, size, state) are read.
+The UNAS appears as one device; its drive bays are listed in the details.
 Optional services show a header chip once set.
 
 - Windows: `%LOCALAPPDATA%\unifi2netbox\config.toml`.

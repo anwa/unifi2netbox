@@ -572,6 +572,7 @@ def fake_runner(monkeypatch, window):
         cable_plan=None,
         protect_config=None,
         access_config=None,
+        drive_config=None,
     ):
         started.update(
             plan=write_plan,
@@ -587,6 +588,7 @@ def fake_runner(monkeypatch, window):
             cable_plan=cable_plan,
             protect_config=protect_config,
             access_config=access_config,
+            drive_config=drive_config,
         )
         return True
 
@@ -1770,3 +1772,38 @@ def test_drive_chip_is_hidden_until_configured(qtbot, tmp_path, pool):
 
     assert not window.drive_chip.isHidden()
     assert window.drive_chip.text().endswith("Drive")
+
+
+def test_unas_detail_lists_drive_bays_display_only(qtbot):
+    from unifi2netbox.gui_review import DetailPanel
+    from unifi2netbox.inventory import InventoryDisk
+    from unifi2netbox.review import ReviewState
+
+    state = ReviewState(preview_result(), BehaviorConfig())
+    key = state.rows()[0].key
+    state.drive_disks = (
+        InventoryDisk(
+            "u1",
+            "1",
+            "WDC WD80",
+            "SERIAL-X",
+            "fw",
+            "HDD",
+            8 * 10**12,
+            "optimal",
+            34,
+            99,
+        ),
+        InventoryDisk("u1", "2", state="empty"),
+    )
+    state.drive_id = lambda k: "u1" if k == key else ""
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show_device(state, key)
+
+    texts = [w.text() for w in panel.findChildren(QLabel)]
+    assert "Drive bays (from UniFi Drive)" in texts
+    bays = next(t for t in texts if t.startswith("Bay 1"))
+    assert "WDC WD80" in bays and "8.0 TB" in bays and "health 99" in bays
+    assert "Bay 2: empty" in bays
+    assert "SERIAL-X" not in bays

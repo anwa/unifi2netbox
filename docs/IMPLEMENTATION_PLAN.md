@@ -418,6 +418,24 @@ Slices:
 - [x] 1. Optional Drive connection: config section, settings page, chip and
   read-only system-information check; key stored, not sent (0.9.1).
 
+Finding (2026-11-14, read-only with the stored key): the UNAS accepts its
+local API key (unknown `/proxy/drive/...` paths then answer 404 instead of
+401); there is no integration path, but the internal
+`/proxy/drive/api/v2/storage` endpoint returns drive bays (model, serial,
+firmware, type, size, state, temperature, health, pool) and pools.
+
+Decision (2026-11-14, user): drives become NetBox inventory items of the UNAS
+device (create and update only, never delete); operational values stay
+display-only.
+
+- [x] 2. Read the UNAS (public system information) and its drive bays
+  (internal storage endpoint, GET, allow-listed fields) into a Drive
+  snapshot; match and preview the UNAS; show bays display-only (0.9.2).
+- [ ] 3. Plan and write drives as NetBox inventory items of the matched UNAS
+  (name, part ID, serial, description) with re-read, drift checks and
+  read-back; never delete.
+- [ ] 4. Approved NetBox write test and live acceptance.
+
 - [ ] Verify Drive 4.4.20 / UNAS Pro 6.0.11 inventory APIs and authentication.
 - [ ] Add verified chassis/interface/hardware inventory with cross-source matching.
 - [ ] Keep unsupported storage metrics display-only; never access file contents.

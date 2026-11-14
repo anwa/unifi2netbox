@@ -1,23 +1,41 @@
-"""Connection check for a UniFi Drive console (UNAS), read-only.
+"""UniFi Drive console (UNAS): connection check and inventory, read-only.
 
-Ubiquiti documents no Drive or UNAS device API yet. The check therefore reads
+Ubiquiti documents no Drive or UNAS device API yet. The connection check reads
 only the public UniFi OS system information of the configured console
-(``/api/system``: model and system MAC) and confirms that it is a UNAS. The
-local API key created on the UNAS is stored for future Drive APIs but not
-sent anywhere yet. Requests are GET only, never follow redirects and ignore
-proxy environment variables. File contents and storage data are never read.
+(``/api/system``: model and system MAC) and confirms that it is a UNAS.
+
+The inventory additionally reads the internal Drive storage endpoint
+(``/proxy/drive/api/v2/storage``) with the local API key and keeps only
+allow-listed drive-bay fields (slot, model, serial, firmware, type, size,
+state, temperature, health, pool). Requests are GET only, never follow
+redirects and ignore proxy environment variables. File contents, shares and
+users are never requested.
 """
 
 import ssl
+from dataclasses import replace
+from datetime import datetime
 
 import httpx
 
 from unifi2netbox.config import DriveConfig
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryDisk,
+    InventoryError,
+    InventorySnapshot,
+    InventorySource,
+    _normalize_mac,
+    _text,
+    _timestamp,
+)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
 from unifi2netbox.unifi import _tls_failure
 
 SYSTEM_PATH = "/api/system"
+STORAGE_PATH = "/proxy/drive/api/v2/storage"
 DRIVE_MODEL_PREFIX = "UNAS"
+NAS = "nas"
 
 
 class _Failure(Exception):
@@ -112,4 +130,92 @@ def check_drive_connection(
         ConnectionState.ONLINE,
         f"{model} reachable (system information read). The API key is stored "
         "for future UniFi Drive APIs; Ubiquiti documents no Drive device API yet.",
+    )
+
+
+def read_drive_inventory(
+    config: DriveConfig,
+    *,
+    captured_at: datetime | None = None,
+    transport: httpx.BaseTransport | None = None,
+) -> InventorySnapshot:
+    """The UNAS as one device plus its drive bays.
+
+    The device comes from the public system information (name, model, system
+    MAC). Drive bays come from the internal storage endpoint with the local
+    API key; if that read fails, the device is still returned and
+    ``disk_error`` explains why the bays are missing.
+    """
+    if not config.configured:
+        raise InventoryError("Set the UNAS console URL and its local API key.")
+    try:
+        with drive_client(config, transport=transport) as client:
+            system = read_system(client)
+            disks, disk_error = _read_disks(client, config)
+    except _Failure as error:
+        raise InventoryError(error.message) from None
+    except (httpx.HTTPError, OSError, ValueError, TypeError) as error:
+        raise InventoryError(
+            "UniFi Drive inventory read failed due to transport errors."
+        ) from error
+    mac = _normalize_mac(system.get("mac"))
+    source_id = mac.replace(":", "").lower() or "unas"
+    device = InventoryDevice(
+        source_id=source_id,
+        name=_text(system.get("name")),
+        model=_text(system["hardware"]["shortname"]),
+        manufacturer="Ubiquiti",
+        mac_address=mac,
+        kind=NAS,
+        # deviceState reports setup phases ("setup"), not reachability; the
+        # system read itself just succeeded, so the console is online.
+        state="online",
+    )
+    return InventorySnapshot(
+        source=InventorySource.UNIFI_DRIVE,
+        captured_at=_timestamp(captured_at),
+        devices=(device,),
+        disks=tuple(replace(disk, device_id=source_id) for disk in disks),
+        disk_error=disk_error,
+    )
+
+
+def _read_disks(
+    client: httpx.Client, config: DriveConfig
+) -> tuple[tuple[InventoryDisk, ...], str]:
+    response = client.get(STORAGE_PATH, headers={"X-API-KEY": config.token})
+    code = response.status_code
+    if code in {401, 403}:
+        return (), "The UNAS rejected the local API key for the storage read."
+    if code != 200 or "json" not in response.headers.get("content-type", ""):
+        return (), f"The UNAS storage read returned HTTP {code}; drive bays unknown."
+    payload = response.json()
+    rows = payload.get("disks") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        return (), "The UNAS returned no supported drive-bay list."
+    disks = tuple(_disk(row) for row in rows if isinstance(row, dict))
+    slots = [disk.slot for disk in disks]
+    if len(set(slots)) != len(slots):
+        return (), "The UNAS returned duplicate drive bays."
+    return disks, ""
+
+
+def _int(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _disk(row: dict) -> InventoryDisk:
+    """Allow-listed drive-bay fields; everything else is ignored."""
+    return InventoryDisk(
+        device_id="",
+        slot=_text(row.get("slotId")) or str(_int(row.get("slotId")) or ""),
+        model=_text(row.get("model")),
+        serial=_text(row.get("serial")),
+        firmware=_text(row.get("firmware")),
+        kind=_text(row.get("type")),
+        size_bytes=_int(row.get("size")) or 0,
+        state=_text(row.get("state")),
+        temperature_c=_int(row.get("temperature")),
+        health=_int(row.get("healthScore")),
+        pool=_text(row.get("poolId")),
     )

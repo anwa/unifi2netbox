@@ -18,6 +18,7 @@ from unifi2netbox.interface_plan import (
     InterfacePlanRow,
     select_interface,
 )
+from unifi2netbox.inventory import InventoryDisk
 from unifi2netbox.networks import NetworkPlan, NetworkPlanRow, select_network
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
@@ -157,6 +158,13 @@ class ReviewState:
             device.source_id: device.state
             for device in (result.access_devices if result else ())
         }
+        self.drive_states: dict[str, str] = {
+            device.source_id: device.state
+            for device in (result.drive_devices if result else ())
+        }
+        self.drive_disks: tuple[InventoryDisk, ...] = (
+            result.drive_disks if result else ()
+        )
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -391,9 +399,28 @@ class ReviewState:
             return ""
         return self.access_states.get(unifi_id[len(ACCESS_PREFIX) :], "")
 
+    def drive_id(self, key: str) -> str:
+        """UNAS source ID for devices that come from UniFi Drive, else ''."""
+        unifi_id, _ = _device_ids(key)
+        if not unifi_id.startswith(DRIVE_PREFIX):
+            return ""
+        return unifi_id[len(DRIVE_PREFIX) :]
+
+    def disks_for(self, key: str) -> tuple[InventoryDisk, ...]:
+        """Drive bays of a UNAS row (display only), ordered by slot."""
+        device_id = self.drive_id(key)
+        if not device_id:
+            return ()
+        disks = [d for d in self.drive_disks if d.device_id == device_id]
+        return tuple(sorted(disks, key=lambda d: (len(d.slot), d.slot)))
+
     def source_kind(self, key: str) -> str:
         """Kind of a device from an optional UniFi application, else ''."""
-        return self.access_kind(key) or self.protect_kind(key)
+        return (
+            self.access_kind(key)
+            or self.protect_kind(key)
+            or ("nas" if self.drive_id(key) else "")
+        )
 
     def source_origin(self, key: str) -> tuple[str, str, str]:
         """(application, kind, state) for optional-source devices, else empty."""
@@ -401,6 +428,8 @@ class ReviewState:
             return "UniFi Access", kind, self.access_state(key)
         if kind := self.protect_kind(key):
             return "UniFi Protect", kind, self.protect_state(key)
+        if device_id := self.drive_id(key):
+            return "UniFi Drive", "nas", self.drive_states.get(device_id, "")
         return "", "", ""
 
     # -- cables -------------------------------------------------------------
@@ -633,6 +662,7 @@ def humanize_timestamp(value: str, now: datetime | None = None) -> str:
 
 PROTECT_PREFIX = "protect:"
 ACCESS_PREFIX = "access:"
+DRIVE_PREFIX = "drive:"
 # Access hints avoid a bare "access", which would also match "Access Point".
 _ACCESS_HINTS = ("access control", "door", "zutritt")
 _ROLE_HINTS = {
@@ -642,6 +672,7 @@ _ROLE_HINTS = {
     "reader": (*_ACCESS_HINTS, "reader"),
     "intercom": ("intercom", "sprechanlage", *_ACCESS_HINTS),
     "access": _ACCESS_HINTS,
+    "nas": ("nas", "storage", "speicher"),
 }
 
 

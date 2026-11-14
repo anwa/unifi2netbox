@@ -150,9 +150,11 @@ class InventoryPreviewJob(QRunnable):
         netbox_site_name: str = "",
         protect_config: ProtectConfig | None = None,
         access_config: AccessConfig | None = None,
+        drive_config: DriveConfig | None = None,
     ) -> None:
         super().__init__()
         self.access_config = access_config
+        self.drive_config = drive_config
         self.config_path = config_path
         self.netbox_config = netbox_config
         self.unifi_config = unifi_config
@@ -174,6 +176,7 @@ class InventoryPreviewJob(QRunnable):
                 netbox_site_name=self.netbox_site_name,
                 protect_config=self.protect_config,
                 access_config=self.access_config,
+                drive_config=self.drive_config,
             )
         except Exception:
             result = InventoryPreviewResult(
@@ -210,9 +213,11 @@ class WriteExecutionJob(QRunnable):
         cable_plan=None,
         protect_config=None,
         access_config=None,
+        drive_config=None,
     ) -> None:
         super().__init__()
         self.access_config = access_config
+        self.drive_config = drive_config
         self.unifi_config = unifi_config
         self.journal_path = journal_path
         self.network_plan = network_plan
@@ -250,6 +255,7 @@ class WriteExecutionJob(QRunnable):
                 cable_plan=self.cable_plan,
                 protect_config=self.protect_config,
                 access_config=self.access_config,
+                drive_config=self.drive_config,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -291,6 +297,7 @@ class WriteExecutionRunner(QObject):
         cable_plan=None,
         protect_config=None,
         access_config=None,
+        drive_config=None,
     ) -> bool:
         if self.busy:
             return False
@@ -311,6 +318,7 @@ class WriteExecutionRunner(QObject):
             cable_plan=cable_plan,
             protect_config=protect_config,
             access_config=access_config,
+            drive_config=drive_config,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -344,6 +352,7 @@ class InventoryPreviewRunner(QObject):
         netbox_site_name: str = "",
         protect_config: ProtectConfig | None = None,
         access_config: AccessConfig | None = None,
+        drive_config: DriveConfig | None = None,
     ) -> bool:
         if self.busy:
             return False
@@ -355,6 +364,7 @@ class InventoryPreviewRunner(QObject):
             netbox_site_name,
             protect_config,
             access_config,
+            drive_config,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1994,6 +2004,7 @@ class MainWindow(QMainWindow):
             netbox_site_name=self.behavior.netbox_site_name,
             protect_config=self.protect.config,
             access_config=self.access.config,
+            drive_config=self.drive.config,
         )
         self.update_check_action()
 
@@ -2077,6 +2088,7 @@ class MainWindow(QMainWindow):
             cable_plan=cable_plan,
             protect_config=self.protect.config,
             access_config=self.access.config,
+            drive_config=self.drive.config,
         )
         self.update_check_action()
 

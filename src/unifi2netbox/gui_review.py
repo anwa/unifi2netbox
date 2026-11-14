@@ -564,6 +564,7 @@ class DetailPanel(QScrollArea):
         self._add_fields(item)
 
         self._add_ports(item)
+        self._add_disks(key)
 
         if item.row.suggested_device_types and item.category == CREATE:
             self.layout_.addWidget(label("Type suggestions", "subheading"))
@@ -592,6 +593,31 @@ class DetailPanel(QScrollArea):
         actions.addStretch()
         self.layout_.addLayout(actions)
         self.layout_.addStretch()
+
+    def _add_disks(self, key: str) -> None:
+        """Drive bays of a UNAS, display only."""
+        disks = self.state.disks_for(key)
+        if not disks:
+            return
+        self.layout_.addWidget(label("Drive bays (from UniFi Drive)", "subheading"))
+        lines = []
+        for disk in disks:
+            if not disk.model:
+                lines.append(f"Bay {disk.slot}: {disk.state or 'empty'}")
+                continue
+            parts = [disk.model]
+            if disk.size_bytes:
+                parts.append(f"{disk.size_bytes / 1e12:.1f} TB")
+            if disk.kind:
+                parts.append(disk.kind)
+            if disk.state:
+                parts.append(disk.state)
+            if disk.temperature_c is not None:
+                parts.append(f"{disk.temperature_c} \N{DEGREE SIGN}C")
+            if disk.health is not None:
+                parts.append(f"health {disk.health}")
+            lines.append(f"Bay {disk.slot}: " + " \N{MIDDLE DOT} ".join(parts))
+        self.layout_.addWidget(label("\n".join(lines), "caption"))
 
     def _add_create_choices(self, item: ReviewRow) -> None:
         self.layout_.addWidget(
