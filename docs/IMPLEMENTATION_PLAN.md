@@ -342,7 +342,9 @@ Slices:
   deduplicated by MAC against Network devices.
 - [ ] 4. Approved NetBox writes for Protect devices and live acceptance.
 
-- [ ] Verify Protect 7.3.70 inventory/NVR endpoints and credentials per console.
+- [x] Verify Protect 7.3.70 inventory/NVR endpoints and credentials per console.
+  (2026-11-14: installed 7.3.74 on the UNVR, Online with its own local API key;
+  fields recorded in `API_CAPABILITIES.md`.)
 - [ ] Add camera/NVR hardware inventory, status, matching and approved NetBox flow.
 - [ ] Deduplicate devices also visible in Network; never collect recordings/streams.
 
