@@ -6,6 +6,50 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.4.0
+
+### Summary
+
+- Fourth functional milestone: matching and difference preview (M4). The
+	release also contains early M5 write slices; M5 itself remains open.
+
+### Added
+
+- Ranked matching (confirmed mappings, then name, serial, MAC) with explicit
+	ambiguity conflicts and site-scoped NetBox-only delete proposals.
+- Device Type suggestions by model, NetBox part number and UniFi aliases, with
+	port-count and manufacturer guards and preselection of unambiguous matches.
+- Difference and change previews with provenance, configured/operational
+	categories, field/device/batch selection and explicit dependencies.
+- Inventory Preview in the main window with highlights, copy actions and the
+	`Show all rows` dialog including per-row role, site, status and type choices.
+- Approved NetBox writes (M5 slices): ordered write plan with preflight
+	blockers, one confirmation, dry run, single-row execution, outcome journal,
+	read-back planning and a NetBox re-read before every write.
+- NetBox site setting for UniFi devices, UniFi API dump exports and UniFi
+	Network 11.0 support in the connection gate.
+- Qt-free `pipeline` module for preview and write orchestration.
+
+### Fixed
+
+- Update previews only preselect writable fields and never clear NetBox values
+	from empty UniFi fields.
+
+### Validation
+
+- Milestone-wide offline gate: 237 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): read-only checks against
+	NetBox 4.7.3 and UniFi Network 11.0.99, plus an approved write test against
+	the NetBox developer instance (9/9 checks); see `docs/TESTING.md`.
+- The GUI was started on the developer workstation; GUI workflows were not
+	driven by the assistant. Linux and packaged builds remain unverified.
+
+### Compatibility
+
+- New optional `[behavior] netbox_site_name` setting; existing configuration
+	and snapshots load without migration (`part_number` defaults to empty).
+
 ## v0.3.40
 
 ### Changed

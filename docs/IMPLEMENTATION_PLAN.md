@@ -163,6 +163,10 @@ exports contain no credentials/personal data and remain useful as test fixtures.
 
 Branch: `feature/diff-and-device-matching`; depends on M3.
 
+Status: completed for release v0.4.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.4.0 release. The branch also contains
+early M5 write slices; M5 stays open (source-side re-read before writes).
+
 - [x] Implement identity conflicts, confirmed mappings and cross-source
   deduplication (service-level matching core and offline contract tests on
   2026-10-28).
@@ -173,6 +177,13 @@ Branch: `feature/diff-and-device-matching`; depends on M3.
   model and offline contract tests on 2026-10-28).
 - [x] Create immutable change previews with explicit dependencies, without writes
   (service-level dependency model and offline contract tests on 2026-10-28).
+- [x] Match UniFi models to NetBox device types by part number and alias, and
+  map the UniFi site to a NetBox site (offline tests and live read-only checks
+  on 2026-11-14).
+- [x] Run live acceptance on the developer workstation (read-only checks and an
+  approved NetBox developer-instance write test on 2026-11-14).
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.4.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.4.0.
 
 Acceptance: ambiguous matches never auto-apply; unavailable values never erase
 targets; selecting a device selects eligible displayed fields, with exceptions.

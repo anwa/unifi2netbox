@@ -1,21 +1,20 @@
 # unifi2netbox
 
-Latest main release: **v0.2.0**, the UniFi Network connection milestone.
+Latest main release: **v0.4.0**, the matching and difference preview
+milestone (M4), including early approved-write (M5) slices.
 
-Release **v0.2.0** adds UniFi Network connectivity alongside NetBox with one
-unified Settings dialog and one shared Check Connections action. Both services
-are checked independently, results remain separate, and the local Network API
-adapter stays read-only.
+Release **v0.4.0** compares UniFi Network inventory with NetBox, explains
+matches, conflicts and Device Type suggestions, and lets you apply selected,
+confirmed changes to NetBox. UniFi stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
-applying selected changes to NetBox. Release v0.2.0 only checks both API
-connections. The features below exist on the development branches (M3-M5) and
-are not part of a main release yet; see [CHANGELOG.md](CHANGELOG.md) for the
-version-by-version history.
+applying selected changes to NetBox. The capabilities below are part of
+release v0.4.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+history. Approved writes (M5) are still being completed.
 
-## Current Development Capabilities
+## Current Capabilities
 
 ### Inventory and snapshots
 
