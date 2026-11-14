@@ -176,6 +176,18 @@ The focused tests validate that:
 - cable creates re-check UniFi evidence and both interfaces, treat an
 	existing joining cable as done, never replace other cables, look up
 	interrupted creates, read back every cable and write nothing in dry runs,
+- fresh Protect devices join matching with prefixed IDs and MAC dedup
+	against Network, stale ones never do, the pre-write re-read merges Protect
+	and tolerates its failure, Protect creates never inherit the default role,
+	unknown vendors get exact type matches only, and empty choices show a
+	placeholder,
+- the Protect reader keeps name, MAC, model, kind and state only, sets the
+	Ubiquiti manufacturer only for known model prefixes, rejects malformed or
+	duplicate entries and is refreshed only when configured; failures keep the
+	last Protect snapshot without blocking NetBox or Network,
+- the optional Protect connection reads info, NVRs and cameras with GET
+	only, never contacts a console while unconfigured, reports HTML answers as
+	unsupported, gates the 7.3 series and keeps its own config section,
 - link evidence comes from wired uplinks and LLDP of known UniFi devices;
 	the cable plan suggests only agreeing, unclaimed, fully mapped links,
 	preselects two-source evidence, never replaces cables and keeps unmatched
@@ -630,3 +642,19 @@ exactly the two test interfaces, deleted it, and repeated the test. Disagreeing
 evidence, occupied interfaces and interrupted creates remain covered by
 offline tests.
 
+On 2026-11-14 the assistant checked M7 (UniFi Protect) live on the developer
+workstation. Read-only first: the Protect connection to the UNVR was Online
+(Protect 7.3.74, own local API key); the reader returned 11 devices (1 NVR,
+10 cameras) in 0.36 s; the UDM answered the Protect paths with HTML only. With
+commit 2b60bd8 (application 0.7.3) the preview showed all 11 Protect devices as
+create rows, 6 with a preselected device type and none with a role (NetBox had
+no camera or NVR role). Then, with the user's explicit approval, a write test
+against the NetBox developer instance passed 7/7 checks: a temporary role
+`u2n-test-camera` was created and preselected for the camera "Hof" (UVC G6
+Bullet, type "Unifi G6 Bullet"); the create ran through the real pipeline
+including the Protect re-read and was read back as verified with the expected
+name, role, type and site; a refreshed preview matched the new device as in
+sync (model text and MAC differ but are not writable, as for Network devices);
+the run was in the write history; the camera and the role were removed
+afterwards (NetBox again had 4 devices and 5 roles). A failing Protect re-read
+and stale Protect snapshots remain covered by offline tests.

@@ -156,3 +156,43 @@ def test_browse_cached_snapshots_marks_recent_snapshot_as_fresh(tmp_path, monkey
 
     assert browse.netbox.stale is False
     assert "within freshness limits" in browse.netbox.diagnostics[0]
+
+
+def test_protect_is_refreshed_only_when_configured_and_fails_softly(
+    tmp_path, monkeypatch
+):
+    from unifi2netbox.config import ProtectConfig
+
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    netbox = NetBoxConfig("https://netbox.invalid", "nb")
+    unifi = UniFiConfig("https://udm.invalid", "uf")
+    protect = ProtectConfig("https://unvr.invalid", "pr")
+    good = snapshot(InventorySource.UNIFI_PROTECT, "2026-11-14T12:00:00+00:00")
+    reads = {"protect": 0}
+
+    def protect_reader(config, **kwargs):
+        reads["protect"] += 1
+        if reads["protect"] == 2:
+            raise InventoryError("Local API key or Protect read permission was denied.")
+        return good
+
+    monkeypatch.setattr(
+        "unifi2netbox.refresh.read_netbox_inventory",
+        lambda config, **kw: snapshot(InventorySource.NETBOX, good.captured_at),
+    )
+    monkeypatch.setattr(
+        "unifi2netbox.refresh.read_unifi_inventory",
+        lambda config, **kw: snapshot(InventorySource.UNIFI_NETWORK, good.captured_at),
+    )
+    monkeypatch.setattr("unifi2netbox.protect.read_protect_inventory", protect_reader)
+
+    assert refresh_snapshots(netbox, unifi, store).protect is None
+    assert refresh_snapshots(netbox, unifi, store, ProtectConfig()).protect is None
+    first = refresh_snapshots(netbox, unifi, store, protect)
+    failed = refresh_snapshots(netbox, unifi, store, protect)
+
+    assert first.protect.snapshot == good and not first.protect.error
+    assert failed.protect.stale and failed.protect.snapshot == good
+    assert "denied" in failed.protect.error
+    assert not failed.netbox.error and not failed.unifi.error
+    assert store.load_current(InventorySource.UNIFI_PROTECT) == good

@@ -203,7 +203,7 @@ def test_run_write_execution_passes_fresh_sources(monkeypatch):
     monkeypatch.setattr(
         pipeline,
         "reread_unifi_snapshot",
-        lambda config, site: (
+        lambda config, site, protect=None: (
             _snapshot(InventorySource.UNIFI_NETWORK, [fresh_device]),
             "",
         ),
@@ -423,3 +423,183 @@ def test_run_write_execution_runs_networks_first_and_records_them(
     assert report.outcomes[0].device_key == "network:n1"
     stored = JournalStore(path).recent()[0].outcomes[0]
     assert (stored.label, stored.operation_type) == ("VLAN 20 IoT", "create_vlan")
+
+
+def test_protect_note_reports_counts_failures_and_cache():
+    from unifi2netbox.pipeline import _protect_note
+    from unifi2netbox.refresh import RefreshStatus
+
+    two = InventorySnapshot(
+        InventorySource.UNIFI_PROTECT,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("a", "x"), InventoryDevice("b", "y")),
+    )
+
+    assert _protect_note(None) == ""
+    assert _protect_note(RefreshStatus(snapshot=two)) == "Protect: 2 devices read."
+    assert _protect_note(
+        RefreshStatus(snapshot=two, error="timeout", cached=True, stale=True)
+    ) == ("Protect refresh failed: timeout Showing the last cached Protect snapshot.")
+
+
+def test_protect_devices_join_matching_without_network_duplicates():
+    from unifi2netbox.pipeline import merge_protect_devices
+
+    network = InventorySnapshot(
+        InventorySource.UNIFI_NETWORK,
+        "2026-11-14T12:00:00+00:00",
+        devices=(
+            InventoryDevice(
+                "sw", "switch", mac_address="AA:00:00:00:00:01", site="Home"
+            ),
+        ),
+    )
+    protect = InventorySnapshot(
+        InventorySource.UNIFI_PROTECT,
+        "2026-11-14T12:00:00+00:00",
+        devices=(
+            InventoryDevice(
+                "c1", "Garden", mac_address="AA:00:00:00:00:02", kind="camera"
+            ),
+            InventoryDevice(
+                "c2", "Dup", mac_address="AA:00:00:00:00:01", kind="camera"
+            ),
+        ),
+    )
+
+    merged, duplicates = merge_protect_devices(network, protect)
+
+    assert duplicates == 1
+    assert [(d.source_id, d.site) for d in merged.devices] == [
+        ("sw", "Home"),
+        ("protect:c1", "Home"),
+    ]
+    assert merge_protect_devices(network, None) == (network, 0)
+
+
+def test_preview_uses_fresh_protect_only(monkeypatch, tmp_path):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import ProtectConfig
+    from unifi2netbox.refresh import RefreshResult, RefreshStatus
+
+    netbox = _snapshot(InventorySource.NETBOX, [])
+    unifi = _snapshot(
+        InventorySource.UNIFI_NETWORK, [InventoryDevice("sw", "switch", site="Home")]
+    )
+    protect = InventorySnapshot(
+        InventorySource.UNIFI_PROTECT,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("c1", "Garden", kind="camera"),),
+    )
+
+    def run(protect_status):
+        monkeypatch.setattr(
+            pipeline,
+            "refresh_snapshots",
+            lambda *args: RefreshResult(
+                RefreshStatus(snapshot=netbox),
+                RefreshStatus(snapshot=unifi),
+                protect_status,
+            ),
+        )
+        return pipeline.build_inventory_preview(
+            tmp_path / "config.toml",
+            NETBOX,
+            UniFiConfig("https://udm.invalid", "uf"),
+            include_all_netbox_delete_candidates=False,
+            protect_config=ProtectConfig("https://unvr.invalid", "pr"),
+        )
+
+    fresh = run(RefreshStatus(snapshot=protect))
+    stale = run(RefreshStatus(snapshot=protect, error="timeout", cached=True))
+
+    assert any("protect:c1" in row.device_key for row in fresh.rows)
+    assert "Protect: 1 device read." in fresh.detail_lines
+    assert not any("protect:c1" in row.device_key for row in stale.rows)
+    assert any("Protect refresh failed" in line for line in stale.detail_lines)
+
+
+def test_write_reread_merges_protect_and_tolerates_its_failure(monkeypatch):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import ProtectConfig
+    from unifi2netbox.inventory import InventoryError
+
+    network = _snapshot(
+        InventorySource.UNIFI_NETWORK, [InventoryDevice("sw", "switch")]
+    )
+    protect = InventorySnapshot(
+        InventorySource.UNIFI_PROTECT,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("c1", "Garden", kind="camera"),),
+    )
+    monkeypatch.setattr(pipeline, "read_unifi_inventory", lambda config: network)
+    config = ProtectConfig("https://unvr.invalid", "pr")
+
+    monkeypatch.setattr(
+        "unifi2netbox.protect.read_protect_inventory", lambda config: protect
+    )
+    merged, error = pipeline.reread_unifi_snapshot(UniFiConfig(), "Home", config)
+    assert error == "" and [d.source_id for d in merged.devices] == ["sw", "protect:c1"]
+
+    def fail(config):
+        raise InventoryError("denied")
+
+    monkeypatch.setattr("unifi2netbox.protect.read_protect_inventory", fail)
+    only_network, error = pipeline.reread_unifi_snapshot(UniFiConfig(), "Home", config)
+    assert error == "" and [d.source_id for d in only_network.devices] == ["sw"]
+
+
+def test_protect_creates_need_a_fitting_role_not_the_default(monkeypatch, tmp_path):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import BehaviorConfig, ProtectConfig
+    from unifi2netbox.inventory import InventoryDeviceRole
+    from unifi2netbox.refresh import RefreshResult, RefreshStatus
+    from unifi2netbox.review import ReviewState
+
+    protect = InventorySnapshot(
+        InventorySource.UNIFI_PROTECT,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("c1", "Garden", kind="camera"),),
+    )
+
+    def preview(roles):
+        netbox = _snapshot(
+            InventorySource.NETBOX,
+            [],
+            device_roles=tuple(
+                InventoryDeviceRole(str(i), name) for i, name in enumerate(roles)
+            ),
+        )
+        unifi = _snapshot(
+            InventorySource.UNIFI_NETWORK, [InventoryDevice("ap", "ap", site="Home")]
+        )
+        monkeypatch.setattr(
+            pipeline,
+            "refresh_snapshots",
+            lambda *args: RefreshResult(
+                RefreshStatus(snapshot=netbox),
+                RefreshStatus(snapshot=unifi),
+                RefreshStatus(snapshot=protect),
+            ),
+        )
+        result = pipeline.build_inventory_preview(
+            tmp_path / "config.toml",
+            NETBOX,
+            UniFiConfig("https://udm.invalid", "uf"),
+            include_all_netbox_delete_candidates=False,
+            protect_config=ProtectConfig("https://unvr.invalid", "pr"),
+        )
+        return ReviewState(
+            result, BehaviorConfig(default_device_role_name="Access Point")
+        )
+
+    plain = preview(("Access Point", "Switch"))
+    camera_key = next(row.key for row in plain.rows() if plain.protect_kind(row.key))
+    ap_key = next(row.key for row in plain.rows() if not plain.protect_kind(row.key))
+    assert plain.role_by_key.get(ap_key) == "Access Point"
+    assert camera_key not in plain.role_by_key
+    blockers = plain.plan_blockers(plain.plan_for(camera_key))
+    assert any("Choose a NetBox device role" in text for text in blockers)
+
+    with_camera = preview(("Access Point", "Camera"))
+    assert with_camera.role_by_key[camera_key] == "Camera"

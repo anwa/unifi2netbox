@@ -6,6 +6,138 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.8.0
+
+### Summary
+
+- UniFi Protect inventory milestone (M7): the NVR and cameras of an optional
+	Protect console join the same review and approved NetBox write flow.
+
+### Added
+
+- Optional `[unifi_protect]` connection with its own console URL and local API
+	key, a settings page and a header chip; GET-only reads of `meta/info`,
+	`nvrs` and `cameras`, gated to the Protect 7.3 series. Consoles without
+	Protect are reported as unsupported.
+- NVR and cameras are stored in their own snapshot with name, MAC, model, kind
+	and live state only; recordings, snapshots and streams are never requested.
+- Fresh Protect devices are matched, previewed and written like Network
+	devices; devices also seen in Network are taken from Network (MAC); stale
+	Protect data never authorizes writes; Protect is re-read before writing.
+- Protect model codes map to NetBox part numbers; unknown vendors (third-party
+	cameras) only get exact type matches; cameras and NVRs never inherit the
+	default network role.
+
+### Fixed
+
+- Create choices show a "Choose a ..." placeholder instead of an unchosen first
+	value.
+
+### Validation
+
+- Milestone-wide offline gate: 454 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): Protect 7.3.74 on the UNVR
+	Online with its own key, 11 devices read (1 NVR, 10 cameras), preview with
+	6 preselected device types; approved NetBox developer-instance write test of
+	one camera with a test role (7/7, verified, matched after refresh, test
+	objects removed). A failing Protect re-read and stale Protect snapshots are
+	covered by offline tests only.
+
+### Compatibility
+
+- No configuration change is required; Protect stays off until
+	`[unifi_protect]` is set. Snapshots gain a `unifi_protect` source and device
+	`kind`/`state` fields; older snapshots load without migration.
+
+## v0.7.4
+
+### Added
+
+- M7 slice 4: the detail panel of a Protect device shows its live Protect
+  state, for example "from UniFi Protect (camera, connected)". The state is
+  operational and never written.
+
+### Validation
+
+- Approved live write test of a Protect camera create against the NetBox
+  developer instance (7/7, see `docs/TESTING.md`); review test for the state.
+
+## v0.7.3
+
+### Added
+
+- M7 slice 3: a fresh Protect read joins matching, preview and write plan.
+  Protect devices get `protect:`-prefixed IDs; a Protect device whose MAC is
+  also a Network device is dropped (Network data wins) and counted in the
+  Protect status line. Protect devices take the most common Network site, then
+  the NetBox site mapping applies. A cached Protect snapshot after a failed
+  refresh never joins the preview, so it cannot authorize writes.
+- Before writing, Protect is re-read and merged like Network; if only Protect
+  fails, its devices are skipped while Network writes proceed.
+- Device type suggestions understand Protect model codes (`UNVR4` is part
+  number `UNVR`, `UVC G4 Instant` is `UVC-G4-INS`); devices without a known
+  manufacturer only get exact model or part-number matches.
+- Cameras and NVRs never inherit the default device role; a NetBox role whose
+  name fits (camera/kamera/CCTV/surveillance, NVR/recorder) is preselected,
+  otherwise the role must be chosen. The detail panel shows "from UniFi
+  Protect (camera)".
+
+### Fixed
+
+- Role, site and status choices no longer display the first NetBox value
+  when nothing is chosen; a "Choose a ..." placeholder is shown instead.
+
+### Validation
+
+- Added merge, fresh-only, re-read, role, alias, exact-match and placeholder
+  tests. Live read-only preview: 11 Protect devices as create rows, 6 with a
+  preselected device type (NVR, G4 Instant, G6 Bullet x2, G3 Flex x2), 5
+  without (G5 Bullet, UA Intercom and three third-party CAM-PT2);
+  roles stay open because NetBox has no camera or NVR role yet.
+
+## v0.7.2
+
+### Added
+
+- M7 slice 2: when Protect is configured, a refresh also reads the NVR and
+  cameras from the Protect Integration API (GET only) into their own snapshot
+  (`unifi_protect`, current and previous, stale on failure). Devices keep only
+  name, MAC, model, kind (`nvr`/`camera`) and the operational connection state.
+  The manufacturer is Ubiquiti only for known Ubiquiti model prefixes; other
+  models such as third-party cameras keep it empty. A Protect failure keeps the
+  last good snapshot and never blocks NetBox or Network; the preview result
+  carries the Protect devices and a one-line Protect status.
+
+### Validation
+
+- Added reader tests (identity fields, vendor rule, settings not copied,
+  malformed entries, failures), refresh tests (optional, soft failure with
+  cache), a pipeline status test and a snapshot round trip. Live read-only:
+  Protect 7.3.74 returned 11 devices (1 NVR, 10 cameras, 3 third-party without
+  manufacturer) in 0.36 s; a full preview stored them as a Protect snapshot.
+
+## v0.7.1
+
+### Added
+
+- M7 slice 1: optional UniFi Protect connection. A new `[unifi_protect]`
+  section stores the URL, local API key and TLS options of the console running
+  Protect (for example a UNVR), edited on a new **UniFi Protect** settings page.
+  The check reads `meta/info`, `nvrs` and `cameras` of the Protect local
+  Integration API (GET only, no redirects, no proxy environment), accepts the
+  Protect 7.3 series and reports a console without Protect (HTML answer) as
+  unsupported. A header chip shows the state ("Protect · Off" while
+  unconfigured); an unconfigured Protect never blocks NetBox or Network work.
+
+### Validation
+
+- Added Protect check tests (online, unconfigured without requests, HTML
+  answer, HTTP failures, version gate, response shapes, timeout), config round
+  trips that keep other sections, and GUI tests for the settings page and the
+  chip. Live read-only: the UDM (Network console) answers the Protect paths
+  with its HTML page, confirming that Protect needs its own connection.
+
 ## v0.7.0
 
 ### Summary

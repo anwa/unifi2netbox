@@ -254,3 +254,22 @@ def test_links_and_interface_cables_round_trip(tmp_path):
 
     loaded = store.load_current(InventorySource.UNIFI_NETWORK)
     assert loaded.links == (link,) and loaded.interfaces == (interface,)
+
+
+def test_protect_devices_round_trip_with_kind_and_state(tmp_path):
+    from unifi2netbox.inventory import (
+        InventoryDevice,
+        InventorySnapshot,
+        InventorySource,
+    )
+
+    device = InventoryDevice(
+        "c1", "Garden", model="UVC G6 Bullet", kind="camera", state="CONNECTED"
+    )
+    snapshot = InventorySnapshot(
+        InventorySource.UNIFI_PROTECT, "2026-11-14T00:00:00+00:00", devices=(device,)
+    )
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    store.save_current(snapshot)
+
+    assert store.load_current(InventorySource.UNIFI_PROTECT).devices == (device,)

@@ -6,6 +6,7 @@ The GUI runs these functions inside worker jobs and only renders their results.
 from __future__ import annotations
 
 import sqlite3
+from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,12 @@ from uuid import uuid4
 
 from unifi2netbox.cable_execute import execute_cable_plan
 from unifi2netbox.cables import CablePlan, build_cable_plan
-from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
+from unifi2netbox.config import (
+    BehaviorConfig,
+    NetBoxConfig,
+    ProtectConfig,
+    UniFiConfig,
+)
 from unifi2netbox.interface_execute import execute_interface_plan
 from unifi2netbox.interface_plan import (
     DevicePair,
@@ -102,6 +108,9 @@ class InventoryPreviewResult:
     port_config_error: str = ""
     interface_plan: InterfacePlan | None = None
     cable_plan: CablePlan | None = None
+    protect_devices: tuple[InventoryDevice, ...] = ()
+    protect_version: str = ""
+    protect_status: str = ""
     network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
@@ -139,6 +148,7 @@ def build_inventory_preview(
     *,
     include_all_netbox_delete_candidates: bool,
     netbox_site_name: str = "",
+    protect_config: ProtectConfig | None = None,
 ) -> InventoryPreviewResult:
     """Refresh snapshots, match, build the difference preview and write plan.
 
@@ -146,8 +156,10 @@ def build_inventory_preview(
     device before matching, so previews and writes use the NetBox site.
     """
     store = SnapshotStore(config_path.with_name(SNAPSHOT_FILENAME))
-    refresh = refresh_snapshots(netbox_config, unifi_config, store)
+    refresh = refresh_snapshots(netbox_config, unifi_config, store, protect_config)
     diagnostics = (*refresh.netbox.diagnostics, *refresh.unifi.diagnostics)
+    protect_snapshot = refresh.protect.snapshot if refresh.protect else None
+    protect_note = _protect_note(refresh.protect)
     message = " ".join(item for item in diagnostics if item)
     last_updated = refresh.netbox.last_updated or refresh.unifi.last_updated
 
@@ -176,7 +188,21 @@ def build_inventory_preview(
             detail_lines=(detail,),
         )
 
-    mapped_unifi = map_unifi_site(unifi_snapshot, netbox_site_name)
+    # Only a fresh Protect read may join the preview; a cached snapshot after a
+    # failed refresh must not authorize writes.
+    fresh_protect = (
+        protect_snapshot
+        if refresh.protect is not None and not refresh.protect.error
+        else None
+    )
+    merged_unifi, protect_duplicates = merge_protect_devices(
+        unifi_snapshot, fresh_protect
+    )
+    if protect_duplicates:
+        protect_note += (
+            f" {protect_duplicates} also seen in UniFi Network; Network data is used."
+        )
+    mapped_unifi = map_unifi_site(merged_unifi, netbox_site_name)
     known_sites = frozenset(
         item.name.strip() for item in netbox_snapshot.sites if item.name.strip()
     )
@@ -227,7 +253,8 @@ def build_inventory_preview(
             hidden_unmatched_netbox=hidden_unmatched_netbox,
             netbox_device_count=len(netbox_snapshot.devices),
             unifi_device_count=len(unifi_snapshot.devices),
-        ),
+        )
+        + ((protect_note,) if protect_note else ()),
         rows=preview_rows(diff, change, plan, suggestions=suggestions),
         unifi_captured_at=unifi_snapshot.captured_at,
         unifi_scope=unifi_snapshot.scope,
@@ -243,6 +270,9 @@ def build_inventory_preview(
             dedup.pairs, netbox_snapshot, mapped_unifi, network_plan, netbox_site_name
         ),
         cable_plan=_cable_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
+        protect_devices=protect_snapshot.devices if protect_snapshot else (),
+        protect_version=protect_snapshot.source_version if protect_snapshot else "",
+        protect_status=protect_note,
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),
@@ -292,6 +322,17 @@ def _interface_plan(
     )
 
 
+def _protect_note(status) -> str:
+    """One line about Protect: off, read, stale cache or failure."""
+    if status is None:
+        return ""
+    if status.error:
+        cached = " Showing the last cached Protect snapshot." if status.cached else ""
+        return f"Protect refresh failed: {status.error}{cached}"
+    count = _device_count(status.snapshot)
+    return f"Protect: {count} device{'s' if count != 1 else ''} read."
+
+
 def _cable_plan(
     pairs, netbox_snapshot: InventorySnapshot, unifi_snapshot: InventorySnapshot
 ) -> CablePlan:
@@ -327,6 +368,7 @@ def run_write_execution(
     network_plan: NetworkPlan | None = None,
     interface_plan: InterfacePlan | None = None,
     cable_plan: CablePlan | None = None,
+    protect_config: ProtectConfig | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
@@ -337,7 +379,7 @@ def run_write_execution(
     """
     started = _now()
     snapshot, source_error = (
-        reread_unifi_snapshot(unifi_config, behavior.netbox_site_name)
+        reread_unifi_snapshot(unifi_config, behavior.netbox_site_name, protect_config)
         if unifi_config is not None
         else (None, "")
     )
@@ -482,13 +524,30 @@ def run_write_execution(
 
 
 def reread_unifi_snapshot(
-    unifi_config: UniFiConfig, netbox_site_name: str
+    unifi_config: UniFiConfig,
+    netbox_site_name: str,
+    protect_config: ProtectConfig | None = None,
 ) -> tuple[InventorySnapshot | None, str]:
-    """Fresh UniFi snapshot with the site mapping, or (None, error text)."""
+    """Fresh UniFi snapshot with the site mapping, or (None, error text).
+
+    With a configured ``protect_config`` the Protect devices are re-read and
+    merged as in the preview. If only Protect fails, its devices are missing
+    from the result, so their writes are skipped while Network writes proceed.
+    """
     try:
-        return map_unifi_site(read_unifi_inventory(unifi_config), netbox_site_name), ""
+        network = read_unifi_inventory(unifi_config)
     except InventoryError as error:
         return None, str(error) or "UniFi read failed"
+    protect = None
+    if protect_config is not None and protect_config.configured:
+        from unifi2netbox.protect import read_protect_inventory
+
+        try:
+            protect = read_protect_inventory(protect_config)
+        except InventoryError:
+            protect = None
+    merged, _ = merge_protect_devices(network, protect)
+    return map_unifi_site(merged, netbox_site_name), ""
 
 
 def reread_unifi_sources(
@@ -680,6 +739,36 @@ def scope_unmatched_netbox_for_delete(
             unmatched_netbox=scoped_unmatched,
         ),
         hidden,
+    )
+
+
+PROTECT_PREFIX = "protect:"
+
+
+def merge_protect_devices(
+    network: InventorySnapshot, protect: InventorySnapshot | None
+) -> tuple[InventorySnapshot, int]:
+    """Add Protect devices to the UniFi snapshot used for matching.
+
+    Protect IDs get a ``protect:`` prefix so they never collide with Network
+    IDs. A Protect device whose MAC is also a Network device is dropped: the
+    Network record wins. Protect has no site, so the most common Network site
+    is used (the NetBox site mapping still applies afterwards).
+    Returns the merged snapshot and the number of dropped duplicates.
+    """
+    if protect is None or not protect.devices:
+        return network, 0
+    network_macs = {d.mac_address for d in network.devices if d.mac_address}
+    sites = Counter(d.site for d in network.devices if d.site)
+    site = sites.most_common(1)[0][0] if sites else ""
+    extra = tuple(
+        replace(device, source_id=f"{PROTECT_PREFIX}{device.source_id}", site=site)
+        for device in protect.devices
+        if not (device.mac_address and device.mac_address in network_macs)
+    )
+    return (
+        replace(network, devices=network.devices + extra),
+        len(protect.devices) - len(extra),
     )
 
 

@@ -513,3 +513,47 @@ def test_fuzzy_or_tied_candidates_are_not_preselected():
     assert confident_device_type_id(tied) == ""
     assert confident_device_type_id(without_id) == ""
     assert confident_device_type_id(()) == ""
+
+
+def test_unknown_vendor_gets_exact_model_suggestions_only():
+    from unifi2netbox.inventory import InventoryDeviceType
+    from unifi2netbox.matching import _build_type_catalog, _rank_candidates
+
+    netbox = InventorySnapshot(
+        InventorySource.NETBOX,
+        "2026-11-14T12:00:00+00:00",
+        device_types=(
+            InventoryDeviceType("1", "Sonoff", "CAM-PT2"),
+            InventoryDeviceType("2", "Other", "CAM-PT3"),
+        ),
+    )
+    catalog = _build_type_catalog(netbox)
+
+    exact = _rank_candidates(InventoryDevice("c", "x", model="CAM-PT2"), catalog)
+    close = _rank_candidates(InventoryDevice("c", "x", model="CAM-PT9"), catalog)
+
+    assert [(c.manufacturer, c.model) for c in exact] == [("Sonoff", "CAM-PT2")]
+    assert close == []
+
+
+@pytest.mark.parametrize(
+    ("model", "part_number"),
+    [("UVC G4 Instant", "UVC-G4-INS"), ("UNVR4", "UNVR")],
+)
+def test_protect_model_codes_match_netbox_part_numbers(model, part_number):
+    from unifi2netbox.matching import _build_type_catalog, _rank_candidates
+
+    netbox = InventorySnapshot(
+        InventorySource.NETBOX,
+        "2026-11-14T12:00:00+00:00",
+        device_types=(
+            InventoryDeviceType("1", "Ubiquiti", "Some name", part_number),
+            InventoryDeviceType("2", "Ubiquiti", "UniFi Protect NVR Pro", "UNVR-Pro"),
+        ),
+    )
+    device = InventoryDevice("c", "x", model=model, manufacturer="Ubiquiti")
+
+    best = _rank_candidates(device, _build_type_catalog(netbox))[0]
+
+    assert best.source_id == "1"
+    assert "UniFi model alias match" in best.reasons

@@ -76,6 +76,37 @@ The official API therefore leaves a demonstrated coverage gap for M6. Internal
 endpoints are used read-only, gated to the validated 11.0 series and covered by
 version-specific fixtures; see the M6 decision in `IMPLEMENTATION_PLAN.md`.
 
+## UniFi Protect Connection Gate (M7)
+
+Protect runs on its own console with its own local API key; the Network
+console's key and URL are not reused. Read-only probe on 2026-11-14 against the
+UDM Pro Max (Network console): `/proxy/protect/integration/v1/meta/info`,
+`nvrs` and `cameras` returned HTTP 200 with `text/html` (the UniFi OS page), so
+Protect is not installed there. The gate therefore treats HTML answers as
+"no Protect".
+
+Read-only probe on 2026-11-14 against the UNVR (assistant-executed on the
+developer workstation, application 0.7.1): Protect reports version 7.3.74 and
+the check is Online (7.3 series). Field coverage of the official API:
+
+| Endpoint | Fields | Not available |
+| --- | --- | --- |
+| `meta/info` | `applicationVersion` | - |
+| `nvrs` (one object, not a list) | `id`, `guid`, `name`, `mac`, `modelKey` (`nvr`), `type` (hardware code, e.g. `UNVR4`), arm mode and doorbell settings | serial, firmware, IP, storage |
+| `cameras` (list, 10 entries) | `id`, `guid`, `name`, `mac`, `modelKey` (`camera`), `type` (model, e.g. `UVC G4 Instant`), `state` (`CONNECTED`/`DISCONNECTED`), video, HDR, LED, OSD, mic and smart-detect settings, feature flags | serial, firmware, IP, manufacturer |
+| `cameras/{id}` | same fields as the list | - |
+
+Observations: `type` is the only model field; three cameras are third-party
+(`CAM-PT2`) without a manufacturer field, and one entry is a UniFi Access
+intercom (`UA Intercom`) listed as a camera. Matching can therefore use MAC and
+name only; the manufacturer must not be assumed.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/proxy/protect/integration/v1/meta/info` | Application version (gate: 7.3 series) |
+| `/proxy/protect/integration/v1/nvrs` | NVR read access |
+| `/proxy/protect/integration/v1/cameras` | Camera read access |
+
 ## Installed-Version Field Capability Matrix
 
 M3 now provides a service-level matrix builder for installed-version capability

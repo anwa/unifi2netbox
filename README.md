@@ -1,20 +1,20 @@
 # unifi2netbox
 
-Latest main release: **v0.7.0**, the switch ports and VLANs milestone (M6).
+Latest main release: **v0.8.0**, the UniFi Protect inventory milestone (M7).
 
-Release **v0.7.0** compares UniFi Network inventory with NetBox in a modern
+Release **v0.8.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
 history. Beyond devices it covers VLANs and prefixes, switch port
-configuration on NetBox interfaces and cable suggestions from LLDP. UniFi
-stays read-only.
+configuration on NetBox interfaces, cable suggestions from LLDP and,
+optionally, the NVR and cameras of UniFi Protect. UniFi stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v0.7.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v0.8.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities
@@ -65,6 +65,11 @@ history.
   effective configuration (mode, native and tagged VLANs, profile, LAG), read
   from internal Network endpoints with GET only. All-VLAN trunks stay
   `tagged-all`; unknown profiles or networks are reported, never guessed.
+- With UniFi Protect configured, the NVR and cameras appear as devices in the
+  same review (marked "from UniFi Protect"). Devices also seen in UniFi Network
+  are taken from Network. Cameras and NVRs never get the default network role:
+  create a fitting NetBox role (for example "Camera", "NVR") or choose one per
+  device. Third-party cameras get a device type only on an exact model match.
 - The **Interfaces** filter compares the effective UniFi port configuration
   with the paired NetBox interfaces of matched devices and offers field-level
   writes for enabled state, 802.1Q mode, untagged and tagged VLANs. VLANs come
@@ -169,7 +174,7 @@ file content and personal access records are excluded. All UI/code/docs are Engl
 | Windows | Windows 11 25H2/26H2 acceptance targets |
 | Linux | Ubuntu/Kubuntu 26.04 LTS/26.10; not yet tested |
 | Network | Network 11.0.99 live-verified read-only on the developer workstation (2026-11-14); 10.6 series accepted per M2 user-reported tests |
-| Protect | UNVR 6.0.11 / Protect 7.3.70; later milestone |
+| Protect | UNVR 6.0.11 / Protect 7.3 series; 7.3.74 live-verified read-only plus an approved NetBox write test (2026-11-14) |
 | Access | 4.3.22; later milestone |
 | Drive | UNAS Pro 6.0.11 / Drive 4.4.20; later capability gate |
 
@@ -255,7 +260,10 @@ NetBox uses `[netbox]`; UniFi Network uses `[unifi_network]` with its own `url`,
 UniFi section is unconfigured and does not affect an existing NetBox connection.
 The dialog saves both sections together and preserves unrelated settings/comments.
 A blank site permits discovery of a single accessible site; multiple sites require
-explicit selection.
+explicit selection. UniFi Protect is optional and uses `[unifi_protect]` with the
+`url`, `token` (local API key of the Protect console), `verify_tls`, `ca_bundle`
+and `timeout` of the console running Protect, which may differ from the Network
+console.
 
 - Windows: `%LOCALAPPDATA%\unifi2netbox\config.toml`.
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/unifi2netbox/config.toml`.

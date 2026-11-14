@@ -570,6 +570,7 @@ def fake_runner(monkeypatch, window):
         network_plan=None,
         interface_plan=None,
         cable_plan=None,
+        protect_config=None,
     ):
         started.update(
             plan=write_plan,
@@ -583,6 +584,7 @@ def fake_runner(monkeypatch, window):
             network_plan=network_plan,
             interface_plan=interface_plan,
             cable_plan=cable_plan,
+            protect_config=protect_config,
         )
         return True
 
@@ -1556,3 +1558,70 @@ def test_confirm_dialog_lists_cables(qtbot, tmp_path, pool):
     qtbot.addWidget(confirm)
 
     assert "1 cable" in confirm.findChild(QLabel, "confirmSummary").text()
+
+
+def test_protect_settings_page_saves_its_own_section(qtbot, tmp_path, pool):
+    from unifi2netbox.config import ProtectConfig, load_protect_config
+
+    seen = []
+
+    def protect_online(config):
+        seen.append(config)
+        return ConnectionResult(
+            ConnectionState.ONLINE, "Synthetic Protect read.", "7.3.70"
+        )
+
+    path = tmp_path / "config.toml"
+    widget = SettingsDialog(
+        path,
+        NetBoxConfig(),
+        pool,
+        online,
+        unifi_config=UniFiConfig(),
+        unifi_checker=unifi_online,
+        protect_checker=protect_online,
+    )
+    qtbot.addWidget(widget)
+    widget.show_page("UniFi Protect")
+    assert widget.pages.currentWidget() is widget.protect
+    assert not widget.protect.site.isVisible()
+    widget.protect.url.setText("https://unvr.invalid/")
+    widget.protect.token.setText("protect-synthetic")
+    widget.test_connections()
+    qtbot.waitUntil(lambda: not widget.busy)
+    assert isinstance(seen[0], ProtectConfig)
+    assert "UniFi Protect: Online" in widget.outcome.text()
+    widget.save()
+
+    assert widget.saved_protect_config == ProtectConfig(
+        "https://unvr.invalid", "protect-synthetic"
+    )
+    assert load_protect_config(path) == widget.saved_protect_config
+
+
+def test_protect_chip_is_off_until_configured(qtbot, tmp_path, pool):
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+    )
+    qtbot.addWidget(window)
+
+    assert window.protect_chip.text().endswith("Protect · Off")
+    assert "Optional." in window.protect_chip.toolTip()
+
+
+def test_role_placeholder_is_shown_when_no_role_is_chosen(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool)
+    key = select_row(window, "ap-1")
+    window.review.role_by_key.pop(key, None)
+    window.show_detail(key)
+
+    role = window.detail.findChild(QComboBox, "choiceRole")
+    assert role.currentText() == "Choose a role"
+    assert role.currentData() == ""
+    role.setCurrentIndex(role.findData("Switch"))
+    assert window.review.role_by_key[key] == "Switch"
+    role.setCurrentIndex(0)
+    assert key not in window.review.role_by_key

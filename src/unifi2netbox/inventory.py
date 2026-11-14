@@ -24,6 +24,7 @@ INTERNAL_API_SERIES = ("11.0.",)
 class InventorySource(StrEnum):
     NETBOX = "netbox"
     UNIFI_NETWORK = "unifi_network"
+    UNIFI_PROTECT = "unifi_protect"
 
 
 class InventoryError(ValueError):
@@ -39,6 +40,8 @@ class InventoryDevice:
     manufacturer: str = ""
     mac_address: str = ""
     site: str = ""
+    kind: str = ""
+    state: str = ""
 
 
 @dataclass(frozen=True)

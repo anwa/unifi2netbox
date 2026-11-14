@@ -326,9 +326,43 @@ no unsupported writes and no redundant changes on a second apply.
 
 Branch: `feature/protect-inventory`; follows M6.
 
-- [ ] Verify Protect 7.3.70 inventory/NVR endpoints and credentials per console.
-- [ ] Add camera/NVR hardware inventory, status, matching and approved NetBox flow.
-- [ ] Deduplicate devices also visible in Network; never collect recordings/streams.
+Status: completed for release v0.8.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.8.0 tag.
+
+Decision (2026-11-14, user-approved): Protect gets its own optional connection
+(`[unifi_protect]`, URL and local API key of the console running Protect,
+edited in Settings); the Network key is not reused. Scope: cameras and the NVR;
+other Protect hardware (lights, sensors, chimes, viewers) may follow later.
+Live probe: the UDM serves no Protect API (HTML answer).
+
+Slices:
+
+- [x] 1. Optional Protect connection: config section, settings page, header
+  chip and read-only check of info, NVRs and cameras (0.7.1).
+- [x] 2. Read NVR and cameras into a Protect snapshot after verifying the
+  7.3.70 fields live. (0.7.2, 2026-11-14: live 7.3.74, 11 devices.)
+  Decision (user-approved): third-party cameras are read and shown, but only
+  proposed for creation when NetBox already has a device type with exactly
+  that model; the manufacturer is never assumed. The Access intercom listed by
+  Protect is treated as a camera and noted for M8.
+- [x] 3. Match and preview Protect devices with the existing flow,
+  deduplicated by MAC against Network devices. (0.7.3, 2026-11-14: live
+  preview with 11 Protect create rows, 6 with a device type; roles open.)
+- [x] 4. Approved NetBox writes for Protect devices and live acceptance.
+  (0.7.4, 2026-11-14: approved live create of one camera with a test role,
+  verified, matched after refresh, removed; 7/7.)
+
+- [x] Verify Protect 7.3.70 inventory/NVR endpoints and credentials per console.
+  (2026-11-14: installed 7.3.74 on the UNVR, Online with its own local API key;
+  fields recorded in `API_CAPABILITIES.md`.)
+- [x] Add camera/NVR hardware inventory, status, matching and approved NetBox flow.
+  (Slices 2 to 4; the Protect state is shown, never written.)
+- [x] Deduplicate devices also visible in Network; never collect recordings/streams.
+  (MAC dedup in favor of Network; only `meta/info`, `nvrs` and `cameras` are
+  requested, no snapshot, recording or stream endpoints.)
+
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.8.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.8.0.
 
 Acceptance: camera/NVR fixtures and target-PC read verification; existing common
 approval and conflict handling remains effective.

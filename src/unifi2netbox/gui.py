@@ -50,16 +50,23 @@ from unifi2netbox.config import (
     BehaviorConfig,
     ConfigError,
     NetBoxConfig,
+    ProtectConfig,
     UiConfig,
     UniFiConfig,
     load_behavior_config,
     load_config,
+    load_protect_config,
     load_ui_config,
     load_unifi_config,
     save_connections,
     save_ui_config,
 )
-from unifi2netbox.connections import Checker, ConnectionRunner, check_unifi_connection
+from unifi2netbox.connections import (
+    Checker,
+    ConnectionRunner,
+    check_protect_connection,
+    check_unifi_connection,
+)
 from unifi2netbox.gui_review import (
     COL_CHANGE,
     COL_DEVICE,
@@ -134,11 +141,13 @@ class InventoryPreviewJob(QRunnable):
         unifi_config: UniFiConfig,
         include_all_netbox_delete_candidates: bool,
         netbox_site_name: str = "",
+        protect_config: ProtectConfig | None = None,
     ) -> None:
         super().__init__()
         self.config_path = config_path
         self.netbox_config = netbox_config
         self.unifi_config = unifi_config
+        self.protect_config = protect_config
         self.include_all_netbox_delete_candidates = include_all_netbox_delete_candidates
         self.netbox_site_name = netbox_site_name
         self.signals = InventoryJobSignals()
@@ -154,6 +163,7 @@ class InventoryPreviewJob(QRunnable):
                     self.include_all_netbox_delete_candidates
                 ),
                 netbox_site_name=self.netbox_site_name,
+                protect_config=self.protect_config,
             )
         except Exception:
             result = InventoryPreviewResult(
@@ -188,6 +198,7 @@ class WriteExecutionJob(QRunnable):
         network_plan=None,
         interface_plan=None,
         cable_plan=None,
+        protect_config=None,
     ) -> None:
         super().__init__()
         self.unifi_config = unifi_config
@@ -195,6 +206,7 @@ class WriteExecutionJob(QRunnable):
         self.network_plan = network_plan
         self.interface_plan = interface_plan
         self.cable_plan = cable_plan
+        self.protect_config = protect_config
         self.netbox_config = netbox_config
         self.behavior = behavior
         self.difference_preview = difference_preview
@@ -224,6 +236,7 @@ class WriteExecutionJob(QRunnable):
                 network_plan=self.network_plan,
                 interface_plan=self.interface_plan,
                 cable_plan=self.cable_plan,
+                protect_config=self.protect_config,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -263,6 +276,7 @@ class WriteExecutionRunner(QObject):
         network_plan=None,
         interface_plan=None,
         cable_plan=None,
+        protect_config=None,
     ) -> bool:
         if self.busy:
             return False
@@ -281,6 +295,7 @@ class WriteExecutionRunner(QObject):
             network_plan=network_plan,
             interface_plan=interface_plan,
             cable_plan=cable_plan,
+            protect_config=protect_config,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -312,6 +327,7 @@ class InventoryPreviewRunner(QObject):
         *,
         include_all_netbox_delete_candidates: bool,
         netbox_site_name: str = "",
+        protect_config: ProtectConfig | None = None,
     ) -> bool:
         if self.busy:
             return False
@@ -321,6 +337,7 @@ class InventoryPreviewRunner(QObject):
             unifi,
             include_all_netbox_delete_candidates,
             netbox_site_name,
+            protect_config,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -353,10 +370,13 @@ class ConnectionSettingsForm(QWidget):
         parent=None,
         *,
         unifi: bool = False,
+        protect: bool = False,
         sites: tuple[tuple[str, str], ...] = (),
     ) -> None:
         super().__init__(parent)
-        self.is_unifi = unifi
+        self.is_unifi = unifi and not protect
+        self.is_protect = protect
+        unifi = unifi or protect
         self.state = ConnectionState.UNCONFIGURED
         self.runner = ConnectionRunner(pool, checker, self)
         self.runner.finished.connect(self.test_finished)
@@ -364,12 +384,18 @@ class ConnectionSettingsForm(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
-        layout.addWidget(plain_label("UniFi Network" if unifi else "NetBox", "heading"))
+        heading = "UniFi Protect" if protect else "UniFi Network" if unifi else "NetBox"
+        layout.addWidget(plain_label(heading, "heading"))
         layout.addWidget(
             plain_label(
                 (
-                    "Local console of your UniFi Network application. Use a local "
-                    "integration API key; cloud keys do not work."
+                    "Optional. Console running UniFi Protect, for example a UNVR. "
+                    "Use a local integration API key created on that console. "
+                    "Protect is only read; recordings and streams are never "
+                    "accessed."
+                    if protect
+                    else "Local console of your UniFi Network application. Use a "
+                    "local integration API key; cloud keys do not work."
                     if unifi
                     else "Your NetBox instance and an API token with device read "
                     "access (and write access for applying changes)."
@@ -381,7 +407,11 @@ class ConnectionSettingsForm(QWidget):
         form.setVerticalSpacing(10)
         self.url = QLineEdit(config.url)
         self.url.setPlaceholderText(
-            "https://unifi.example.lan" if unifi else "https://netbox.example.lan"
+            "https://unvr.example.lan"
+            if protect
+            else "https://unifi.example.lan"
+            if unifi
+            else "https://netbox.example.lan"
         )
         self.token = QLineEdit(config.token)
         self.token.setEchoMode(QLineEdit.EchoMode.Password)
@@ -415,9 +445,9 @@ class ConnectionSettingsForm(QWidget):
         form.addRow("", self.show_token)
         self.site = QComboBox(self)
         self.site.setEditable(True)
-        self.site.setVisible(unifi)
+        self.site.setVisible(self.is_unifi)
         self.update_sites(sites, config.site if isinstance(config, UniFiConfig) else "")
-        if unifi:
+        if self.is_unifi:
             form.addRow("Site", self.site)
         form.addRow("", self.verify_tls)
         form.addRow("CA bundle", ca_row)
@@ -460,6 +490,8 @@ class ConnectionSettingsForm(QWidget):
         )
         if self.is_unifi:
             return UniFiConfig(**asdict(config), site=self.site_value())
+        if self.is_protect:
+            return ProtectConfig(**asdict(config))
         return config
 
     def site_value(self) -> str:
@@ -509,7 +541,7 @@ class ConnectionSettingsForm(QWidget):
 
 
 class SettingsDialog(QDialog):
-    PAGES = ("NetBox", "UniFi Network", "Sync defaults")
+    PAGES = ("NetBox", "UniFi Network", "UniFi Protect", "Sync defaults")
 
     def __init__(
         self,
@@ -522,11 +554,14 @@ class SettingsDialog(QDialog):
         unifi_config: UniFiConfig | None = None,
         unifi_checker: Checker = check_unifi_connection,
         sites: tuple[tuple[str, str], ...] = (),
+        protect_config: ProtectConfig | None = None,
+        protect_checker: Checker = check_protect_connection,
     ) -> None:
         super().__init__(parent)
         self.path = path
         self.saved_config: NetBoxConfig | None = None
         self.saved_unifi_config: UniFiConfig | None = None
+        self.saved_protect_config: ProtectConfig | None = None
         self.saved_behavior_config: BehaviorConfig | None = None
         self.close_pending = False
         try:
@@ -544,6 +579,14 @@ class SettingsDialog(QDialog):
             unifi_checker,
             unifi=True,
             sites=sites,
+        )
+        if protect_config is None:
+            try:
+                protect_config = load_protect_config(path)
+            except ConfigError:
+                protect_config = ProtectConfig()
+        self.protect = ConnectionSettingsForm(
+            protect_config, pool, protect_checker, protect=True
         )
         sync_page = QWidget()
         sync = QVBoxLayout(sync_page)
@@ -598,7 +641,7 @@ class SettingsDialog(QDialog):
         self.nav.setFixedWidth(170)
         self.nav.addItems(list(self.PAGES))
         self.pages = QStackedWidget()
-        for page in (self.netbox, self.unifi, sync_page):
+        for page in (self.netbox, self.unifi, self.protect, sync_page):
             self.pages.addWidget(page)
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
@@ -637,6 +680,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.buttons)
         self.netbox.changed.connect(self.update_activity)
         self.unifi.changed.connect(self.update_activity)
+        self.protect.changed.connect(self.update_activity)
 
     def show_page(self, name: str) -> None:
         if name in self.PAGES:
@@ -644,7 +688,11 @@ class SettingsDialog(QDialog):
 
     @property
     def busy(self) -> bool:
-        return self.netbox.runner.busy or self.unifi.runner.busy
+        return (
+            self.netbox.runner.busy
+            or self.unifi.runner.busy
+            or self.protect.runner.busy
+        )
 
     def save(self) -> None:
         if self.busy:
@@ -654,6 +702,9 @@ class SettingsDialog(QDialog):
             unifi = self.unifi.config_from_fields()
             if not isinstance(unifi, UniFiConfig):
                 raise ConfigError("UniFi settings are invalid.")
+            protect = self.protect.config_from_fields()
+            if not isinstance(protect, ProtectConfig):
+                raise ConfigError("Protect settings are invalid.")
             behavior = BehaviorConfig(
                 include_all_netbox_delete_candidates=(
                     self.include_all_netbox_delete_candidates.isChecked()
@@ -661,12 +712,13 @@ class SettingsDialog(QDialog):
                 default_device_role_name=self.default_device_role_name.text().strip(),
                 netbox_site_name=self.netbox_site_name.text().strip(),
             )
-            save_connections(self.path, netbox, unifi, behavior)
+            save_connections(self.path, netbox, unifi, behavior, protect)
         except ConfigError as error:
             self.outcome.setText(str(error))
             return
         self.saved_config = netbox
         self.saved_unifi_config = unifi
+        self.saved_protect_config = protect
         self.saved_behavior_config = behavior
         self.accept()
 
@@ -675,6 +727,7 @@ class SettingsDialog(QDialog):
             return
         self.netbox.test_connection()
         self.unifi.test_connection()
+        self.protect.test_connection()
         self.update_activity()
 
     def update_activity(self) -> None:
@@ -684,6 +737,7 @@ class SettingsDialog(QDialog):
         self.buttons.setEnabled(not busy)
         self.outcome.setText(
             f"NetBox: {self.netbox.state}\nUniFi Network: {self.unifi.state}"
+            f"\nUniFi Protect: {self.protect.state}"
         )
         if self.close_pending and not busy:
             super().reject()
@@ -717,25 +771,39 @@ class ConnectionPanel(QFrame):
         checker: Checker,
         *,
         unifi: bool = False,
+        protect: bool = False,
     ) -> None:
         super().__init__()
         self.path = config_path
         self.pool = pool
         self.checker = checker
-        self.is_unifi = unifi
+        self.is_unifi = unifi and not protect
+        self.is_protect = protect
         self.closing = False
         self.pending_check = False
         self.site_choices = ()
-        self.name = "UniFi Network" if unifi else "NetBox"
+        self.name = (
+            "UniFi Protect" if protect else "UniFi Network" if unifi else "NetBox"
+        )
         self.runner = ConnectionRunner(pool, checker, self)
         self.runner.finished.connect(self.connection_finished)
         self.config_error = ""
         try:
             self.config = (
-                load_unifi_config(config_path) if unifi else load_config(config_path)
+                load_protect_config(config_path)
+                if protect
+                else load_unifi_config(config_path)
+                if unifi
+                else load_config(config_path)
             )
         except ConfigError as error:
-            self.config = UniFiConfig() if unifi else NetBoxConfig()
+            self.config = (
+                ProtectConfig()
+                if protect
+                else UniFiConfig()
+                if unifi
+                else NetBoxConfig()
+            )
             self.config_error = str(error)
 
         self.setProperty("card", True)
@@ -762,7 +830,7 @@ class ConnectionPanel(QFrame):
             ("Version", self.server_version),
             ("Last check", self.checked_at),
         ]
-        if unifi:
+        if self.is_unifi:
             rows.append(("Site", self.selected_site))
         for index, (title, widget) in enumerate(rows):
             grid.addWidget(plain_label(title, "secondary"), index, 0)
@@ -770,7 +838,10 @@ class ConnectionPanel(QFrame):
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
         self.details = plain_label(
-            "Set a console URL and local API key."
+            "Optional. Set the URL and local API key of the console running "
+            "UniFi Protect."
+            if protect
+            else "Set a console URL and local API key."
             if unifi
             else "Set a NetBox URL and API token.",
             "secondary",
@@ -794,8 +865,10 @@ class ConnectionPanel(QFrame):
 
     def summary(self) -> str:
         """Short chip text, for example 'NetBox 4.7.3' or 'UniFi · Offline'."""
-        short = "UniFi" if self.is_unifi else "NetBox"
+        short = "Protect" if self.is_protect else "UniFi" if self.is_unifi else "NetBox"
         state = self.current_state
+        if self.is_protect and state == ConnectionState.UNCONFIGURED:
+            return "Protect · Off"
         version_text = self.server_version.text()
         if state == ConnectionState.ONLINE:
             text = f"{short} {version_text}".strip()
@@ -949,6 +1022,7 @@ class MainWindow(QMainWindow):
         *,
         open_first_run: bool = True,
         unifi_checker: Checker = check_unifi_connection,
+        protect_checker: Checker = check_protect_connection,
     ) -> None:
         super().__init__()
         self.path = config_path
@@ -971,6 +1045,7 @@ class MainWindow(QMainWindow):
         self.last_result: InventoryPreviewResult | None = None
         self.netbox = ConnectionPanel(config_path, pool, checker)
         self.unifi = ConnectionPanel(config_path, pool, unifi_checker, unifi=True)
+        self.protect = ConnectionPanel(config_path, pool, protect_checker, protect=True)
         self.setWindowTitle(f"unifi2netbox {version('unifi2netbox')}")
         self.resize(1180, 760)
         self.setMinimumSize(860, 560)
@@ -1004,7 +1079,7 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_apply_bar())
         self.setCentralWidget(central)
 
-        for panel in (self.netbox, self.unifi):
+        for panel in (self.netbox, self.unifi, self.protect):
             panel.idle.connect(self.finish_close)
             panel.activity_changed.connect(self.update_check_action)
             panel.status_changed.connect(self.update_empty_state)
@@ -1026,7 +1101,7 @@ class MainWindow(QMainWindow):
             "Check connections",
             self,
         )
-        self.check_action.setToolTip("Check NetBox and UniFi Network connections")
+        self.check_action.setToolTip("Check NetBox and UniFi connections")
         self.check_action.triggered.connect(self.recheck)
         self.preview_action = QAction(
             theme.icon("ViewRefresh", QStyle.StandardPixmap.SP_BrowserReload),
@@ -1046,7 +1121,7 @@ class MainWindow(QMainWindow):
         self.settings_action.setShortcut(
             QKeySequence(QKeySequence.StandardKey.Preferences)
         )
-        self.settings_action.setToolTip("Edit NetBox, UniFi Network and sync settings")
+        self.settings_action.setToolTip("Edit NetBox, UniFi and sync settings")
         self.settings_action.triggered.connect(self.open_settings)
         self.export_action = QAction("Export UniFi API dump...", self)
         self.export_action.triggered.connect(self.export_unifi_api_dump)
@@ -1073,8 +1148,11 @@ class MainWindow(QMainWindow):
         self.netbox_chip.setObjectName("netboxChip")
         self.unifi_chip = ConnectionChip(self.unifi, header)
         self.unifi_chip.setObjectName("unifiChip")
+        self.protect_chip = ConnectionChip(self.protect, header)
+        self.protect_chip.setObjectName("protectChip")
         layout.addWidget(self.netbox_chip)
         layout.addWidget(self.unifi_chip)
+        layout.addWidget(self.protect_chip)
         layout.addStretch()
         check = QToolButton()
         check.setDefaultAction(self.check_action)
@@ -1704,6 +1782,8 @@ class MainWindow(QMainWindow):
             unifi_config=self.unifi.config,
             unifi_checker=self.unifi.checker,
             sites=self.unifi.site_choices,
+            protect_config=self.protect.config,
+            protect_checker=self.protect.checker,
         )
         if page:
             dialog.show_page(page)
@@ -1714,6 +1794,8 @@ class MainWindow(QMainWindow):
         ):
             self.netbox.apply_config(dialog.saved_config)
             self.unifi.apply_config(dialog.saved_unifi_config)
+            if dialog.saved_protect_config is not None:
+                self.protect.apply_config(dialog.saved_protect_config)
             if dialog.saved_behavior_config is not None:
                 self.behavior = dialog.saved_behavior_config
                 self.review.behavior = self.behavior
@@ -1726,6 +1808,7 @@ class MainWindow(QMainWindow):
     def recheck(self) -> None:
         self.netbox.recheck()
         self.unifi.recheck()
+        self.protect.recheck()
 
     # -- refresh ---------------------------------------------------------------
 
@@ -1746,6 +1829,7 @@ class MainWindow(QMainWindow):
                 self.behavior.include_all_netbox_delete_candidates
             ),
             netbox_site_name=self.behavior.netbox_site_name,
+            protect_config=self.protect.config,
         )
         self.update_check_action()
 
@@ -1827,6 +1911,7 @@ class MainWindow(QMainWindow):
             network_plan=network_plan,
             interface_plan=interface_plan,
             cable_plan=cable_plan,
+            protect_config=self.protect.config,
         )
         self.update_check_action()
 
@@ -1962,7 +2047,11 @@ class MainWindow(QMainWindow):
     # -- busy state and closing ------------------------------------------------
 
     def update_check_action(self) -> None:
-        connections_busy = self.netbox.runner.busy or self.unifi.runner.busy
+        connections_busy = (
+            self.netbox.runner.busy
+            or self.unifi.runner.busy
+            or self.protect.runner.busy
+        )
         self.settings_action.setEnabled(not self.closing)
         self.check_action.setEnabled(not self.closing and not connections_busy)
         refresh_enabled = (
@@ -1982,6 +2071,7 @@ class MainWindow(QMainWindow):
         if self.closing and not (
             self.netbox.runner.busy
             or self.unifi.runner.busy
+            or self.protect.runner.busy
             or self.inventory_runner.busy
             or self.write_runner.busy
         ):
@@ -1991,10 +2081,12 @@ class MainWindow(QMainWindow):
         self.closing = True
         self.netbox.stop_for_close()
         self.unifi.stop_for_close()
+        self.protect.stop_for_close()
         self.update_check_action()
         if (
             self.netbox.runner.busy
             or self.unifi.runner.busy
+            or self.protect.runner.busy
             or self.inventory_runner.busy
             or self.write_runner.busy
         ):
