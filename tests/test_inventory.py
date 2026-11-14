@@ -117,6 +117,9 @@ def netbox_transport(monkeypatch):
                 ],
             },
         ),
+        (200, {"count": 0, "next": None, "previous": None, "results": []}),
+        (200, {"count": 0, "next": None, "previous": None, "results": []}),
+        (200, {"count": 0, "next": None, "previous": None, "results": []}),
         (
             200,
             {
@@ -272,6 +275,7 @@ def unifi_api():
                 limit=1,
             ),
         ),
+        httpx.Response(200, json=page([], limit=1)),
     ]
 
     def handle(request):
@@ -383,6 +387,7 @@ def test_unifi_inventory_is_paginated_and_normalized(unifi_api):
         "/proxy/network/integration/v1/sites",
         f"/proxy/network/integration/v1/sites/{SITE_ID}/devices",
         f"/proxy/network/integration/v1/sites/{SITE_ID}/devices",
+        f"/proxy/network/integration/v1/sites/{SITE_ID}/networks",
     ]
 
 
@@ -433,6 +438,7 @@ def test_unifi_inventory_reads_ports_from_device_details():
                 },
             ]
         ),
+        f"sites/{SITE_ID}/networks": page([]),
         f"sites/{SITE_ID}/devices/sw": {
             "id": "sw",
             "interfaces": {
@@ -498,3 +504,88 @@ def test_unifi_port_lists_are_validated(ports):
 
     with pytest.raises(InventoryError):
         _normalize_unifi_ports("sw", {"interfaces": {"ports": ports}})
+
+
+def test_unifi_networks_carry_vlan_and_subnet():
+    from unifi2netbox.inventory import _normalize_unifi_network
+
+    row = {"id": "n1", "name": "IoT", "vlanId": 20, "enabled": True}
+    detail = {"ipv4Configuration": {"hostIpAddress": "10.0.20.1", "prefixLength": 24}}
+
+    network = _normalize_unifi_network(row, detail)
+
+    assert (network.name, network.vlan_id, network.subnet, network.gateway_ip) == (
+        "IoT",
+        20,
+        "10.0.20.0/24",
+        "10.0.20.1",
+    )
+    assert _normalize_unifi_network(row, {}).subnet == ""
+    assert _normalize_unifi_network({"id": "n2", "name": "x"}, {}) is None
+    bad = {"ipv4Configuration": {"hostIpAddress": "nope", "prefixLength": 24}}
+    assert _normalize_unifi_network(row, bad).subnet == ""
+
+
+def test_netbox_ipam_rows_are_normalized():
+    from unifi2netbox.inventory import (
+        _normalize_netbox_prefix,
+        _normalize_netbox_vlan,
+        _normalize_netbox_vlan_group,
+    )
+
+    group = _normalize_netbox_vlan_group(
+        {
+            "id": 3,
+            "name": "UniFi Home",
+            "slug": "unifi-home",
+            "scope_type": "dcim.site",
+            "scope_id": 7,
+        }
+    )
+    vlan = _normalize_netbox_vlan(
+        {
+            "id": 9,
+            "vid": 20,
+            "name": "IoT",
+            "group": {"id": 3},
+            "status": {"value": "active"},
+        }
+    )
+    prefix = _normalize_netbox_prefix(
+        {
+            "id": 5,
+            "prefix": "10.0.20.0/24",
+            "vlan": {"id": 9},
+            "scope_type": "dcim.site",
+            "scope_id": 7,
+            "status": {"value": "active"},
+        }
+    )
+
+    assert (group.source_id, group.scope_type, group.scope_id) == (
+        "3",
+        "dcim.site",
+        "7",
+    )
+    assert (vlan.vid, vlan.group_id, vlan.status) == (20, "3", "active")
+    assert (prefix.prefix, prefix.vlan_id, prefix.scope_id) == (
+        "10.0.20.0/24",
+        "9",
+        "7",
+    )
+    assert _normalize_netbox_vlan({"id": 1, "vid": "20"}) is None
+
+
+def test_netbox_inventory_survives_missing_ipam_permission(netbox_transport):
+    _, responses = netbox_transport
+    responses[5] = (403, {"detail": "You do not have permission."})
+    del responses[6:8]
+
+    snapshot = read_netbox_inventory(
+        NetBoxConfig("https://netbox.invalid", "synthetic-token"),
+        page_size=1,
+    )
+
+    assert [device.source_id for device in snapshot.devices] == ["7", "8"]
+    assert snapshot.vlans == ()
+    assert snapshot.ipam_error.startswith("NetBox IPAM could not be read")

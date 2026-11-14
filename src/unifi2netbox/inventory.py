@@ -1,3 +1,4 @@
+import ipaddress
 import ssl
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -93,6 +94,48 @@ class InventoryInterface:
 
 
 @dataclass(frozen=True)
+class InventoryNetwork:
+    """One UniFi network (official API) with its VLAN and IPv4 subnet."""
+
+    source_id: str
+    name: str
+    vlan_id: int
+    enabled: bool = True
+    subnet: str = ""
+    gateway_ip: str = ""
+    default: bool = False
+
+
+@dataclass(frozen=True)
+class InventoryVlanGroup:
+    source_id: str
+    name: str
+    slug: str = ""
+    scope_type: str = ""
+    scope_id: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryVlan:
+    source_id: str
+    vid: int
+    name: str
+    group_id: str = ""
+    status: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryPrefix:
+    source_id: str
+    prefix: str
+    vlan_id: str = ""
+    scope_type: str = ""
+    scope_id: str = ""
+    status: str = ""
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     source: InventorySource
     captured_at: str
@@ -107,6 +150,11 @@ class InventorySnapshot:
     unifi_raw_devices: tuple[dict[str, object], ...] = ()
     ports: tuple[InventoryPort, ...] = ()
     interfaces: tuple[InventoryInterface, ...] = ()
+    networks: tuple[InventoryNetwork, ...] = ()
+    vlan_groups: tuple[InventoryVlanGroup, ...] = ()
+    vlans: tuple[InventoryVlan, ...] = ()
+    prefixes: tuple[InventoryPrefix, ...] = ()
+    ipam_error: str = ""
 
 
 def _text(value: object) -> str:
@@ -223,6 +271,54 @@ def _normalize_netbox_interface(row: dict[str, object]) -> InventoryInterface | 
         poe_mode=_choice_value(row.get("poe_mode")),
         poe_type=_choice_value(row.get("poe_type")),
         speed_kbps=speed if type(speed) is int and speed > 0 else 0,
+    )
+
+
+def _related_id(value: object) -> str:
+    return _identifier(value.get("id")) if isinstance(value, dict) else ""
+
+
+def _normalize_netbox_vlan_group(row: dict[str, object]) -> InventoryVlanGroup | None:
+    source_id = _identifier(row.get("id"))
+    name = _text(row.get("name"))
+    if not source_id or not name:
+        return None
+    return InventoryVlanGroup(
+        source_id=source_id,
+        name=name,
+        slug=_text(row.get("slug")),
+        scope_type=_text(row.get("scope_type")),
+        scope_id=_identifier(row.get("scope_id")),
+    )
+
+
+def _normalize_netbox_vlan(row: dict[str, object]) -> InventoryVlan | None:
+    source_id = _identifier(row.get("id"))
+    vid = row.get("vid")
+    if not source_id or type(vid) is not int:
+        return None
+    return InventoryVlan(
+        source_id=source_id,
+        vid=vid,
+        name=_text(row.get("name")),
+        group_id=_related_id(row.get("group")),
+        status=_choice_value(row.get("status")),
+    )
+
+
+def _normalize_netbox_prefix(row: dict[str, object]) -> InventoryPrefix | None:
+    source_id = _identifier(row.get("id"))
+    prefix = _text(row.get("prefix"))
+    if not source_id or not prefix:
+        return None
+    return InventoryPrefix(
+        source_id=source_id,
+        prefix=prefix,
+        vlan_id=_related_id(row.get("vlan")),
+        scope_type=_text(row.get("scope_type")),
+        scope_id=_identifier(row.get("scope_id")),
+        status=_choice_value(row.get("status")),
+        description=_text(row.get("description")),
     )
 
 
@@ -348,6 +444,10 @@ def read_netbox_inventory(
 
     devices: list[InventoryDevice] = []
     interfaces: list[InventoryInterface] = []
+    vlan_groups: list[InventoryVlanGroup] = []
+    vlans: list[InventoryVlan] = []
+    prefixes: list[InventoryPrefix] = []
+    ipam_error = ""
     device_types: list[InventoryDeviceType] = []
     device_roles: list[InventoryDeviceRole] = []
     sites: list[InventorySite] = []
@@ -385,6 +485,38 @@ def read_netbox_inventory(
                 interface = _normalize_netbox_interface(row)
                 if interface is not None:
                     interfaces.append(interface)
+
+            # IPAM is optional: a token without IPAM rights must not break the
+            # device inventory; network planning is skipped instead.
+            try:
+                for path, normalize, target in (
+                    (
+                        "/api/ipam/vlan-groups/",
+                        _normalize_netbox_vlan_group,
+                        vlan_groups,
+                    ),
+                    ("/api/ipam/vlans/", _normalize_netbox_vlan, vlans),
+                    ("/api/ipam/prefixes/", _normalize_netbox_prefix, prefixes),
+                ):
+                    rows = _netbox_paginated_rows(
+                        session,
+                        config,
+                        path,
+                        page_size=page_size,
+                        max_pages=max_pages,
+                        limit_error=(
+                            "NetBox IPAM pagination exceeded the configured page "
+                            "safety limit."
+                        ),
+                    )
+                    target.extend(
+                        item for item in map(normalize, rows) if item is not None
+                    )
+            except InventoryError as error:
+                vlan_groups.clear()
+                vlans.clear()
+                prefixes.clear()
+                ipam_error = f"NetBox IPAM could not be read: {error}"
 
             type_rows = _netbox_paginated_rows(
                 session,
@@ -461,6 +593,10 @@ def read_netbox_inventory(
         sites=tuple(sites),
         device_statuses=tuple(device_statuses),
         interfaces=tuple(interfaces),
+        vlan_groups=tuple(vlan_groups),
+        vlans=tuple(vlans),
+        prefixes=tuple(prefixes),
+        ipam_error=ipam_error,
     )
 
 
@@ -590,6 +726,38 @@ def _normalize_unifi_ports(
     return sorted(ports, key=lambda port: port.idx)
 
 
+def _normalize_unifi_network(
+    row: dict[str, object], detail: dict[str, object]
+) -> InventoryNetwork | None:
+    source_id = _text(row.get("id"))
+    vlan_id = row.get("vlanId")
+    if not source_id or type(vlan_id) is not int:
+        return None
+    subnet = ""
+    gateway = ""
+    ipv4 = detail.get("ipv4Configuration")
+    if isinstance(ipv4, dict):
+        host = _text(ipv4.get("hostIpAddress"))
+        length = ipv4.get("prefixLength")
+        if host and type(length) is int:
+            try:
+                interface = ipaddress.ip_interface(f"{host}/{length}")
+            except ValueError:
+                interface = None
+            if interface is not None:
+                subnet = str(interface.network)
+                gateway = str(interface.ip)
+    return InventoryNetwork(
+        source_id=source_id,
+        name=_text(row.get("name")),
+        vlan_id=vlan_id,
+        enabled=row.get("enabled") is not False,
+        subnet=subnet,
+        gateway_ip=gateway,
+        default=row.get("default") is True,
+    )
+
+
 def read_unifi_inventory(
     config: UniFiConfig,
     *,
@@ -611,6 +779,7 @@ def read_unifi_inventory(
     version = ""
     devices: list[InventoryDevice] = []
     ports: list[InventoryPort] = []
+    networks: list[InventoryNetwork] = []
     api_feedback: list[dict[str, object]] = []
     raw_devices: list[dict[str, object]] = []
     try:
@@ -700,6 +869,35 @@ def read_unifi_inventory(
                 detail = _unifi_json(client, path)
                 api_feedback.append({"endpoint": path, "params": {}, "payload": detail})
                 ports.extend(_normalize_unifi_ports(device_id, detail))
+
+            network_rows: list[dict[str, object]] = []
+            for page_index in range(max_pages):
+                offset = page_index * page_size
+                payload = _unifi_json(
+                    client,
+                    f"sites/{site['id']}/networks",
+                    offset=offset,
+                    limit=page_size,
+                )
+                rows = _unifi_page(payload, offset, page_size)
+                network_rows.extend(rows)
+                if offset + len(rows) >= payload["totalCount"]:
+                    break
+            else:
+                raise InventoryError(
+                    "UniFi network pagination exceeded the configured page safety "
+                    "limit."
+                )
+            for row in network_rows:
+                network_id = _text(row.get("id"))
+                if not network_id:
+                    continue
+                detail = _unifi_json(
+                    client, f"sites/{site['id']}/networks/{network_id}"
+                )
+                network = _normalize_unifi_network(row, detail)
+                if network is not None:
+                    networks.append(network)
     except InventoryError:
         raise
     except (httpx.HTTPError, OSError, ValueError, TypeError) as error:
@@ -716,4 +914,5 @@ def read_unifi_inventory(
         unifi_api_feedback=tuple(api_feedback),
         unifi_raw_devices=tuple(raw_devices),
         ports=tuple(ports),
+        networks=tuple(networks),
     )

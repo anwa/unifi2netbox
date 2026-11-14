@@ -154,3 +154,29 @@ def test_ports_and_interfaces_roundtrip(tmp_path):
     store.save_current(snapshot)
 
     assert store.load_current(InventorySource.UNIFI_NETWORK) == snapshot
+
+
+def test_networks_and_ipam_roundtrip(tmp_path):
+    from unifi2netbox.inventory import (
+        InventoryNetwork,
+        InventoryPrefix,
+        InventoryVlan,
+        InventoryVlanGroup,
+    )
+
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    snapshot = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-14T10:00:00+00:00",
+        networks=(
+            InventoryNetwork("n1", "IoT", 20, True, "10.0.20.0/24", "10.0.20.1"),
+        ),
+        vlan_groups=(InventoryVlanGroup("3", "UniFi Home", "unifi-home"),),
+        vlans=(InventoryVlan("9", 20, "IoT", "3", "active"),),
+        prefixes=(InventoryPrefix("5", "10.0.20.0/24", "9"),),
+        ipam_error="",
+    )
+
+    store.save_current(snapshot)
+
+    assert store.load_current(InventorySource.NETBOX) == snapshot

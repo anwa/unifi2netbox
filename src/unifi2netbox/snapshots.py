@@ -10,10 +10,14 @@ from unifi2netbox.inventory import (
     InventoryDeviceStatus,
     InventoryDeviceType,
     InventoryInterface,
+    InventoryNetwork,
     InventoryPort,
+    InventoryPrefix,
     InventorySite,
     InventorySnapshot,
     InventorySource,
+    InventoryVlan,
+    InventoryVlanGroup,
 )
 
 SNAPSHOT_SCHEMA_VERSION = 1
@@ -129,6 +133,11 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "unifi_raw_devices": list(snapshot.unifi_raw_devices),
         "ports": [asdict(item) for item in snapshot.ports],
         "interfaces": [asdict(item) for item in snapshot.interfaces],
+        "networks": [asdict(item) for item in snapshot.networks],
+        "vlan_groups": [asdict(item) for item in snapshot.vlan_groups],
+        "vlans": [asdict(item) for item in snapshot.vlans],
+        "prefixes": [asdict(item) for item in snapshot.prefixes],
+        "ipam_error": snapshot.ipam_error,
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -172,7 +181,11 @@ def _decode(raw: str) -> InventorySnapshot:
         raise ValueError
     ports = payload.get("ports", [])
     interfaces = payload.get("interfaces", [])
-    for items in (ports, interfaces):
+    networks = payload.get("networks", [])
+    vlan_groups = payload.get("vlan_groups", [])
+    vlans = payload.get("vlans", [])
+    prefixes = payload.get("prefixes", [])
+    for items in (ports, interfaces, networks, vlan_groups, vlans, prefixes):
         if not isinstance(items, list) or not all(
             isinstance(item, dict) for item in items
         ):
@@ -193,4 +206,9 @@ def _decode(raw: str) -> InventorySnapshot:
         unifi_raw_devices=tuple(unifi_raw_devices),
         ports=tuple(InventoryPort(**item) for item in ports),
         interfaces=tuple(InventoryInterface(**item) for item in interfaces),
+        networks=tuple(InventoryNetwork(**item) for item in networks),
+        vlan_groups=tuple(InventoryVlanGroup(**item) for item in vlan_groups),
+        vlans=tuple(InventoryVlan(**item) for item in vlans),
+        prefixes=tuple(InventoryPrefix(**item) for item in prefixes),
+        ipam_error=str(payload.get("ipam_error", "")),
     )

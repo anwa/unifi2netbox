@@ -171,6 +171,8 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- UniFi networks carry VLAN ID and IPv4 subnet; NetBox VLAN groups, VLANs and
+	prefixes are read, and missing IPAM rights are recorded instead of failing,
 - UniFi ports pair with NetBox interfaces by exact connector kind, then by
 	copper/optical family, in numbering order; speed, PoE and unpaired entries
 	become notes, and devices without UniFi ports show no comparison,

@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.2
+
+### Added
+
+- M6 slice 2, reading: UniFi networks (name, VLAN ID, enabled, default flag
+	and IPv4 subnet from the official network details) and NetBox VLAN groups,
+	VLANs and prefixes are read into the snapshots. A NetBox token without IPAM
+	rights no longer breaks the refresh; the IPAM error is recorded instead.
+
+### Validation
+
+- Added network/IPAM normalization, missing-permission and snapshot tests.
+- Live read-only check: 16 UniFi networks (15 enabled, all with a subnet, no
+	duplicate VLAN IDs) read in 0.49 s; NetBox IPAM readable and still empty.
+
 ## v0.6.1
 
 ### Added
