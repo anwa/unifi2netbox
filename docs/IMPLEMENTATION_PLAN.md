@@ -198,7 +198,8 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
   check on 2026-11-14).
 - [x] Re-read NetBox targets before each write and skip operations whose preview
   baseline changed (deleted/changed update targets, newly appeared create
-  duplicates by name/serial; offline contract tests on 2026-11-14). Source-side
+  duplicates by name/serial; offline contract tests and approved live write
+  test against the NetBox developer instance on 2026-11-14). Source-side
   UniFi re-read before writes remains open.
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are

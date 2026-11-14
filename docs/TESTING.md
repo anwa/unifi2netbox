@@ -494,3 +494,31 @@ After 0.3.39 the same live preview without a site mapping plans 15 creates with
 `unknown_netbox_site` warnings and no site updates; with the mapping set to the
 only NetBox site it plans 15 creates without warnings. The mapping was passed in
 the check script; the saved configuration was not changed.
+
+On 2026-11-14, with the user's explicit approval, the assistant ran the
+pre-write re-read acceptance as a scripted live write test against the NetBox
+developer instance (commit 89397de, application 0.3.39). The script used the
+same pipeline and executor as the GUI, with the site mapping and one NetBox
+role passed in; UniFi was only read. Results, all passed (9/9):
+
+- T1: a device with the same name created after the preview made the create
+	operation `skipped` ("now exists"); no second device was created.
+- T2: after a refresh the create succeeded; read-back confirmed name, site,
+	device type and role.
+- T3: an unselected field change (serial) did not block a site update, which
+	succeeded and was read back.
+- T4: a site change after the preview made both the dry run and the real run
+	`skipped` ("changed since the preview (site)"); NetBox kept the new value.
+- T5: deleting the target after the preview made the update `skipped`
+	("no longer exists").
+
+All test objects (one duplicate device, the created device and two test sites)
+were removed afterwards; NetBox again held 4 devices and 1 site. The GUI itself
+was not driven in this test.
+
+Observed limitation: only 1 of 11 UniFi model names in this installation
+(`U6 Lite`) matches a NetBox device-type model exactly. Device-type suggestions
+rank manufacturer-only candidates (score 20) and partial matches such as
+`USW-Pro-8-PoE` for `USW Pro 24 PoE`, so creates currently need a manually
+chosen `Device type` per row.
+
