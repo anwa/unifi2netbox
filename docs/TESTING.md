@@ -317,7 +317,15 @@ The focused tests validate that:
 - create execution requires an explicit default NetBox device role setting,
 - create execution succeeds with resolvable site/role/device-type references,
 - dry-run execution records skipped outcomes without backend writes,
-- mixed create/update runs continue and record partial failures per operation.
+- mixed create/update runs continue and record partial failures per operation,
+- each run is saved to the local write journal and listed in the write
+	history; a failed save is reported without affecting the writes,
+- UniFi is re-read before writing; changed or vanished source devices are
+	skipped and an unreadable UniFi blocks all writes,
+- interrupted creates are looked up by name instead of retried: one match is
+	created, none is safe to retry, several or a failed lookup need review,
+- successful writes are read back and marked verified, mismatch or unverified;
+	read-back problems never cause another write and dry runs are not read back.
 - every operation re-reads NetBox first: updates are skipped when the target
 	was deleted or a selected field changed since the preview, creates are skipped
 	when a device with the same name or serial now exists, and a failing re-read
@@ -520,4 +528,16 @@ After 0.3.40 a read-only live preview preselects the correct NetBox device type
 for all 11 UniFi models in this installation (15 of 15 create rows): one by
 exact model, seven by part number and three by alias. 203 of 210 Ubiquiti
 device types in this NetBox carry a part number.
+
+On 2026-11-14 the assistant checked the M5 additions live on the developer
+workstation (commit 4a5b07d, application 0.5.4). Read-only first: the UniFi
+re-read took 0.04 s and found all 15 planned devices; a real dry run of all 15
+creates passed the UniFi and NetBox re-read checks and was saved to a scratch
+write journal. Then, with the user's explicit approval, an approved write test
+against the NetBox developer instance passed 6/6 checks: a create through the
+real pipeline was written and read back as verified, a site update via a
+temporary test site was written and verified, both runs appeared in the write
+history, and the test device and test site were removed afterwards (NetBox
+again held 4 devices and 1 site). Interrupted creates and changed UniFi values
+cannot be produced safely on live systems and remain covered by offline tests.
 

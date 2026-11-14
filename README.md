@@ -1,18 +1,19 @@
 # unifi2netbox
 
-Latest main release: **v0.5.0**, the GUI redesign milestone (M4.5).
+Latest main release: **v0.6.0**, the approved NetBox writes milestone (M5).
 
-Release **v0.5.0** compares UniFi Network inventory with NetBox in a modern
+Release **v0.6.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
-Type suggestions, and lets you apply selected, confirmed changes to NetBox.
-UniFi stays read-only.
+Type suggestions, and applies selected, confirmed changes to NetBox with
+re-reads before writing, read-back verification afterwards and a saved write
+history. UniFi stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v0.5.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
-history. Approved writes (M5) are still being completed.
+release v0.6.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+history.
 
 ## Current Capabilities
 
@@ -90,10 +91,22 @@ system**. The choice is saved as `[ui] theme` (`system`, `light` or `dark`).
 - **Apply N changes** asks once, then writes; **Dry run (no changes)** records
   the outcomes without changing NetBox. **Apply this device** in the detail
   panel runs a single device, for example when other rows block the full plan.
+- Right before writing, UniFi is re-read: a device whose selected UniFi
+  values changed since the preview, or that UniFi no longer reports, is
+  skipped. If UniFi cannot be read, nothing is written.
 - Before each write, NetBox is re-read: an update is skipped if the target
   device was deleted or a selected field changed since the preview, and a
   create is skipped if a device with the same name or serial appeared
   meanwhile. Refresh the preview and review the row before retrying.
+- If a create is interrupted (timeout, dropped connection, HTTP 502/503/504),
+  the app never retries it blindly: it looks the device up in NetBox and
+  reports it as created (with ID), safe to retry after a refresh, or in need of
+  a manual check.
+- After writing, each successful device is read back from NetBox and marked
+  **Verified**, **Mismatch** (NetBox holds other values) or **Not verified**
+  (read-back failed). The app never writes again on its own.
+- Every run is saved to `write-journal.sqlite3` next to the configuration;
+  **More > Write history** shows recent runs with per-device results.
 - Every operation is journaled as success, failed or skipped. NetBox rejections
   include parsed field-level details. Ambiguous creates are flagged for manual
   reconciliation and read-back requests are planned for successful writes.
@@ -227,7 +240,8 @@ TLS verification defaults on. Use a private CA file or explicitly disable checks
 per connection. Self-signed certificates can be trusted with the correct CA.
 HTTP transmits tokens unencrypted; disabled verification weakens authentication.
 Tokens are initially plaintext locally, not encrypted. Restrict file access.
-Never commit real configuration, tokens, logs, raw captures or inventory caches.
+Never commit real configuration, tokens, logs, raw captures, inventory caches
+or the write journal.
 
 Use dedicated tokens/keys with the minimum available inventory-read permissions.
 NetBox Online requires authenticated status/version and device inventory reads.

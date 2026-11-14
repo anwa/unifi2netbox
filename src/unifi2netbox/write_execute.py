@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
 import requests
 
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig
-from unifi2netbox.inventory import normalize_netbox_device
+from unifi2netbox.inventory import InventoryDevice, normalize_netbox_device
 from unifi2netbox.preview import DevicePreview, DifferencePreview
 from unifi2netbox.write_journal import (
     OperationOutcomeStatus,
@@ -16,10 +17,23 @@ from unifi2netbox.write_journal import (
     record_operation_result,
 )
 from unifi2netbox.write_plan import OperationType, WriteOperation, WritePlan
+from unifi2netbox.write_readback import verify_readback
 
 
 class WriteExecutionError(ValueError):
     pass
+
+
+class AmbiguousWriteError(WriteExecutionError):
+    """NetBox may have applied the write although no clear answer arrived."""
+
+
+# Errors after which a create may or may not exist in NetBox.
+AMBIGUOUS_CREATE_ERRORS = (
+    AmbiguousWriteError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectionError,
+)
 
 
 class StalePreviewError(WriteExecutionError):
@@ -62,7 +76,15 @@ def execute_write_plan(
     status_overrides: dict[str, str] | None = None,
     device_type_overrides: dict[str, str] | None = None,
     backend: NetBoxWriteBackend | None = None,
+    source_devices: Mapping[str, InventoryDevice] | None = None,
+    source_error: str = "",
 ) -> WriteExecutionResult:
+    """Execute the plan; ``source_devices`` enables the UniFi re-read check.
+
+    ``source_devices`` maps UniFi observation IDs to freshly read devices (with
+    the same site mapping as the preview). ``source_error`` means UniFi could
+    not be re-read, so nothing is written.
+    """
     journal = initialize_journal(write_plan, run_id=run_id, started_at=started_at)
     if not write_plan.executable:
         return WriteExecutionResult(
@@ -75,6 +97,7 @@ def execute_write_plan(
     resolved_site_overrides = site_overrides or {}
     resolved_status_overrides = status_overrides or {}
     resolved_device_type_overrides = device_type_overrides or {}
+    written_payloads: dict[int, dict[str, object]] = {}
 
     for operation in write_plan.operations:
         device = device_by_key.get(operation.device_key)
@@ -86,6 +109,27 @@ def execute_write_plan(
                 "Missing preview device for write operation.",
             )
             continue
+
+        if source_error:
+            journal = record_operation_result(
+                journal,
+                operation.sequence,
+                OperationOutcomeStatus.SKIPPED,
+                f"UniFi could not be re-read before writing ({source_error}); "
+                "nothing was written.",
+            )
+            continue
+        if source_devices is not None:
+            try:
+                _verify_source_unchanged(operation, device, source_devices)
+            except StalePreviewError as error:
+                journal = record_operation_result(
+                    journal,
+                    operation.sequence,
+                    OperationOutcomeStatus.SKIPPED,
+                    str(error),
+                )
+                continue
 
         try:
             _verify_target_unchanged(operation, device, resolved_backend)
@@ -145,7 +189,16 @@ def execute_write_plan(
 
         try:
             if operation.operation_type == OperationType.CREATE_DEVICE:
-                created_id = resolved_backend.create_device(payload)
+                try:
+                    created_id = resolved_backend.create_device(payload)
+                except AMBIGUOUS_CREATE_ERRORS as error:
+                    journal, found = _reconcile_create(
+                        journal, operation, payload, resolved_backend, error
+                    )
+                    if found:
+                        written_payloads[operation.sequence] = payload
+                    continue
+                written_payloads[operation.sequence] = payload
                 journal = record_operation_result(
                     journal,
                     operation.sequence,
@@ -156,6 +209,7 @@ def execute_write_plan(
             elif operation.operation_type == OperationType.UPDATE_DEVICE:
                 device_id = _update_target_id(operation)
                 resolved_backend.update_device(device_id, payload)
+                written_payloads[operation.sequence] = payload
                 journal = record_operation_result(
                     journal,
                     operation.sequence,
@@ -178,9 +232,97 @@ def execute_write_plan(
                 str(error),
             )
 
+    if written_payloads:
+        journal = verify_readback(
+            write_plan, journal, written_payloads, resolved_backend.read_device
+        )
+
     return WriteExecutionResult(
         journal=finalize_journal(journal, finished_at, cancelled=False)
     )
+
+
+def _reconcile_create(
+    journal: WriteJournal,
+    operation: WriteOperation,
+    payload: dict[str, object],
+    backend: NetBoxWriteBackend,
+    error: Exception,
+) -> tuple[WriteJournal, bool]:
+    """Look up an interrupted create instead of retrying it.
+
+    The pre-write check guaranteed that no device with this name existed, so
+    exactly one match now means the create went through.
+    """
+    name = str(payload.get("name", "")).strip()
+    reason = f"Create was interrupted ({error})"
+    try:
+        found = backend.find_device_ids(name=name) if name else ()
+    except (WriteExecutionError, requests.exceptions.RequestException) as lookup:
+        message = (
+            f"{reason} and the NetBox lookup failed ({lookup}). Check NetBox for "
+            f"'{name}' before retrying."
+        )
+        return _fail(journal, operation, message), False
+    if len(found) == 1:
+        journal = record_operation_result(
+            journal,
+            operation.sequence,
+            OperationOutcomeStatus.SUCCESS,
+            f"{reason}, but NetBox now has '{name}' (ID {found[0]}).",
+            netbox_object_id=found[0],
+        )
+        return journal, True
+    if not found:
+        message = f"{reason} and NetBox has no device '{name}'. Refresh, then retry."
+    else:
+        message = (
+            f"{reason}; NetBox has several devices named '{name}' "
+            f"(IDs {', '.join(found)}). Review them in NetBox."
+        )
+    return _fail(journal, operation, message), False
+
+
+def _fail(journal: WriteJournal, operation: WriteOperation, message: str):
+    return record_operation_result(
+        journal, operation.sequence, OperationOutcomeStatus.FAILED, message
+    )
+
+
+def source_observation_id(device_key: str) -> str:
+    """UniFi observation ID inside a preview device key, or ''."""
+    key = device_key.strip()
+    if key.startswith("create:"):
+        return key.split(":", maxsplit=1)[1]
+    if "->" in key:
+        return key.split("->", maxsplit=1)[0]
+    return ""
+
+
+def _verify_source_unchanged(
+    operation: WriteOperation,
+    device: DevicePreview,
+    source_devices: Mapping[str, InventoryDevice],
+) -> None:
+    """Refuse operations whose UniFi values changed after the preview."""
+    current = source_devices.get(source_observation_id(operation.device_key))
+    if current is None:
+        raise StalePreviewError(
+            "UniFi no longer reports this device; refresh the preview before writing."
+        )
+    changed = sorted(
+        field.name
+        for field in device.fields
+        if field.name in operation.selected_fields
+        and field.supported
+        and str(getattr(current, field.name, "")).strip() != field.source_value
+    )
+    if changed:
+        raise StalePreviewError(
+            "UniFi values changed since the preview ("
+            + ", ".join(changed)
+            + "); refresh and review before writing."
+        )
 
 
 def _verify_target_unchanged(
@@ -429,14 +571,21 @@ class RequestsNetBoxWriteBackend:
 
     def create_device(self, payload: dict[str, object]) -> str:
         response = self._request("POST", "/api/dcim/devices/", json=payload)
+        if response.status_code in {502, 503, 504}:
+            raise AmbiguousWriteError(
+                f"NetBox or its proxy answered HTTP {response.status_code}"
+            )
         if response.status_code not in {200, 201}:
             detail = _response_error_detail(response)
             raise WriteExecutionError(
                 f"NetBox create failed with HTTP {response.status_code}: {detail}"
             )
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError:
+            data = None
         if not isinstance(data, dict) or not str(data.get("id", "")).strip():
-            raise WriteExecutionError("NetBox create response did not include an ID.")
+            raise AmbiguousWriteError("NetBox create response did not include an ID")
         return str(data["id"])
 
     def update_device(self, device_id: str, payload: dict[str, object]) -> None:

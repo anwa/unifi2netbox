@@ -6,6 +6,108 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.0
+
+### Summary
+
+- Approved NetBox writes milestone (M5): writes are now guarded before, during
+	and after execution and every run is recorded.
+
+### Added
+
+- UniFi is re-read right before writing; devices whose selected UniFi values
+	changed or vanished are skipped, and nothing is written if UniFi is
+	unreachable. NetBox is re-read before every write as before.
+- Interrupted creates (timeout, dropped connection, HTTP 502/503/504) are
+	reconciled by name in NetBox instead of being retried.
+- Successful writes are read back and marked Verified, Mismatch or Not verified,
+	without automatic rewrites.
+- Every run is saved to `write-journal.sqlite3`; **More > Write history** lists
+	recent runs with per-device results.
+
+### Validation
+
+- Milestone-wide offline gate: 281 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): read-only UniFi re-read and a
+	dry run over all 15 planned creates, plus an approved NetBox developer-
+	instance write test (create and site update verified, history saved, 6/6,
+	test objects removed). Interrupted creates and changed UniFi values are
+	covered by offline tests only.
+
+### Compatibility
+
+- New local file `write-journal.sqlite3` next to the configuration; existing
+	configuration and snapshots load without migration.
+
+## v0.5.4
+
+### Added
+
+- Every write run and dry run is saved to `write-journal.sqlite3` next to the
+	configuration (outside the repository), with start/finish time, dry-run flag
+	and per-device result, NetBox ID and read-back state. **More > Write
+	history** lists recent runs and their results. A failed save is reported in
+	the run summary and never affects the writes.
+
+### Fixed
+
+- The journal finish time is now taken after the run instead of before it.
+
+### Validation
+
+- Added journal store tests (ordering, empty history, schema and corrupt data
+	errors), pipeline tests for saving and save failures, and GUI tests for the
+	history dialog and the journal path passed to write jobs.
+
+## v0.5.3
+
+### Added
+
+- UniFi is re-read right before writing (with the configured NetBox site
+	mapping). Operations whose selected UniFi values changed since the preview,
+	or whose device UniFi no longer reports, are skipped with the reason; if
+	UniFi cannot be read, nothing is written. Dry runs run the same check.
+
+### Validation
+
+- Added executor tests for unchanged, changed, missing and unreadable UniFi
+	sources, pipeline tests for the re-read and its site mapping, and a GUI test
+	that the UniFi settings reach the write job.
+
+## v0.5.2
+
+### Added
+
+- Interrupted creates are reconciled instead of retried. After a timeout, a
+	dropped connection, HTTP 502/503/504 or a create response without an ID,
+	the app looks the device up by name: exactly one match counts as created
+	(with its ID, then read back), no match fails with "Refresh, then retry",
+	and several matches or a failed lookup ask for a manual check in NetBox.
+
+### Validation
+
+- Added executor tests for found, missing, duplicated and unverifiable
+	interrupted creates (each with a single create call) and backend tests for
+	which NetBox answers count as ambiguous.
+
+## v0.5.1
+
+### Added
+
+- Successful writes are read back from NetBox and compared with the written
+	values (plain fields directly, site/role/device type by ID, status by value).
+	Each result is marked verified, mismatch or unverified; mismatches and read
+	errors never trigger another write. The table shows Verified, Mismatch or
+	Not verified, the detail panel and copied details include the read-back
+	detail, and the run summary counts verified writes. Dry runs are not
+	read back.
+
+### Validation
+
+- Added executor tests for verified creates and updates, mismatches, read-back
+	failures and dry runs, a read-back value test and a GUI status test.
+
 ## v0.5.0
 
 ### Summary

@@ -21,16 +21,21 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QScrollArea,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from unifi2netbox import theme
+from unifi2netbox.journal_store import StoredRun
 from unifi2netbox.review import (
     CATEGORY_LABELS,
     CREATE,
@@ -84,6 +89,12 @@ def type_model(state: ReviewState, type_id: str) -> str:
 
 def status_text(item: ReviewRow) -> tuple[str, str]:
     """(text, tone) for the status column."""
+    if item.outcome is not None and item.outcome.status == "success":
+        return {
+            "verified": ("Verified", "success"),
+            "mismatch": ("Mismatch", "danger"),
+            "unverified": ("Not verified", "warning"),
+        }.get(item.outcome.verification, ("Written", "success"))
     if item.outcome is not None:
         status = item.outcome.status
         text = {
@@ -326,7 +337,13 @@ class DetailPanel(QScrollArea):
             tone = {"success": "success", "skipped": "warning"}.get(
                 item.outcome.status, "danger"
             )
-            self.layout_.addWidget(banner(item.outcome.message, tone))
+            text = item.outcome.message
+            if item.outcome.verification:
+                tone = {"mismatch": "danger", "unverified": "warning"}.get(
+                    item.outcome.verification, tone
+                )
+                text += f"\nRead-back: {item.outcome.verification_detail}"
+            self.layout_.addWidget(banner(text, tone))
         elif item.attention and item.note:
             self.layout_.addWidget(banner(item.note, "danger"))
 
@@ -532,11 +549,11 @@ class ConfirmDialog(QDialog):
         layout.addWidget(
             label(
                 (
-                    "Nothing is written. Each operation re-reads NetBox and reports "
-                    "what would happen."
+                    "Nothing is written. UniFi and NetBox are re-read and each "
+                    "operation reports what would happen."
                     if dry_run
-                    else "NetBox is re-read before every write; changed or missing "
-                    "targets are skipped. UniFi is never modified."
+                    else "UniFi and NetBox are re-read before writing; devices that "
+                    "changed since the preview are skipped. UniFi is never modified."
                 ),
                 "caption",
             )
@@ -598,6 +615,11 @@ def device_summary(item: ReviewRow) -> str:
         lines.append(f"Note: {item.note}")
     if item.outcome is not None:
         lines.append(f"Result: {item.outcome.status} - {item.outcome.message}")
+        if item.outcome.verification:
+            lines.append(
+                f"Read-back: {item.outcome.verification} - "
+                f"{item.outcome.verification_detail}"
+            )
     for field in item.device.fields:
         if field.supported and (field.source_value or field.target_value):
             lines.append(
@@ -605,3 +627,77 @@ def device_summary(item: ReviewRow) -> str:
                 f"NetBox={field.target_value or '-'} UniFi={field.source_value or '-'}"
             )
     return "\n".join(lines)
+
+
+class HistoryDialog(QDialog):
+    """Recent write runs on the left, their per-device results on the right."""
+
+    COLUMNS = ("Device", "Operation", "Result", "Read-back", "Message")
+
+    def __init__(self, runs: tuple[StoredRun, ...], parent=None) -> None:
+        super().__init__(parent)
+        self.runs = runs
+        self.setWindowTitle("Write history")
+        self.resize(980, 520)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 14)
+        layout.addWidget(label("Write history", "heading"))
+        if not runs:
+            empty = label(
+                "No writes or dry runs yet. Each run is listed here with its results.",
+                "secondary",
+            )
+            empty.setObjectName("historyEmpty")
+            layout.addWidget(empty)
+        body = QHBoxLayout()
+        self.run_list = QListWidget()
+        self.run_list.setObjectName("historyRuns")
+        self.run_list.setFixedWidth(300)
+        for run in runs:
+            kind = "Dry run" if run.dry_run else "Applied"
+            item = QListWidgetItem(
+                f"{run.started_at[:16].replace('T', ' ')}  {kind}\n{run.summary()}"
+            )
+            item.setToolTip(run.run_id)
+            self.run_list.addItem(item)
+        self.table = QTableWidget(0, len(self.COLUMNS))
+        self.table.setObjectName("historyOutcomes")
+        self.table.setHorizontalHeaderLabels(list(self.COLUMNS))
+        self.table.verticalHeader().hide()
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        body.addWidget(self.run_list)
+        body.addWidget(self.table, 1)
+        layout.addLayout(body, 1)
+        close = QPushButton("Close")
+        close.clicked.connect(self.accept)
+        footer = QHBoxLayout()
+        footer.addStretch()
+        footer.addWidget(close)
+        layout.addLayout(footer)
+        self.run_list.currentRowChanged.connect(self.show_run)
+        if runs:
+            self.run_list.setCurrentRow(0)
+
+    def show_run(self, index: int) -> None:
+        run = self.runs[index] if 0 <= index < len(self.runs) else None
+        outcomes = run.outcomes if run else ()
+        self.table.setRowCount(len(outcomes))
+        for row, outcome in enumerate(outcomes):
+            values = (
+                outcome.label,
+                outcome.operation_type.replace("_device", ""),
+                outcome.status,
+                outcome.verification,
+                outcome.message,
+            )
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column == 4:
+                    tip = outcome.message
+                    if outcome.verification_detail:
+                        tip += f"\n\nRead-back: {outcome.verification_detail}"
+                    item.setToolTip(tip)
+                self.table.setItem(row, column, item)
+        self.table.resizeColumnsToContents()

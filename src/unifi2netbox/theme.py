@@ -248,6 +248,14 @@ QHeaderView::section {{
     background: {c.surface}; color: {c.text_secondary}; border: none;
     border-bottom: 1px solid {c.border}; padding: 8px; font-weight: 600;
 }}
+QListWidget#historyRuns {{
+    background: {c.surface}; border: 1px solid {c.border}; border-radius: 10px;
+    outline: none; padding: 4px;
+}}
+QListWidget#historyRuns::item {{ padding: 8px 10px; border-radius: 6px; }}
+QListWidget#historyRuns::item:selected {{
+    background: {c.accent_soft}; color: {c.text};
+}}
 QListWidget#settingsNav {{
     background: transparent; border: none; outline: none;
 }}

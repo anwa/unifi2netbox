@@ -5,13 +5,26 @@ The GUI runs these functions inside worker jobs and only renders their results.
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
-from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryError,
+    InventorySnapshot,
+    InventorySource,
+    read_unifi_inventory,
+)
+from unifi2netbox.journal_store import (
+    JournalStore,
+    JournalStoreError,
+    StoredOutcome,
+    StoredRun,
+)
 from unifi2netbox.matching import (
     DeduplicationResult,
     DeviceTypeSuggestion,
@@ -28,7 +41,7 @@ from unifi2netbox.preview import (
 from unifi2netbox.refresh import refresh_snapshots
 from unifi2netbox.snapshots import SnapshotStore
 from unifi2netbox.write_execute import execute_write_plan
-from unifi2netbox.write_journal import summarize_journal
+from unifi2netbox.write_journal import finalize_journal, summarize_journal
 from unifi2netbox.write_plan import WritePlan, build_write_plan
 
 SNAPSHOT_FILENAME = "snapshots.sqlite3"
@@ -81,6 +94,8 @@ class WriteOutcome:
     status: str
     message: str
     netbox_object_id: str = ""
+    verification: str = ""
+    verification_detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -90,6 +105,8 @@ class WriteExecutionReport:
     detail_lines: tuple[str, ...] = ()
     outcomes: tuple[WriteOutcome, ...] = ()
     dry_run: bool = False
+    run_id: str = ""
+    started_at: str = ""
 
 
 def build_inventory_preview(
@@ -209,9 +226,20 @@ def run_write_execution(
     status_overrides: dict[str, str],
     device_type_overrides: dict[str, str],
     dry_run: bool,
+    unifi_config: UniFiConfig | None = None,
+    journal_path: Path | None = None,
 ) -> WriteExecutionReport:
-    """Execute an approved write plan and summarize the journal for display."""
+    """Execute an approved write plan and summarize the journal for display.
+
+    With ``unifi_config`` the UniFi inventory is re-read first, and operations
+    whose UniFi values changed since the preview are skipped.
+    """
     started = _now()
+    source_devices, source_error = (
+        reread_unifi_sources(unifi_config, behavior.netbox_site_name)
+        if unifi_config is not None
+        else (None, "")
+    )
     result = execute_write_plan(
         write_plan,
         difference_preview,
@@ -225,13 +253,57 @@ def run_write_execution(
         site_overrides=site_overrides,
         status_overrides=status_overrides,
         device_type_overrides=device_type_overrides,
+        source_devices=source_devices,
+        source_error=source_error,
     )
+    journal = finalize_journal(result.journal, _now())
+    result = replace(result, journal=journal)
     summary = summarize_journal(result.journal)
+    verified = sum(
+        outcome.verification == "verified" for outcome in result.journal.outcomes
+    )
+    mismatched = sum(
+        outcome.verification == "mismatch" for outcome in result.journal.outcomes
+    )
     details = (
         "Write execution finished: "
         f"{summary.successful} success, {summary.failed} failed, "
         f"{summary.skipped} skipped."
     )
+    if summary.successful:
+        details += f" Read-back: {verified} verified"
+        details += f", {mismatched} mismatch." if mismatched else "."
+
+    if journal_path is not None:
+        labels = {
+            op.sequence: op.source_label or op.target_label or op.device_key
+            for op in write_plan.operations
+        }
+        try:
+            JournalStore(journal_path).save(
+                StoredRun(
+                    run_id=journal.run_id,
+                    started_at=journal.started_at,
+                    finished_at=journal.finished_at,
+                    dry_run=dry_run,
+                    outcomes=tuple(
+                        StoredOutcome(
+                            device_key=item.device_key,
+                            label=labels.get(item.sequence, item.device_key),
+                            operation_type=str(item.operation_type),
+                            status=str(item.status),
+                            message=item.message,
+                            netbox_object_id=item.netbox_object_id,
+                            verification=item.verification,
+                            verification_detail=item.verification_detail,
+                        )
+                        for item in journal.outcomes
+                    ),
+                )
+            )
+        except (JournalStoreError, sqlite3.Error, OSError) as error:
+            details += f" Write history not saved: {error}"
+
     lines = tuple(
         f"Write #{outcome.sequence} {outcome.operation_type}: "
         f"{outcome.status} {outcome.message}".strip()
@@ -247,11 +319,29 @@ def run_write_execution(
                 status=str(outcome.status),
                 message=outcome.message,
                 netbox_object_id=outcome.netbox_object_id,
+                verification=outcome.verification,
+                verification_detail=outcome.verification_detail,
             )
             for outcome in result.journal.outcomes
         ),
         dry_run=dry_run,
+        run_id=journal.run_id,
+        started_at=journal.started_at,
     )
+
+
+def reread_unifi_sources(
+    unifi_config: UniFiConfig, netbox_site_name: str
+) -> tuple[dict[str, InventoryDevice] | None, str]:
+    """Fresh UniFi devices by observation ID, or (None, error text)."""
+    try:
+        snapshot = map_unifi_site(read_unifi_inventory(unifi_config), netbox_site_name)
+    except InventoryError as error:
+        return None, str(error) or "UniFi read failed"
+    return {
+        _snapshot_observation_id(snapshot.source, device): device
+        for device in snapshot.devices
+    }, ""
 
 
 def preview_detail_lines(

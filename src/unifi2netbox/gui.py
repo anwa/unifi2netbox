@@ -70,10 +70,12 @@ from unifi2netbox.gui_review import (
     BadgeDelegate,
     ConfirmDialog,
     DetailPanel,
+    HistoryDialog,
     ReviewTableModel,
     banner,
     device_summary,
 )
+from unifi2netbox.journal_store import JOURNAL_FILENAME, JournalStore, JournalStoreError
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
@@ -175,8 +177,12 @@ class WriteExecutionJob(QRunnable):
         device_type_overrides: dict[str, str],
         *,
         dry_run: bool,
+        unifi_config: UniFiConfig | None = None,
+        journal_path: Path | None = None,
     ) -> None:
         super().__init__()
+        self.unifi_config = unifi_config
+        self.journal_path = journal_path
         self.netbox_config = netbox_config
         self.behavior = behavior
         self.difference_preview = difference_preview
@@ -201,6 +207,8 @@ class WriteExecutionJob(QRunnable):
                 status_overrides=self.status_overrides,
                 device_type_overrides=self.device_type_overrides,
                 dry_run=self.dry_run,
+                unifi_config=self.unifi_config,
+                journal_path=self.journal_path,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -235,6 +243,8 @@ class WriteExecutionRunner(QObject):
         device_type_overrides: dict[str, str],
         *,
         dry_run: bool,
+        unifi_config: UniFiConfig | None = None,
+        journal_path: Path | None = None,
     ) -> bool:
         if self.busy:
             return False
@@ -248,6 +258,8 @@ class WriteExecutionRunner(QObject):
             status_overrides,
             device_type_overrides,
             dry_run=dry_run,
+            unifi_config=unifi_config,
+            journal_path=journal_path,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -934,6 +946,7 @@ class MainWindow(QMainWindow):
         except ConfigError:
             self.ui = UiConfig()
         self.review = ReviewState(behavior=self.behavior)
+        self.journal_path = config_path.with_name(JOURNAL_FILENAME)
         self.last_result: InventoryPreviewResult | None = None
         self.netbox = ConnectionPanel(config_path, pool, checker)
         self.unifi = ConnectionPanel(config_path, pool, unifi_checker, unifi=True)
@@ -1016,6 +1029,8 @@ class MainWindow(QMainWindow):
         self.settings_action.triggered.connect(self.open_settings)
         self.export_action = QAction("Export UniFi API dump...", self)
         self.export_action.triggered.connect(self.export_unifi_api_dump)
+        self.history_action = QAction("Write history...", self)
+        self.history_action.triggered.connect(self.show_history)
         self.copy_summary_action = QAction("Copy summary", self)
         self.copy_summary_action.triggered.connect(self.copy_summary)
         self.exit_action = QAction("Exit", self)
@@ -1064,6 +1079,7 @@ class MainWindow(QMainWindow):
         more.setProperty("variant", "ghost")
         more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(more)
+        menu.addAction(self.history_action)
         menu.addAction(self.export_action)
         menu.addAction(self.copy_summary_action)
         menu.addSeparator()
@@ -1558,6 +1574,8 @@ class MainWindow(QMainWindow):
             overrides["status"],
             overrides["type"],
             dry_run=dry_run,
+            unifi_config=self.unifi.config,
+            journal_path=self.journal_path,
         )
         self.update_check_action()
 
@@ -1588,6 +1606,16 @@ class MainWindow(QMainWindow):
         self.update_check_action()
 
     # -- clipboard and exports ---------------------------------------------------
+
+    def show_history(self) -> None:
+        try:
+            runs = JournalStore(self.journal_path).recent()
+        except (JournalStoreError, OSError) as error:
+            self.statusBar().showMessage(f"Write history unavailable: {error}")
+            return
+        dialog = HistoryDialog(runs, self)
+        dialog.exec()
+        dialog.deleteLater()
 
     def copy_device_details(self, key: str) -> None:
         item = self.review.row(key)

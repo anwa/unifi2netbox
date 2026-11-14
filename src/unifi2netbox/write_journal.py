@@ -21,6 +21,14 @@ class OperationOutcome:
     status: OperationOutcomeStatus
     message: str = ""
     netbox_object_id: str = ""
+    verification: str = ""
+    verification_detail: str = ""
+
+
+class Verification(StrEnum):
+    VERIFIED = "verified"
+    MISMATCH = "mismatch"
+    UNVERIFIED = "unverified"
 
 
 @dataclass(frozen=True)
@@ -103,6 +111,27 @@ def record_operation_result(
     if not updated:
         raise ValueError("Cannot update unknown operation sequence.")
 
+    return replace(journal, outcomes=tuple(outcomes))
+
+
+def record_verification(
+    journal: WriteJournal,
+    sequence: int,
+    verification: Verification,
+    detail: str = "",
+) -> WriteJournal:
+    """Attach a read-back result to a successful operation."""
+    outcomes = []
+    found = False
+    for item in journal.outcomes:
+        if item.sequence == sequence:
+            item = replace(
+                item, verification=str(verification), verification_detail=detail
+            )
+            found = True
+        outcomes.append(item)
+    if not found:
+        raise ValueError("Cannot verify unknown operation sequence.")
     return replace(journal, outcomes=tuple(outcomes))
 
 
