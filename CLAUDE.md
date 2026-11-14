@@ -16,8 +16,15 @@ starting work. Key points that are easy to miss:
   `importlib.metadata`). Doc-only commits do not bump. Never `git add .`.
 - Keep README.md, CHANGELOG.md, `docs/TESTING.md` and the milestone checkboxes in
   `docs/IMPLEMENTATION_PLAN.md` current with every behavior change.
-- This dev machine cannot reach the user's NetBox/UniFi. Never claim live API,
-  Linux or packaged-app verification; record user-reported results as such.
+- Two machines use this repo: the **developer workstation** (direct access to
+  the user's NetBox and UniFi) and an **external developer notebook** (no
+  access). On the workstation you may run the app and opt-in live tests against
+  the real systems: reads freely, NetBox writes only after the user approves that
+  specific test and only on dedicated test objects. Never write to UniFi. The
+  real config (`%LOCALAPPDATA%\unifi2netbox\config.toml`) holds tokens: use it,
+  never print, copy or commit it. Record live evidence with date, commit,
+  version and observed results; never claim Linux or packaged-app verification
+  without running it.
 
 ## Commands
 
@@ -28,6 +35,7 @@ bump so `--version` and the window title match.
 ```powershell
 python -m pip install -r requirements-dev.txt
 python -m pytest -m "not integration"          # offline suite (CI runs this)
+python -m pytest -m integration                # live tests, workstation only (*)
 python -m pytest -q tests/test_matching.py      # one file
 python -m pytest -q tests/test_gui.py -k rows   # single test / pattern
 python -m ruff check .
@@ -40,6 +48,10 @@ with `QT_QPA_PLATFORM=offscreen`. `tests/conftest.py` autouse-blocks all socket
 connects, so tests must use synthetic transports (`httpx.MockTransport` for UniFi,
 a fake requests transport for pynetbox/NetBox). `tests/test_package.py` is skipped
 unless `UNIFI2NETBOX_EXE` points at a PyInstaller build (see `docs/DEPLOYMENT.md`).
+
+(*) No `integration` tests exist yet, and the conftest socket block currently
+applies to them too. Adding the first live test means exempting that marker in
+`tests/conftest.py` and reading the real config without logging secrets.
 
 ## Architecture
 

@@ -113,8 +113,9 @@ Future Python versions are not automatically certified. The user reported all
 NetBox online tests passed on 2026-10-25; see the
 [acceptance record](docs/TESTING.md#acceptance-record) for evidence and limitations.
 Native Windows standalone startup is verified locally; Linux and exact target-OS
-coverage remain unverified. The development PC cannot reach the infrastructure;
-default tests use fixtures and block live sockets.
+coverage remain unverified. Default tests use fixtures and block live sockets;
+live checks run only on the developer workstation with access to NetBox and
+UniFi, as explicitly opted-in `integration` tests or manual application runs.
 
 ## Installation
 
@@ -224,7 +225,7 @@ python -m ruff format --check .
 ```
 
 [Testing instructions](docs/TESTING.md) cover offline tests and the separate
-target-PC acceptance workflow. Return only sanitized reports including exact
+live acceptance workflow on the developer workstation. Return only sanitized reports including exact
 commit/application/Python/OS/API versions. No live writes run by default.
 
 ## Roadmap and Rules

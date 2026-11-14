@@ -15,8 +15,9 @@ passed on 2026-10-25. Linux/exact-platform verification remains open.
   UNAS Pro: 6.0.11, Drive 4.4.20. Applications may use separate consoles.
 - NetBox Community 4.7.3, netbox-docker 5.1.1. Addresses, explicit HTTP/HTTPS
   schemes, tokens, site and role choices are runtime inputs, not hardcoded defaults.
-- This development PC cannot reach the infrastructure. The user can clone the
-  exact branch/commit and execute documented acceptance tests on the target PC.
+- The developer workstation (from 2026-11-14) has direct access to NetBox and
+  UniFi; live acceptance runs there. The external developer notebook used
+  earlier has no access. Earlier "target PC" results were user-reported.
 - UniFi is read-only. NetBox changes are selected and explicitly confirmed.
   No automatic deletion, automatic background writes or unapproved Custom Fields.
 - Network first; later inventory of cameras, NVRs, Access hardware and UNAS.
@@ -291,9 +292,11 @@ are implemented. Update milestone checkboxes with evidence, not intentions.
 - Block accidental live network in default tests; use synthetic or reviewed,
   consistently pseudonymized fixtures. Keep raw exports outside version control.
 - Test GUI persistence, first-run errors, selection, signal handling and shutdown.
-- Target-PC workflow: clone exact commit, install pinned requirements in `.venv`,
-  configure through GUI, perform read-only checks, return a sanitized report with
-  application/commit/Python/OS/API versions. Write tests are separately opted in.
+- Live workflow on the developer workstation: exact commit, pinned requirements
+  in `.venv`, configuration through the GUI, read-only checks first; record
+  application/commit/Python/OS/API versions. Live NetBox write tests need
+  separate explicit approval and dedicated test objects. Opt-in live pytest
+  checks use the `integration` marker and never run by default or in CI.
 - Correct activation: Windows `.\.venv\Scripts\Activate.ps1`; Linux
   `source .venv/bin/activate`. Do not use system-wide pip or break system packages.
 - Before each commit: tests, lint, format, staged diff, secret check and version.

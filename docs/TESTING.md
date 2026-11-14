@@ -410,7 +410,7 @@ Report commit, application/Python/OS/NetBox versions and observed results withou
 tokens, raw responses or private inventory. Linux and live checks are not passed
 until executed on the corresponding systems.
 
-## Pre-write Re-read Target PC Acceptance
+## Pre-write Re-read Live Acceptance
 
 Version 0.3.34 and later re-read NetBox before each write. This check uses
 live NetBox writes, so limit it to one dedicated test device and run it only
