@@ -566,6 +566,7 @@ def fake_runner(monkeypatch, window):
         *,
         dry_run,
         unifi_config=None,
+        journal_path=None,
     ):
         started.update(
             plan=write_plan,
@@ -575,6 +576,7 @@ def fake_runner(monkeypatch, window):
             status=status_overrides,
             type=device_type_overrides,
             unifi_config=unifi_config,
+            journal_path=journal_path,
         )
         return True
 
@@ -698,6 +700,7 @@ def test_apply_runs_selected_plan_with_create_choices(
     assert set(started["type"].values()) == {"101", "102"}
     assert set(started["role"].values()) == {"Access Point"}
     assert started["unifi_config"] == window.unifi.config
+    assert started["journal_path"] == tmp_path / "write-journal.sqlite3"
     assert "Running dry run" in window.banner_text()
 
 
@@ -1146,3 +1149,53 @@ def test_read_back_result_is_shown_in_status_column(qtbot, tmp_path, pool):
     names = table_names(window)
     assert model.data(model.index(names.index("ap-1"), 5)) == "Verified"
     assert model.data(model.index(names.index("ap-2"), 5)) == "Mismatch"
+
+
+def test_history_dialog_lists_runs_and_outcomes(qtbot, tmp_path, pool, monkeypatch):
+    from unifi2netbox.gui_review import HistoryDialog
+    from unifi2netbox.journal_store import JournalStore, StoredOutcome, StoredRun
+
+    JournalStore(tmp_path / "write-journal.sqlite3").save(
+        StoredRun(
+            run_id="run-1",
+            started_at="2026-11-14T10:00:00+01:00",
+            finished_at="2026-11-14T10:00:02+01:00",
+            dry_run=False,
+            outcomes=(
+                StoredOutcome(
+                    "create:unifi_network:c",
+                    "ap-1",
+                    "create_device",
+                    "success",
+                    "Created device in NetBox.",
+                    "55",
+                    "verified",
+                    "NetBox matches the written values.",
+                ),
+            ),
+        )
+    )
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    shown = {}
+
+    def fake_exec(dialog):
+        shown["runs"] = dialog.run_list.count()
+        shown["device"] = dialog.table.item(0, 0).text()
+        shown["verification"] = dialog.table.item(0, 3).text()
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(HistoryDialog, "exec", fake_exec)
+    window.history_action.trigger()
+
+    assert shown == {"runs": 1, "device": "ap-1", "verification": "verified"}
+
+
+def test_history_dialog_without_runs_shows_empty_hint(qtbot):
+    from unifi2netbox.gui_review import HistoryDialog
+
+    dialog = HistoryDialog(())
+    qtbot.addWidget(dialog)
+
+    assert dialog.findChild(QLabel, "historyEmpty") is not None
+    assert dialog.table.rowCount() == 0

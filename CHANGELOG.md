@@ -6,6 +6,26 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.5.4
+
+### Added
+
+- Every write run and dry run is saved to `write-journal.sqlite3` next to the
+	configuration (outside the repository), with start/finish time, dry-run flag
+	and per-device result, NetBox ID and read-back state. **More > Write
+	history** lists recent runs and their results. A failed save is reported in
+	the run summary and never affects the writes.
+
+### Fixed
+
+- The journal finish time is now taken after the run instead of before it.
+
+### Validation
+
+- Added journal store tests (ordering, empty history, schema and corrupt data
+	errors), pipeline tests for saving and save failures, and GUI tests for the
+	history dialog and the journal path passed to write jobs.
+
 ## v0.5.3
 
 ### Added

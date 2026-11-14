@@ -88,7 +88,10 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   `write_readback.py`): selected previews become an ordered `WritePlan` (creates
   before updates, preflight blockers), executed against NetBox via
   `RequestsNetBoxWriteBackend` (supports dry run), outcomes recorded in an
-  immutable journal, then read-back requests planned for successful operations.
+  immutable journal, read back and marked verified/mismatch/unverified.
+  Interrupted creates are reconciled by name, never retried; UniFi sources are
+  re-read before writing. Runs are saved by `journal_store.py` to
+  `write-journal.sqlite3` next to the config.
   GUI-side per-row overrides (role, site, status, device-type ID) are passed into
   execution for create rows.
 - **Pipeline** (`pipeline.py`): Qt-free orchestration. `build_inventory_preview`

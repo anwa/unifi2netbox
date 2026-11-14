@@ -5,6 +5,7 @@ The GUI runs these functions inside worker jobs and only renders their results.
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +18,12 @@ from unifi2netbox.inventory import (
     InventorySnapshot,
     InventorySource,
     read_unifi_inventory,
+)
+from unifi2netbox.journal_store import (
+    JournalStore,
+    JournalStoreError,
+    StoredOutcome,
+    StoredRun,
 )
 from unifi2netbox.matching import (
     DeduplicationResult,
@@ -34,7 +41,7 @@ from unifi2netbox.preview import (
 from unifi2netbox.refresh import refresh_snapshots
 from unifi2netbox.snapshots import SnapshotStore
 from unifi2netbox.write_execute import execute_write_plan
-from unifi2netbox.write_journal import summarize_journal
+from unifi2netbox.write_journal import finalize_journal, summarize_journal
 from unifi2netbox.write_plan import WritePlan, build_write_plan
 
 SNAPSHOT_FILENAME = "snapshots.sqlite3"
@@ -98,6 +105,8 @@ class WriteExecutionReport:
     detail_lines: tuple[str, ...] = ()
     outcomes: tuple[WriteOutcome, ...] = ()
     dry_run: bool = False
+    run_id: str = ""
+    started_at: str = ""
 
 
 def build_inventory_preview(
@@ -218,6 +227,7 @@ def run_write_execution(
     device_type_overrides: dict[str, str],
     dry_run: bool,
     unifi_config: UniFiConfig | None = None,
+    journal_path: Path | None = None,
 ) -> WriteExecutionReport:
     """Execute an approved write plan and summarize the journal for display.
 
@@ -246,6 +256,8 @@ def run_write_execution(
         source_devices=source_devices,
         source_error=source_error,
     )
+    journal = finalize_journal(result.journal, _now())
+    result = replace(result, journal=journal)
     summary = summarize_journal(result.journal)
     verified = sum(
         outcome.verification == "verified" for outcome in result.journal.outcomes
@@ -261,6 +273,36 @@ def run_write_execution(
     if summary.successful:
         details += f" Read-back: {verified} verified"
         details += f", {mismatched} mismatch." if mismatched else "."
+
+    if journal_path is not None:
+        labels = {
+            op.sequence: op.source_label or op.target_label or op.device_key
+            for op in write_plan.operations
+        }
+        try:
+            JournalStore(journal_path).save(
+                StoredRun(
+                    run_id=journal.run_id,
+                    started_at=journal.started_at,
+                    finished_at=journal.finished_at,
+                    dry_run=dry_run,
+                    outcomes=tuple(
+                        StoredOutcome(
+                            device_key=item.device_key,
+                            label=labels.get(item.sequence, item.device_key),
+                            operation_type=str(item.operation_type),
+                            status=str(item.status),
+                            message=item.message,
+                            netbox_object_id=item.netbox_object_id,
+                            verification=item.verification,
+                            verification_detail=item.verification_detail,
+                        )
+                        for item in journal.outcomes
+                    ),
+                )
+            )
+        except (JournalStoreError, sqlite3.Error, OSError) as error:
+            details += f" Write history not saved: {error}"
 
     lines = tuple(
         f"Write #{outcome.sequence} {outcome.operation_type}: "
@@ -283,6 +325,8 @@ def run_write_execution(
             for outcome in result.journal.outcomes
         ),
         dry_run=dry_run,
+        run_id=journal.run_id,
+        started_at=journal.started_at,
     )
 
 

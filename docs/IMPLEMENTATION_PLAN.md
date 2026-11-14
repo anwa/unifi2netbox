@@ -250,7 +250,8 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
   (offline tests, 0.5.2, 2026-11-14).
 - [x] Re-read affected UniFi source devices before writes (offline tests,
   0.5.3, 2026-11-14).
-- [ ] Persist write journals in SQLite and show recent runs.
+- [x] Persist write journals in SQLite and show recent runs (offline tests,
+  0.5.4, 2026-11-14).
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
 visible; live write tests require explicit narrow test scope and separate opt-in.

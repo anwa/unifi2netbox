@@ -104,6 +104,8 @@ system**. The choice is saved as `[ui] theme` (`system`, `light` or `dark`).
 - After writing, each successful device is read back from NetBox and marked
   **Verified**, **Mismatch** (NetBox holds other values) or **Not verified**
   (read-back failed). The app never writes again on its own.
+- Every run is saved to `write-journal.sqlite3` next to the configuration;
+  **More > Write history** shows recent runs with per-device results.
 - Every operation is journaled as success, failed or skipped. NetBox rejections
   include parsed field-level details. Ambiguous creates are flagged for manual
   reconciliation and read-back requests are planned for successful writes.
@@ -237,7 +239,8 @@ TLS verification defaults on. Use a private CA file or explicitly disable checks
 per connection. Self-signed certificates can be trusted with the correct CA.
 HTTP transmits tokens unencrypted; disabled verification weakens authentication.
 Tokens are initially plaintext locally, not encrypted. Restrict file access.
-Never commit real configuration, tokens, logs, raw captures or inventory caches.
+Never commit real configuration, tokens, logs, raw captures, inventory caches
+or the write journal.
 
 Use dedicated tokens/keys with the minimum available inventory-read permissions.
 NetBox Online requires authenticated status/version and device inventory reads.
