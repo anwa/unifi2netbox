@@ -3,6 +3,7 @@ from threading import Event
 
 import pytest
 from PySide6.QtCore import Qt, QThreadPool, QTimer
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -1838,3 +1839,38 @@ def test_unas_detail_offers_drive_items_and_counts_them(qtbot):
     assert state.disk_operation_count() == 1
     box.setChecked(False)
     assert state.disk_operation_count() == 0
+
+
+def test_chips_are_never_narrower_than_their_text(qtbot, tmp_path, pool):
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+    )
+    qtbot.addWidget(window)
+    window.resize(860, 560)
+    window.show()
+    qtbot.waitExposed(window)
+
+    for item in (window.netbox_chip, window.unifi_chip):
+        bold = item.font()
+        bold.setBold(True)
+        needed = QFontMetrics(bold).horizontalAdvance(item.text())
+        assert item.minimumWidth() >= needed
+        assert item.width() >= item.minimumWidth()
+
+
+def test_online_unifi_chip_keeps_the_site_in_the_tooltip(qtbot, tmp_path, pool):
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+    )
+    qtbot.addWidget(window)
+    window.unifi.apply_config(UniFiConfig("https://udm.invalid", "synthetic"))
+    qtbot.waitUntil(lambda: not window.unifi.runner.busy)
+
+    assert window.unifi_chip.text().endswith("UniFi 10.6.100")
+    assert "Default" in window.unifi_chip.toolTip()

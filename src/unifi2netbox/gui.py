@@ -16,7 +16,13 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QCloseEvent,
+    QFontMetrics,
+    QKeySequence,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -1026,10 +1032,9 @@ class ConnectionPanel(QFrame):
         if version_text in ("Not available", "Not checked"):
             version_text = ""
         if state == ConnectionState.ONLINE:
-            text = f"{short} {version_text}".strip()
-            if self.is_unifi and self.selected_site.text() not in ("", "Not selected"):
-                text += f" · {self.selected_site.text().split(' (')[0]}"
-            return text
+            # The UniFi site stays in the tooltip and detail card: five chips
+            # must fit the header at the default window width.
+            return f"{short} {version_text}".strip()
         return f"{short} · {state}"
 
     def update_config_display(self) -> None:
@@ -1121,19 +1126,26 @@ class ConnectionChip(QToolButton):
         tone = state_tone(state)
         if tone == "success" and self.panel.config.security_warning:
             tone = "warning"
-        font = self.font()
-        font.setBold(True)
-        self.setFont(font)
         self.setText(f"●  {self.panel.summary()}")
         # Optional services (Protect, Access) only take header space once set.
         self.setVisible(self.panel.service is None or self.panel.config.configured)
         self.updateGeometry()
         self.adjustSize()
         tip = self.panel.details.text()
+        site = self.panel.selected_site.text() if self.panel.is_unifi else ""
+        if site and site != "Not selected":
+            tip = f"Site: {site}\n{tip}"
         if self.panel.config.security_warning:
             tip += f"\n{self.panel.config.security_warning}"
         self.setToolTip(tip)
         theme.set_variant(self, "chip", tone)
+        # The style sheet draws the text bold, but the size hint is measured
+        # with the regular font; reserve the bold width plus the pill padding
+        # so the layout never squeezes the text (e.g. "UniFi 11.0.99 · Default").
+        bold = self.font()
+        bold.setBold(True)
+        text_width = QFontMetrics(bold).horizontalAdvance(self.text())
+        self.setMinimumWidth(max(self.sizeHint().width(), text_width + 2 * 14 + 8))
 
     def show_details(self) -> None:
         self.popup.adjustSize()
