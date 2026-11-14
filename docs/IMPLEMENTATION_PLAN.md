@@ -345,13 +345,18 @@ Slices:
 - [x] 3. Match and preview Protect devices with the existing flow,
   deduplicated by MAC against Network devices. (0.7.3, 2026-11-14: live
   preview with 11 Protect create rows, 6 with a device type; roles open.)
-- [ ] 4. Approved NetBox writes for Protect devices and live acceptance.
+- [x] 4. Approved NetBox writes for Protect devices and live acceptance.
+  (0.7.4, 2026-11-14: approved live create of one camera with a test role,
+  verified, matched after refresh, removed; 7/7.)
 
 - [x] Verify Protect 7.3.70 inventory/NVR endpoints and credentials per console.
   (2026-11-14: installed 7.3.74 on the UNVR, Online with its own local API key;
   fields recorded in `API_CAPABILITIES.md`.)
-- [ ] Add camera/NVR hardware inventory, status, matching and approved NetBox flow.
-- [ ] Deduplicate devices also visible in Network; never collect recordings/streams.
+- [x] Add camera/NVR hardware inventory, status, matching and approved NetBox flow.
+  (Slices 2 to 4; the Protect state is shown, never written.)
+- [x] Deduplicate devices also visible in Network; never collect recordings/streams.
+  (MAC dedup in favor of Network; only `meta/info`, `nvrs` and `cameras` are
+  requested, no snapshot, recording or stream endpoints.)
 
 Acceptance: camera/NVR fixtures and target-PC read verification; existing common
 approval and conflict handling remains effective.

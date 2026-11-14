@@ -145,6 +145,10 @@ class ReviewState:
             device.source_id: device.kind
             for device in (result.protect_devices if result else ())
         }
+        self.protect_states: dict[str, str] = {
+            device.source_id: device.state
+            for device in (result.protect_devices if result else ())
+        }
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -357,6 +361,13 @@ class ReviewState:
         if not unifi_id.startswith(PROTECT_PREFIX):
             return ""
         return self.protect_kinds.get(unifi_id[len(PROTECT_PREFIX) :], "") or "device"
+
+    def protect_state(self, key: str) -> str:
+        """Operational Protect state, e.g. 'CONNECTED'; display only."""
+        unifi_id, _ = _device_ids(key)
+        if not unifi_id.startswith(PROTECT_PREFIX):
+            return ""
+        return self.protect_states.get(unifi_id[len(PROTECT_PREFIX) :], "")
 
     # -- cables -------------------------------------------------------------
 

@@ -642,3 +642,19 @@ exactly the two test interfaces, deleted it, and repeated the test. Disagreeing
 evidence, occupied interfaces and interrupted creates remain covered by
 offline tests.
 
+On 2026-11-14 the assistant checked M7 (UniFi Protect) live on the developer
+workstation. Read-only first: the Protect connection to the UNVR was Online
+(Protect 7.3.74, own local API key); the reader returned 11 devices (1 NVR,
+10 cameras) in 0.36 s; the UDM answered the Protect paths with HTML only. With
+commit 2b60bd8 (application 0.7.3) the preview showed all 11 Protect devices as
+create rows, 6 with a preselected device type and none with a role (NetBox had
+no camera or NVR role). Then, with the user's explicit approval, a write test
+against the NetBox developer instance passed 7/7 checks: a temporary role
+`u2n-test-camera` was created and preselected for the camera "Hof" (UVC G6
+Bullet, type "Unifi G6 Bullet"); the create ran through the real pipeline
+including the Protect re-read and was read back as verified with the expected
+name, role, type and site; a refreshed preview matched the new device as in
+sync (model text and MAC differ but are not writable, as for Network devices);
+the run was in the write history; the camera and the role were removed
+afterwards (NetBox again had 4 devices and 5 roles). A failing Protect re-read
+and stale Protect snapshots remain covered by offline tests.

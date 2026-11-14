@@ -541,7 +541,8 @@ class DetailPanel(QScrollArea):
         subtitle = _subtitle(item)
         kind = state.protect_kind(key)
         if kind:
-            subtitle += f" · from UniFi Protect ({kind})"
+            live = state.protect_state(key).lower()
+            subtitle += f" · from UniFi Protect ({kind}{', ' + live if live else ''})"
         self.layout_.addWidget(label(subtitle, "secondary"))
 
         if item.outcome is not None:

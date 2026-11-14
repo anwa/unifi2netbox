@@ -6,6 +6,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.7.4
+
+### Added
+
+- M7 slice 4: the detail panel of a Protect device shows its live Protect
+  state, for example "from UniFi Protect (camera, connected)". The state is
+  operational and never written.
+
+### Validation
+
+- Approved live write test of a Protect camera create against the NetBox
+  developer instance (7/7, see `docs/TESTING.md`); review test for the state.
+
 ## v0.7.3
 
 ### Added

@@ -382,9 +382,13 @@ def test_protect_kind_comes_from_the_key():
 
     result = replace(
         make_result(),
-        protect_devices=(InventoryDevice("c1", "Garden", kind="camera"),),
+        protect_devices=(
+            InventoryDevice("c1", "Garden", kind="camera", state="DISCONNECTED"),
+        ),
     )
     state = ReviewState(result, BehaviorConfig())
 
     assert state.protect_kind("create:unifi_network:protect:c1") == "camera"
+    assert state.protect_state("create:unifi_network:protect:c1") == "DISCONNECTED"
     assert state.protect_kind("create:unifi_network:sw") == ""
+    assert state.protect_state("create:unifi_network:sw") == ""
