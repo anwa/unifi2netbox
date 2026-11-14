@@ -289,3 +289,33 @@ def test_history_save_failure_is_reported_not_raised(monkeypatch, tmp_path):
 
     assert "Write history not saved" in report.details
     assert report.outcomes[0].status == "success"
+
+
+def test_preview_result_carries_ports_and_interfaces(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+
+    netbox = _snapshot(
+        InventorySource.NETBOX,
+        [InventoryDevice(source_id="1", name="switch-a", site="HQ")],
+        interfaces=(InventoryInterface("10", "1", "Port 1", "1000base-t"),),
+    )
+    unifi = replace(
+        _snapshot(
+            InventorySource.UNIFI_NETWORK,
+            [InventoryDevice(source_id="a", name="switch-a", site="HQ")],
+        ),
+        ports=(InventoryPort("a", 1, "RJ45", 1000, "UP", 1000),),
+    )
+    _patch_readers(monkeypatch, lambda c, **kw: netbox, lambda c, **kw: unifi)
+
+    result = build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UNIFI,
+        include_all_netbox_delete_candidates=False,
+    )
+
+    assert [p.idx for p in result.unifi_ports] == [1]
+    assert [i.name for i in result.netbox_interfaces] == ["Port 1"]

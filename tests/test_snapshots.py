@@ -136,3 +136,21 @@ def test_invalid_snapshot_payload_raises_store_error(tmp_path):
 
     with pytest.raises(SnapshotStoreError, match="invalid"):
         store.load_current(InventorySource.NETBOX)
+
+
+def test_ports_and_interfaces_roundtrip(tmp_path):
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    snapshot = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-14T10:00:00+00:00",
+        ports=(
+            InventoryPort("sw", 1, "RJ45", 1000, "UP", 100, "802.3at", 2, True, "UP"),
+        ),
+        interfaces=(InventoryInterface("501", "7", "Port 1", "1000base-t"),),
+    )
+
+    store.save_current(snapshot)
+
+    assert store.load_current(InventorySource.UNIFI_NETWORK) == snapshot

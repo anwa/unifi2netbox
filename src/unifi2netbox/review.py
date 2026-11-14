@@ -19,6 +19,7 @@ from unifi2netbox.pipeline import (
     WriteOutcome,
     preview_rows,
 )
+from unifi2netbox.ports import PortMatch, match_ports
 from unifi2netbox.preview import (
     ChangePreview,
     DeviceAction,
@@ -116,6 +117,8 @@ class ReviewState:
         self.role_by_key: dict[str, str] = {}
         self.site_by_key: dict[str, str] = {}
         self.status_by_key: dict[str, str] = {}
+        self.unifi_ports = result.unifi_ports if result else ()
+        self.netbox_interfaces = result.netbox_interfaces if result else ()
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -262,6 +265,26 @@ class ReviewState:
 
     def selectable_count(self) -> int:
         return sum(1 for item in self.rows() if item.category in (CREATE, UPDATE))
+
+    def ports_for(self, key: str) -> tuple[PortMatch, ...]:
+        """UniFi ports and NetBox interfaces of one device, paired.
+
+        New devices only show their UniFi ports: NetBox creates interfaces from
+        the device-type template when the device is written.
+        """
+        unifi_id, netbox_id = _device_ids(key)
+        ports = [p for p in self.unifi_ports if unifi_id and p.device_id == unifi_id]
+        interfaces = [
+            i for i in self.netbox_interfaces if netbox_id and i.device_id == netbox_id
+        ]
+        if not ports:
+            # Access points and similar devices expose no ports officially.
+            return ()
+        if key.startswith("create:"):
+            return tuple(
+                PortMatch(port, None) for port in sorted(ports, key=lambda p: p.idx)
+            )
+        return match_ports(ports, interfaces)
 
     # -- user actions --------------------------------------------------------
 
@@ -419,6 +442,19 @@ def humanize_timestamp(value: str, now: datetime | None = None) -> str:
     if moment.date() == reference.date():
         return f"today {moment:%H:%M}"
     return f"{moment:%d %b %H:%M}"
+
+
+def _device_ids(key: str) -> tuple[str, str]:
+    """(UniFi device ID, NetBox device ID) from a preview device key."""
+    value = key.strip()
+    if value.startswith("create:"):
+        value = value.split(":", 1)[1]
+    unifi_part, _, netbox_part = value.partition("->")
+    if value.startswith("target-only:"):
+        unifi_part, netbox_part = "", value.split(":", 1)[1]
+    unifi_id = unifi_part.split(":", 1)[1] if ":" in unifi_part else ""
+    netbox_id = netbox_part.split(":", 1)[1] if ":" in netbox_part else ""
+    return unifi_id, netbox_id
 
 
 def _category(device: DevicePreview) -> str:

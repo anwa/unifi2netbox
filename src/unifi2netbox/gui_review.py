@@ -351,6 +351,8 @@ class DetailPanel(QScrollArea):
             self._add_create_choices(item)
         self._add_fields(item)
 
+        self._add_ports(item)
+
         if item.row.suggested_device_types and item.category == CREATE:
             self.layout_.addWidget(label("Type suggestions", "subheading"))
             self.layout_.addWidget(
@@ -484,6 +486,55 @@ class DetailPanel(QScrollArea):
                 )
             )
 
+    def _add_ports(self, item: ReviewRow) -> None:
+        matches = self.state.ports_for(item.key)
+        if not matches:
+            return
+        ports = [m.port for m in matches if m.port is not None]
+        up = sum(port.link_state == "UP" for port in ports)
+        heading = label(f"Ports ({len(ports)})", "subheading")
+        heading.setObjectName("portsHeading")
+        self.layout_.addWidget(heading)
+        summary = f"{up} up, {len(ports) - up} down. Link and speed are live values"
+        summary += " and never written."
+        if item.category == CREATE:
+            summary += " NetBox adds interfaces from the device type on create."
+        self.layout_.addWidget(label(summary, "caption"))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(3)
+        titles = ("Port", "NetBox", "Type", "Link", "PoE")
+        for column, text in enumerate(titles):
+            grid.addWidget(label(text, "caption"), 0, column)
+        notes: list[str] = []
+        for row, match in enumerate(matches, start=1):
+            port, interface = match.port, match.interface
+            name = str(port.idx) if port else "-"
+            values = (
+                name,
+                interface.name if interface else "-",
+                _port_type(port) if port else (interface.type if interface else ""),
+                _port_link(port) if port else "",
+                _port_poe(port) if port else "",
+            )
+            for column, value in enumerate(values):
+                cell = label(value, "secondary" if column == 3 else "")
+                if match.notes:
+                    cell.setToolTip("\n".join(match.notes))
+                grid.addWidget(cell, row, column)
+            for note in match.notes:
+                prefix = f"Port {port.idx}" if port else interface.name
+                notes.append(f"{prefix}: {note}")
+        grid.setColumnStretch(1, 1)
+        self.layout_.addLayout(grid)
+        if notes and item.category != CREATE:
+            shown = notes[:8]
+            if len(notes) > 8:
+                shown.append(f"... and {len(notes) - 8} more")
+            note_label = label("\n".join(shown), "caption")
+            note_label.setObjectName("portNotes")
+            self.layout_.addWidget(note_label)
+
     def _toggle_field(self, name: str, checked: bool) -> None:
         self.state.set_field_selected(self.key, name, checked)
         self.changed.emit()
@@ -581,6 +632,33 @@ class ConfirmDialog(QDialog):
         self.confirm_button.clicked.connect(self.accept)
         buttons.addWidget(self.confirm_button)
         layout.addLayout(buttons)
+
+
+_CONNECTOR_NAMES = {"SFPPLUS": "SFP+", "SFP28": "SFP28", "SFP": "SFP"}
+
+
+def _short_speed(mbps: int) -> str:
+    if not mbps:
+        return ""
+    return f"{mbps / 1000:g}G" if mbps >= 1000 else f"{mbps}M"
+
+
+def _port_type(port) -> str:
+    connector = _CONNECTOR_NAMES.get(port.connector, port.connector)
+    return f"{connector} {_short_speed(port.max_speed_mbps)}".strip()
+
+
+def _port_link(port) -> str:
+    if port.link_state == "UP":
+        return f"Up {_short_speed(port.speed_mbps)}".strip()
+    return port.link_state.capitalize() or "-"
+
+
+def _port_poe(port) -> str:
+    if not port.poe_standard:
+        return ""
+    state = "off" if port.poe_enabled is False else port.poe_state.lower() or "on"
+    return f"{port.poe_standard} ({state})"
 
 
 def _subtitle(item: ReviewRow) -> str:

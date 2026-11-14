@@ -1199,3 +1199,30 @@ def test_history_dialog_without_runs_shows_empty_hint(qtbot):
 
     assert dialog.findChild(QLabel, "historyEmpty") is not None
     assert dialog.table.rowCount() == 0
+
+
+def test_detail_panel_lists_ports_with_notes(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+
+    result = replace(
+        preview_result(),
+        unifi_ports=(
+            InventoryPort("a", 1, "RJ45", 2500, "UP", 1000, "802.3at", 2, True, "UP"),
+            InventoryPort("a", 2, "SFPPLUS", 10000, "DOWN", 0),
+        ),
+        netbox_interfaces=(
+            InventoryInterface("10", "1", "Port 1", "1000base-t"),
+            InventoryInterface("11", "1", "SFP+ 1", "10gbase-x-sfpp"),
+        ),
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    select_row(window, "sw-a")
+
+    heading = window.detail.findChild(QLabel, "portsHeading")
+    notes = window.detail.findChild(QLabel, "portNotes")
+    assert heading is not None and heading.text() == "Ports (2)"
+    assert notes is not None
+    assert "Port 1: UniFi port supports 2.5 Gbit/s" in notes.text()
+    assert "PSE mode" in notes.text()

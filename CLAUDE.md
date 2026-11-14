@@ -77,6 +77,9 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   `SnapshotStore` is SQLite (`snapshots.sqlite3` next to the config file) with
   current/previous per source; failed refreshes keep the last good snapshot and
   mark it stale.
+- **Ports** (`ports.py`): pairs UniFi ports with NetBox interfaces of a
+  matched device by connector kind, then family, in numbering order; link
+  state and speed are operational and display-only.
 - **Matching** (`matching.py`): confirmed mappings first, then ranked passes per
   UniFi device: normalized name → serial → MAC. Multiple hits within one pass are
   an ambiguity conflict, never auto-matched. Device Type suggestions only for

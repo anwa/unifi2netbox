@@ -9,6 +9,8 @@ from unifi2netbox.inventory import (
     InventoryDeviceRole,
     InventoryDeviceStatus,
     InventoryDeviceType,
+    InventoryInterface,
+    InventoryPort,
     InventorySite,
     InventorySnapshot,
     InventorySource,
@@ -125,6 +127,8 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "device_statuses": [asdict(item) for item in snapshot.device_statuses],
         "unifi_api_feedback": list(snapshot.unifi_api_feedback),
         "unifi_raw_devices": list(snapshot.unifi_raw_devices),
+        "ports": [asdict(item) for item in snapshot.ports],
+        "interfaces": [asdict(item) for item in snapshot.interfaces],
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -166,6 +170,13 @@ def _decode(raw: str) -> InventorySnapshot:
         isinstance(item, dict) for item in unifi_raw_devices
     ):
         raise ValueError
+    ports = payload.get("ports", [])
+    interfaces = payload.get("interfaces", [])
+    for items in (ports, interfaces):
+        if not isinstance(items, list) or not all(
+            isinstance(item, dict) for item in items
+        ):
+            raise ValueError
     return InventorySnapshot(
         source=InventorySource(payload["source"]),
         captured_at=str(payload["captured_at"]),
@@ -180,4 +191,6 @@ def _decode(raw: str) -> InventorySnapshot:
         ),
         unifi_api_feedback=tuple(unifi_api_feedback),
         unifi_raw_devices=tuple(unifi_raw_devices),
+        ports=tuple(InventoryPort(**item) for item in ports),
+        interfaces=tuple(InventoryInterface(**item) for item in interfaces),
     )

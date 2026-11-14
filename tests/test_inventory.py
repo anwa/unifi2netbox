@@ -80,6 +80,47 @@ def netbox_transport(monkeypatch):
             200,
             {
                 "count": 2,
+                "next": "https://netbox.invalid/api/dcim/interfaces/?limit=1&offset=1",
+                "previous": None,
+                "results": [
+                    {
+                        "id": 501,
+                        "device": {"id": 7, "name": "edge-a"},
+                        "name": "Port 1",
+                        "type": {"value": "1000base-t", "label": "1000BASE-T"},
+                        "enabled": True,
+                        "mgmt_only": False,
+                        "mode": None,
+                        "poe_mode": {"value": "pse", "label": "PSE"},
+                        "poe_type": {"value": "type2-ieee802.3at", "label": "x"},
+                        "speed": None,
+                    }
+                ],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": None,
+                "previous": "https://netbox.invalid/api/dcim/interfaces/?limit=1&offset=0",
+                "results": [
+                    {
+                        "id": 502,
+                        "device": {"id": 7, "name": "edge-a"},
+                        "name": "SFP+ 1",
+                        "type": {"value": "10gbase-x-sfpp", "label": "SFP+"},
+                        "enabled": False,
+                        "mode": {"value": "tagged", "label": "Tagged"},
+                        "speed": 10000000,
+                    }
+                ],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
                 "next": "https://netbox.invalid/api/dcim/device-types/?limit=1&offset=1",
                 "previous": None,
                 "results": [
@@ -268,6 +309,15 @@ def test_netbox_inventory_is_paginated_and_normalized(netbox_transport):
     assert snapshot.sites[1].name == "Branch"
     assert [item.value for item in snapshot.device_statuses] == ["active", "planned"]
     assert snapshot.device_statuses[0].label == "Active"
+    first, second = snapshot.interfaces
+    assert (first.source_id, first.device_id, first.name) == ("501", "7", "Port 1")
+    assert (first.type, first.poe_mode, first.enabled) == ("1000base-t", "pse", True)
+    assert (second.type, second.mode, second.enabled) == (
+        "10gbase-x-sfpp",
+        "tagged",
+        False,
+    )
+    assert second.speed_kbps == 10000000
 
     for request, options in calls:
         assert request.method == "GET"
@@ -361,3 +411,90 @@ def test_unifi_inventory_rejects_bad_pagination(unifi_api):
             page_size=1,
             transport=unifi_api[2],
         )
+
+
+def test_unifi_inventory_reads_ports_from_device_details():
+    responses = {
+        "info": {"applicationVersion": "11.0.99"},
+        "sites": page([{"id": SITE_ID, "name": "Default", "internalReference": "d"}]),
+        f"sites/{SITE_ID}/devices": page(
+            [
+                {
+                    "id": "sw",
+                    "name": "switch",
+                    "model": "US 8 60W",
+                    "interfaces": ["ports"],
+                },
+                {
+                    "id": "ap",
+                    "name": "ap",
+                    "model": "U6 Lite",
+                    "interfaces": ["radios"],
+                },
+            ]
+        ),
+        f"sites/{SITE_ID}/devices/sw": {
+            "id": "sw",
+            "interfaces": {
+                "ports": [
+                    {
+                        "idx": 2,
+                        "state": "DOWN",
+                        "connector": "RJ45",
+                        "maxSpeedMbps": 1000,
+                    },
+                    {
+                        "idx": 1,
+                        "state": "UP",
+                        "connector": "rj45",
+                        "maxSpeedMbps": 1000,
+                        "speedMbps": 100,
+                        "poe": {
+                            "standard": "802.3at",
+                            "type": 2,
+                            "enabled": True,
+                            "state": "UP",
+                        },
+                    },
+                ]
+            },
+        },
+    }
+    requested = []
+
+    def handle(request):
+        path = request.url.path.split("/integration/v1/", 1)[1]
+        requested.append(path)
+        return httpx.Response(200, json=responses[path])
+
+    snapshot = read_unifi_inventory(
+        UniFiConfig("https://console.invalid", "synthetic-key"),
+        transport=httpx.MockTransport(handle),
+    )
+
+    assert f"sites/{SITE_ID}/devices/ap" not in requested
+    first, second = snapshot.ports
+    assert (first.device_id, first.idx, first.connector) == ("sw", 1, "RJ45")
+    assert (first.link_state, first.speed_mbps) == ("UP", 100)
+    assert (first.poe_standard, first.poe_type, first.poe_enabled) == (
+        "802.3at",
+        2,
+        True,
+    )
+    assert (second.idx, second.link_state, second.speed_mbps) == (2, "DOWN", 0)
+    assert second.poe_enabled is None
+
+
+@pytest.mark.parametrize(
+    "ports",
+    [
+        "not-a-list",
+        [{"state": "UP"}],
+        [{"idx": 1}, {"idx": 1}],
+    ],
+)
+def test_unifi_port_lists_are_validated(ports):
+    from unifi2netbox.inventory import _normalize_unifi_ports
+
+    with pytest.raises(InventoryError):
+        _normalize_unifi_ports("sw", {"interfaces": {"ports": ports}})

@@ -6,6 +6,26 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.1
+
+### Added
+
+- M6 slice 1: UniFi switch ports (official device details: index, connector,
+	maximum speed, PoE, live link state and speed) and NetBox interfaces are read
+	into the snapshots. For matched devices, ports are paired with NetBox
+	interfaces by exact connector kind (RJ45, SFP, SFP+, SFP28), then by copper
+	or optical family, in numbering order. The detail panel lists the ports with
+	their NetBox interface and notes for speed or PoE differences and unpaired
+	ports or interfaces. Link state and speed are display-only and never written.
+
+### Validation
+
+- Added inventory, snapshot, port matching, review and GUI tests.
+- Live read-only check: 195 UniFi ports on 17 devices and 47 NetBox interfaces
+	read; the UDM Pro Max pairs 11/11 ports, and a USW Aggregation pairs 8 SFP+
+	ports while its NetBox device has 24 further interfaces from another device
+	type.
+
 ## v0.6.0
 
 ### Summary

@@ -281,9 +281,11 @@ passwords are never read into models, stored or exported), marked as
 
 Slices, in this order:
 
-- [ ] 1. Read UniFi ports and NetBox interfaces; match ports to interfaces of
+- [x] 1. Read UniFi ports and NetBox interfaces; match ports to interfaces of
   matched devices by connector family and numbering; show them per device.
   Operational state (link, speed) is display-only and never written.
+  (0.6.1, 2026-11-14: offline tests and live read-only check; the UDM Pro Max
+  pairs 11/11 ports, a USW Aggregation shows 24 surplus NetBox interfaces.)
 - [ ] 2. Create NetBox VLANs (in a site-scoped VLAN group) and prefixes from
   UniFi networks, with preview and approval.
 - [ ] 3. Read internal port configuration: names, configured enable state,

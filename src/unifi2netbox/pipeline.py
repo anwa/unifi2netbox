@@ -15,6 +15,8 @@ from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
 from unifi2netbox.inventory import (
     InventoryDevice,
     InventoryError,
+    InventoryInterface,
+    InventoryPort,
     InventorySnapshot,
     InventorySource,
     read_unifi_inventory,
@@ -80,6 +82,8 @@ class InventoryPreviewResult:
     unifi_version: str = ""
     unifi_api_feedback: tuple[dict[str, object], ...] = ()
     unifi_raw_devices: tuple[dict[str, object], ...] = ()
+    unifi_ports: tuple[InventoryPort, ...] = ()
+    netbox_interfaces: tuple[InventoryInterface, ...] = ()
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
     netbox_sites: tuple[str, ...] = ()
@@ -202,6 +206,8 @@ def build_inventory_preview(
         unifi_version=unifi_snapshot.source_version,
         unifi_api_feedback=unifi_snapshot.unifi_api_feedback,
         unifi_raw_devices=unifi_snapshot.unifi_raw_devices,
+        unifi_ports=unifi_snapshot.ports,
+        netbox_interfaces=netbox_snapshot.interfaces,
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),

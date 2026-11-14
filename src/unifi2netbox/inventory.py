@@ -57,6 +57,42 @@ class InventoryDeviceStatus:
 
 
 @dataclass(frozen=True)
+class InventoryPort:
+    """One UniFi switch port from the official Integration API.
+
+    ``link_state`` and ``speed_mbps`` are operational values: they describe the
+    current link and must never be written as configuration.
+    """
+
+    device_id: str
+    idx: int
+    connector: str
+    max_speed_mbps: int = 0
+    link_state: str = ""
+    speed_mbps: int = 0
+    poe_standard: str = ""
+    poe_type: int = 0
+    poe_enabled: bool | None = None
+    poe_state: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryInterface:
+    """One NetBox device interface."""
+
+    source_id: str
+    device_id: str
+    name: str
+    type: str
+    enabled: bool = True
+    mgmt_only: bool = False
+    mode: str = ""
+    poe_mode: str = ""
+    poe_type: str = ""
+    speed_kbps: int = 0
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     source: InventorySource
     captured_at: str
@@ -69,6 +105,8 @@ class InventorySnapshot:
     device_statuses: tuple[InventoryDeviceStatus, ...] = ()
     unifi_api_feedback: tuple[dict[str, object], ...] = ()
     unifi_raw_devices: tuple[dict[str, object], ...] = ()
+    ports: tuple[InventoryPort, ...] = ()
+    interfaces: tuple[InventoryInterface, ...] = ()
 
 
 def _text(value: object) -> str:
@@ -150,6 +188,41 @@ def _normalize_netbox_device_type(row: dict[str, object]) -> InventoryDeviceType
         manufacturer=manufacturer,
         model=model,
         part_number=_text(row.get("part_number")),
+    )
+
+
+def _identifier(value: object) -> str:
+    """NetBox IDs arrive as integers; accept integer or text IDs."""
+    if type(value) is int:
+        return str(value)
+    return _text(value)
+
+
+def _choice_value(value: object) -> str:
+    if isinstance(value, dict):
+        return _text(value.get("value"))
+    return _text(value)
+
+
+def _normalize_netbox_interface(row: dict[str, object]) -> InventoryInterface | None:
+    device = row.get("device")
+    device_id = _identifier(device.get("id")) if isinstance(device, dict) else ""
+    source_id = _identifier(row.get("id"))
+    name = _text(row.get("name"))
+    if not device_id or not source_id or not name:
+        return None
+    speed = row.get("speed")
+    return InventoryInterface(
+        source_id=source_id,
+        device_id=device_id,
+        name=name,
+        type=_choice_value(row.get("type")),
+        enabled=row.get("enabled") is not False,
+        mgmt_only=row.get("mgmt_only") is True,
+        mode=_choice_value(row.get("mode")),
+        poe_mode=_choice_value(row.get("poe_mode")),
+        poe_type=_choice_value(row.get("poe_type")),
+        speed_kbps=speed if type(speed) is int and speed > 0 else 0,
     )
 
 
@@ -274,6 +347,7 @@ def read_netbox_inventory(
         raise InventoryError("Pagination bounds must be positive.")
 
     devices: list[InventoryDevice] = []
+    interfaces: list[InventoryInterface] = []
     device_types: list[InventoryDeviceType] = []
     device_roles: list[InventoryDeviceRole] = []
     sites: list[InventorySite] = []
@@ -295,6 +369,22 @@ def read_netbox_inventory(
             )
             devices.extend(normalize_netbox_device(row) for row in device_rows)
             device_statuses.extend(_netbox_device_statuses_from_devices(device_rows))
+
+            interface_rows = _netbox_paginated_rows(
+                session,
+                config,
+                "/api/dcim/interfaces/",
+                page_size=page_size,
+                max_pages=max_pages,
+                limit_error=(
+                    "NetBox interface pagination exceeded the configured page "
+                    "safety limit."
+                ),
+            )
+            for row in interface_rows:
+                interface = _normalize_netbox_interface(row)
+                if interface is not None:
+                    interfaces.append(interface)
 
             type_rows = _netbox_paginated_rows(
                 session,
@@ -370,6 +460,7 @@ def read_netbox_inventory(
         device_roles=tuple(device_roles),
         sites=tuple(sites),
         device_statuses=tuple(device_statuses),
+        interfaces=tuple(interfaces),
     )
 
 
@@ -458,6 +549,47 @@ def _normalize_unifi_device(row: dict[str, object], site_name: str) -> Inventory
     )
 
 
+def _int(value: object) -> int:
+    return value if type(value) is int and value >= 0 else 0
+
+
+def _normalize_unifi_ports(
+    device_id: str, detail: dict[str, object]
+) -> list[InventoryPort]:
+    interfaces = detail.get("interfaces")
+    rows = interfaces.get("ports") if isinstance(interfaces, dict) else None
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        raise InventoryError("UniFi returned a malformed port list.")
+    ports: list[InventoryPort] = []
+    seen: set[int] = set()
+    for row in rows:
+        if not isinstance(row, dict) or type(row.get("idx")) is not int:
+            raise InventoryError("UniFi returned a malformed port entry.")
+        idx = row["idx"]
+        if idx in seen:
+            raise InventoryError("UniFi returned duplicate port indexes.")
+        seen.add(idx)
+        poe = row.get("poe") if isinstance(row.get("poe"), dict) else {}
+        enabled = poe.get("enabled")
+        ports.append(
+            InventoryPort(
+                device_id=device_id,
+                idx=idx,
+                connector=_text(row.get("connector")).upper(),
+                max_speed_mbps=_int(row.get("maxSpeedMbps")),
+                link_state=_text(row.get("state")).upper(),
+                speed_mbps=_int(row.get("speedMbps")),
+                poe_standard=_text(poe.get("standard")),
+                poe_type=_int(poe.get("type")),
+                poe_enabled=enabled if isinstance(enabled, bool) else None,
+                poe_state=_text(poe.get("state")).upper(),
+            )
+        )
+    return sorted(ports, key=lambda port: port.idx)
+
+
 def read_unifi_inventory(
     config: UniFiConfig,
     *,
@@ -478,6 +610,7 @@ def read_unifi_inventory(
     site_scope = ""
     version = ""
     devices: list[InventoryDevice] = []
+    ports: list[InventoryPort] = []
     api_feedback: list[dict[str, object]] = []
     raw_devices: list[dict[str, object]] = []
     try:
@@ -555,6 +688,18 @@ def read_unifi_inventory(
                 raise InventoryError(
                     "UniFi device pagination exceeded the configured page safety limit."
                 )
+
+            for row in raw_devices:
+                listed = row.get("interfaces")
+                device_id = _text(row.get("id"))
+                if not device_id or not (
+                    isinstance(listed, list) and "ports" in listed
+                ):
+                    continue
+                path = f"sites/{site['id']}/devices/{device_id}"
+                detail = _unifi_json(client, path)
+                api_feedback.append({"endpoint": path, "params": {}, "payload": detail})
+                ports.extend(_normalize_unifi_ports(device_id, detail))
     except InventoryError:
         raise
     except (httpx.HTTPError, OSError, ValueError, TypeError) as error:
@@ -570,4 +715,5 @@ def read_unifi_inventory(
         devices=tuple(devices),
         unifi_api_feedback=tuple(api_feedback),
         unifi_raw_devices=tuple(raw_devices),
+        ports=tuple(ports),
     )

@@ -171,6 +171,9 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- UniFi ports pair with NetBox interfaces by exact connector kind, then by
+	copper/optical family, in numbering order; speed, PoE and unpaired entries
+	become notes, and devices without UniFi ports show no comparison,
 - only unmatched UniFi observations receive suggestions,
 - UniFi model names resolve to NetBox library types by model, part number or
 	alias (`AC Pro` -> `UAP-AC-PRO`, `US 16 PoE 150W` -> `US-16-150W`),

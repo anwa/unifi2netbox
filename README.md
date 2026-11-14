@@ -52,6 +52,10 @@ history.
   `serial`, `site`). Other differences, such as UniFi model names versus NetBox
   device types, are shown as preview-only. Empty UniFi values never clear
   NetBox values.
+- For matched switches, the detail panel lists each UniFi port with its
+  NetBox interface (paired by connector kind and number), connector and speed,
+  live link state and PoE, plus notes for speed or PoE differences and
+  unpaired ports or interfaces. Link state and speed are never written.
 - NetBox-only devices (delete proposals) are limited to the active UniFi site
   by default; a setting includes all NetBox devices. Nothing is deleted.
 
