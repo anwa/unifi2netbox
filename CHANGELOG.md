@@ -6,6 +6,24 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.10
+
+### Added
+
+- M6 slice 4, review window: an **Interfaces** filter and summary card list
+  paired UniFi ports and NetBox interfaces of matched devices with port name,
+  effective configuration, change and status. The detail panel shows one
+  checkbox per field change (enabled, 802.1Q mode, untagged VLAN, tagged VLANs)
+  with current and target values; VLAN fields follow the mode selection and
+  the panel updates immediately. Selected interface writes count in the apply
+  bar, appear in the confirmation dialog and run with the other writes.
+
+### Validation
+
+- Added review and GUI tests for interface rows, field selection and
+  dependencies, apply counts, the blocker message and the confirmation
+  summary; offscreen render with live data reviewed.
+
 ## v0.6.9
 
 ### Added

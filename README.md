@@ -63,6 +63,12 @@ history.
   effective configuration (mode, native and tagged VLANs, profile, LAG), read
   from internal Network endpoints with GET only. All-VLAN trunks stay
   `tagged-all`; unknown profiles or networks are reported, never guessed.
+- The **Interfaces** filter compares the effective UniFi port configuration
+  with the paired NetBox interfaces of matched devices and offers field-level
+  writes for enabled state, 802.1Q mode, untagged and tagged VLANs. VLANs come
+  from the site's "UniFi <site>" VLAN group, so write the networks first and
+  refresh. Interfaces are only updated, never created or deleted; LAGs and
+  cables are not changed, and a second apply after a refresh writes nothing.
 - For matched switches, the detail panel lists each UniFi port with its
   NetBox interface (paired by connector kind and number), connector and speed,
   live link state and PoE, plus notes for speed or PoE differences and

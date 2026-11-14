@@ -85,6 +85,10 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   port configuration (name, enable, profile, mode, native/tagged VLANs, LAG)
   from allow-listed fields of internal Network endpoints, read GET-only and
   only for UniFi Network 11.0; all-VLAN trunks stay `tagged-all`.
+- **Interfaces** (`interface_plan.py`, `interface_execute.py`): field-level
+  plan (enabled, mode, untagged/tagged VLANs from the site VLAN group) for
+  paired ports of matched devices, written by PATCH between network and device
+  writes with drift checks and read-back; LAG stays display-only.
 - **Ports** (`ports.py`): pairs UniFi ports with NetBox interfaces of a
   matched device by connector kind, then family, in numbering order; link
   state and speed are operational and display-only.

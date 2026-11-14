@@ -35,6 +35,8 @@ from PySide6.QtWidgets import (
 )
 
 from unifi2netbox import theme
+from unifi2netbox.interface_plan import FIELD_LABELS as IF_FIELD_LABELS
+from unifi2netbox.interface_plan import InterfacePlan, InterfacePlanRow
 from unifi2netbox.journal_store import StoredRun
 from unifi2netbox.networks import (
     CONFLICT as NET_CONFLICT,
@@ -403,6 +405,69 @@ class DetailPanel(QScrollArea):
         )
         self.layout_.addStretch()
 
+    def show_interface(self, state: ReviewState, key: str) -> None:
+        self.state = state
+        row = state.interface_row(key)
+        if row is None:
+            self.show_placeholder("Select an interface to see details.")
+            return
+        self.key = key
+        self._clear()
+        title = label(row.label, "heading")
+        title.setObjectName("detailTitle")
+        self.layout_.addWidget(title)
+        port = f"UniFi port {row.port_idx}"
+        if row.port_name:
+            port += f" '{row.port_name}'"
+        port += f": {row.config.summary()}"
+        if row.config.profile:
+            port += f" (profile {row.config.profile})"
+        self.layout_.addWidget(label(port, "secondary"))
+        outcome = state.outcomes.get(key)
+        if outcome is not None:
+            text = f"{outcome.status}: {outcome.message}"
+            if outcome.verification:
+                text += f" (read-back {outcome.verification})"
+            tone = {"success": "success", "failed": "danger"}.get(
+                outcome.status, "warning"
+            )
+            if outcome.verification == "mismatch":
+                tone = "danger"
+            self.layout_.addWidget(banner(text, tone))
+        if row.notes:
+            self.layout_.addWidget(banner("\n".join(row.notes), "neutral"))
+        self.layout_.addWidget(label("NetBox interface", "subheading"))
+        if row.in_sync:
+            self.layout_.addWidget(
+                label("Enabled state, mode and VLANs match UniFi.", "secondary")
+            )
+        for change in row.changes:
+            box = QCheckBox(
+                f"{IF_FIELD_LABELS[change.field]}: {change.current_label} "
+                f"\u2192 {change.desired_label}"
+            )
+            box.setObjectName(f"interface_{change.field}")
+            box.setChecked(change.field in row.selected_fields)
+            box.toggled.connect(
+                lambda checked, f=change.field: self._toggle_interface(f, checked)
+            )
+            self.layout_.addWidget(box)
+        self.layout_.addWidget(
+            label(
+                "Only checked fields are written. VLAN fields need the mode "
+                "change. Link state and speed are never written; LAGs and cables "
+                "are not changed.",
+                "caption",
+            )
+        )
+        self.layout_.addStretch()
+
+    def _toggle_interface(self, field: str, checked: bool) -> None:
+        self.state.set_interface_selected(self.key, field, checked)
+        # Dependent fields may change too (VLAN fields follow the mode).
+        self.show_interface(self.state, self.key)
+        self.changed.emit()
+
     def _toggle_network(self, part: str, checked: bool) -> None:
         self.state.set_network_selected(self.key, part, checked)
         self.changed.emit()
@@ -665,6 +730,7 @@ class ConfirmDialog(QDialog):
         single: bool = False,
         parent=None,
         network_plan: NetworkPlan | None = None,
+        interface_plan: InterfacePlan | None = None,
     ) -> None:
         super().__init__(parent)
         creates = sum(
@@ -672,7 +738,8 @@ class ConfirmDialog(QDialog):
         )
         updates = len(plan.operations) - creates
         group_ops, vlan_ops, prefix_ops = network_actions(network_plan)
-        network_ops = group_ops + vlan_ops + prefix_ops
+        interface_ops = interface_plan.operation_count if interface_plan else 0
+        network_ops = group_ops + vlan_ops + prefix_ops + interface_ops
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
         layout = QVBoxLayout(self)
@@ -693,6 +760,10 @@ class ConfirmDialog(QDialog):
             parts.append(f"{prefix_ops} prefix{'es' if prefix_ops != 1 else ''}")
         if group_ops:
             parts.append("1 VLAN group")
+        if interface_ops:
+            parts.append(
+                f"{interface_ops} interface{'s' if interface_ops != 1 else ''}"
+            )
         summary = label(", ".join(parts) or "No changes", "subheading")
         summary.setObjectName("confirmSummary")
         layout.addWidget(summary)
@@ -1063,6 +1134,149 @@ class NetworkTableModel(QAbstractTableModel):
             return False
         checked = Qt.CheckState(value) == Qt.CheckState.Checked
         self.state.set_network_selected(row.key, "all", checked)
+        self.refresh_rows()
+        self.selection_changed.emit()
+        return True
+
+
+IF_HEADERS = ("", "Device", "Interface", "UniFi port", "Config", "Change", "Status")
+
+
+def interface_status(state: ReviewState, row: InterfacePlanRow) -> tuple[str, str]:
+    outcome = state.outcomes.get(row.key)
+    if outcome is not None:
+        if outcome.status == "failed" or outcome.verification == "mismatch":
+            return "Failed", "danger"
+        if outcome.status == "success":
+            verified = outcome.verification == "verified"
+            return ("Verified" if verified else "Written"), "success"
+        return "Skipped", "warning"
+    if row.in_sync:
+        return ("Note" if row.notes else ""), "neutral"
+    if not row.selected_fields:
+        return "Not selected", "neutral"
+    if len(row.selected_fields) < len(row.changes):
+        return "Partly selected", "accent"
+    return "Ready", "success"
+
+
+class InterfaceTableModel(QAbstractTableModel):
+    selection_changed = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.state = ReviewState()
+        self.search = ""
+        self.items: tuple[InterfacePlanRow, ...] = ()
+
+    def set_state(self, state: ReviewState) -> None:
+        self.state = state
+        self.reload()
+
+    def set_filter(self, search: str) -> None:
+        self.search = search
+        self.reload()
+
+    def reload(self) -> None:
+        self.beginResetModel()
+        self.items = self.state.interface_rows(self.search)
+        self.endResetModel()
+
+    def refresh_rows(self) -> None:
+        keys = [row.key for row in self.items]
+        fresh = {row.key: row for row in self.state.interface_rows()}
+        self.items = tuple(fresh[key] for key in keys if key in fresh)
+        if self.items:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self.items) - 1, len(IF_HEADERS) - 1),
+            )
+
+    def key_at(self, row: int) -> str:
+        return self.items[row].key if 0 <= row < len(self.items) else ""
+
+    def row_of(self, key: str) -> int:
+        return next((i for i, row in enumerate(self.items) if row.key == key), -1)
+
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(self.items)
+
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(IF_HEADERS)
+
+    def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
+            return IF_HEADERS[section]
+        return None
+
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        row = self.items[index.row()] if 0 <= index.row() < len(self.items) else None
+        if index.column() == 0 and row is not None and not row.in_sync:
+            base |= Qt.ItemFlag.ItemIsUserCheckable
+        return base
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
+        if not index.isValid():
+            return None
+        row = self.items[index.row()]
+        column = index.column()
+        if role == KEY_ROLE:
+            return row.key
+        if column == 0 and role == Qt.ItemDataRole.CheckStateRole:
+            if row.in_sync:
+                return None
+            if not row.selected_fields:
+                return Qt.CheckState.Unchecked
+            if len(row.selected_fields) < len(row.changes):
+                return Qt.CheckState.PartiallyChecked
+            return Qt.CheckState.Checked
+        if role == Qt.ItemDataRole.DisplayRole:
+            if column == 1:
+                return row.device_name
+            if column == 2:
+                return row.interface_name
+            if column == 3:
+                return f"{row.port_idx} {row.port_name}".strip()
+            if column == 4:
+                return row.config.summary()
+            if column == 5:
+                return "In sync" if row.in_sync else "Changed"
+            if column == 6:
+                return interface_status(self.state, row)[0]
+        if role == TONE_ROLE:
+            if column == 5:
+                return "success" if row.in_sync else "warning"
+            if column == 6:
+                return interface_status(self.state, row)[1]
+        if role == Qt.ItemDataRole.ToolTipRole:
+            lines = [
+                f"{IF_FIELD_LABELS[c.field]}: {c.current_label} -> {c.desired_label}"
+                for c in row.changes
+            ] + list(row.notes)
+            return "\n".join(lines) or None
+        return None
+
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value,
+        role=Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        if index.column() != 0 or role != Qt.ItemDataRole.CheckStateRole:
+            return False
+        row = self.items[index.row()]
+        if row.in_sync:
+            return False
+        checked = Qt.CheckState(value) == Qt.CheckState.Checked
+        self.state.set_interface_selected(row.key, "all", checked)
         self.refresh_rows()
         self.selection_changed.emit()
         return True

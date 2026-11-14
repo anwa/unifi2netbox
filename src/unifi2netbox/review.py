@@ -12,6 +12,11 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 from unifi2netbox.config import BehaviorConfig
+from unifi2netbox.interface_plan import (
+    InterfacePlan,
+    InterfacePlanRow,
+    select_interface,
+)
 from unifi2netbox.networks import NetworkPlan, NetworkPlanRow, select_network
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
@@ -45,6 +50,7 @@ IN_SYNC = "in_sync"
 NETBOX_ONLY = "netbox_only"
 ATTENTION = "attention"
 NETWORKS = "networks"
+INTERFACES = "interfaces"
 ALL = "all"
 
 CATEGORY_LABELS = {
@@ -55,6 +61,7 @@ CATEGORY_LABELS = {
     ATTENTION: "Needs attention",
     NETBOX_ONLY: "NetBox only",
     NETWORKS: "Networks",
+    INTERFACES: "Interfaces",
 }
 
 FIELD_LABELS = {
@@ -127,6 +134,9 @@ class ReviewState:
         self.port_config_error = result.port_config_error if result else ""
         self.network_plan: NetworkPlan | None = result.network_plan if result else None
         self.network_outcomes: dict[str, list[WriteOutcome]] = {}
+        self.interface_plan: InterfacePlan | None = (
+            result.interface_plan if result else None
+        )
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -263,6 +273,7 @@ class ReviewState:
             counts[item.category] += 1
             counts[ATTENTION] += int(item.attention)
         counts[NETWORKS] = len(self.network_rows())
+        counts[INTERFACES] = len(self.interface_rows())
         return counts
 
     # -- networks -----------------------------------------------------------
@@ -293,6 +304,36 @@ class ReviewState:
     def set_network_selected(self, key: str, part: str, selected: bool) -> None:
         if self.network_plan is not None:
             self.network_plan = select_network(self.network_plan, key, part, selected)
+
+    # -- interfaces ---------------------------------------------------------
+
+    def interface_rows(self, text: str = "") -> tuple[InterfacePlanRow, ...]:
+        if self.interface_plan is None:
+            return ()
+        needle = text.strip().lower()
+        return tuple(
+            row
+            for row in self.interface_plan.rows
+            if not needle
+            or needle
+            in f"{row.device_name} {row.interface_name} {row.port_name} "
+            f"{row.config.summary()}".lower()
+        )
+
+    def interface_row(self, key: str) -> InterfacePlanRow | None:
+        return next((row for row in self.interface_rows() if row.key == key), None)
+
+    def interface_changes(self) -> int:
+        return sum(1 for row in self.interface_rows() if not row.in_sync)
+
+    def interface_operation_count(self) -> int:
+        return self.interface_plan.operation_count if self.interface_plan else 0
+
+    def set_interface_selected(self, key: str, field: str, selected: bool) -> None:
+        if self.interface_plan is not None:
+            self.interface_plan = select_interface(
+                self.interface_plan, key, field, selected
+            )
 
     def selected_count(self) -> int:
         return sum(

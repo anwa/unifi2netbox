@@ -335,3 +335,30 @@ def test_port_configs_for_returns_the_device_ports_by_index():
     key = next(row.key for row in state.rows() if "unifi_network:a" in row.key)
 
     assert {idx: c.name for idx, c in state.port_configs_for(key).items()} == {2: "Two"}
+
+
+def test_interface_rows_search_counts_and_selection():
+    from dataclasses import replace
+
+    from unifi2netbox.interface_plan import DevicePair, build_interface_plan
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort, InventoryVlan
+    from unifi2netbox.port_config import InventoryPortConfig
+    from unifi2netbox.review import INTERFACES
+
+    plan = build_interface_plan(
+        (DevicePair("u->n", "sw-a", "a", "1"),),
+        (InventoryPort("a", 1, "RJ45", 1000),),
+        (InventoryInterface("10", "1", "Port 1", "1000base-t"),),
+        (InventoryPortConfig("a", 1, "Uplink", True, "access", 20),),
+        (InventoryVlan("120", 20, "IoT", "9"),),
+        vlan_group_id="9",
+        vlan_group_name="UniFi Home",
+    )
+    state = ReviewState(replace(make_result(), interface_plan=plan), BehaviorConfig())
+
+    assert state.counts()[INTERFACES] == 1
+    assert state.interface_rows("uplink") and not state.interface_rows("nothing")
+    assert state.interface_changes() == 1
+    assert state.interface_operation_count() == 1
+    state.set_interface_selected("interface:10", "all", False)
+    assert state.interface_operation_count() == 0

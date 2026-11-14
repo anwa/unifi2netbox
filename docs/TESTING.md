@@ -171,6 +171,8 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- the Interfaces view lists paired ports with field checkboxes, keeps VLAN
+	fields tied to the mode, counts interface writes and passes them to the run,
 - interface writes patch only selected fields, skip on NetBox or UniFi drift,
 	read back every write, write nothing in dry runs and run between network
 	and device writes,

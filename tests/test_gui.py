@@ -568,6 +568,7 @@ def fake_runner(monkeypatch, window):
         unifi_config=None,
         journal_path=None,
         network_plan=None,
+        interface_plan=None,
     ):
         started.update(
             plan=write_plan,
@@ -579,6 +580,7 @@ def fake_runner(monkeypatch, window):
             unifi_config=unifi_config,
             journal_path=journal_path,
             network_plan=network_plan,
+            interface_plan=interface_plan,
         )
         return True
 
@@ -1374,3 +1376,104 @@ def test_detail_panel_explains_missing_port_configuration(qtbot, tmp_path, pool)
 
     summary = window.detail.findChild(QLabel, "portsSummary").text()
     assert "permission denied" in summary
+
+
+def interface_result():
+    from dataclasses import replace
+
+    from unifi2netbox.interface_plan import DevicePair, build_interface_plan
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort, InventoryVlan
+    from unifi2netbox.port_config import InventoryPortConfig
+
+    plan = build_interface_plan(
+        (DevicePair("unifi_network:a->netbox:1", "sw-a", "a", "1"),),
+        (
+            InventoryPort("a", 1, "RJ45", 1000),
+            InventoryPort("a", 2, "RJ45", 1000),
+        ),
+        (
+            InventoryInterface("10", "1", "Port 1", "1000base-t"),
+            InventoryInterface(
+                "11", "1", "Port 2", "1000base-t", mode="access", untagged_vlan_id="120"
+            ),
+        ),
+        (
+            InventoryPortConfig("a", 1, "Uplink", True, "tagged", 1, (20,)),
+            InventoryPortConfig("a", 2, "Cam", True, "access", 20),
+        ),
+        (InventoryVlan("101", 1, "Default", "9"), InventoryVlan("120", 20, "IoT", "9")),
+        vlan_group_id="9",
+        vlan_group_name="UniFi Home",
+    )
+    return replace(preview_result(), interface_plan=plan)
+
+
+def test_interfaces_filter_shows_table_and_field_checkboxes(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, interface_result())
+
+    assert window.segments["interfaces"].text() == "Interfaces 2"
+    assert window.cards["interfaces"].count == 1
+    window.set_filter("interfaces")
+
+    assert window.table_stack.currentWidget() is window.interface_table
+    model = window.interface_model
+    assert [model.data(model.index(r, 2)) for r in range(model.rowCount())] == [
+        "Port 1",
+        "Port 2",
+    ]
+    assert model.data(model.index(0, 4)) == "tagged 20, native 1"
+    assert model.data(model.index(1, 5)) == "In sync"
+    title = window.detail.findChild(QLabel, "detailTitle")
+    assert title.text() == "sw-a Port 1"
+    mode = window.detail.findChild(QCheckBox, "interface_mode")
+    tagged = window.detail.findChild(QCheckBox, "interface_tagged_vlans")
+    assert mode.isChecked() and "- \u2192 tagged" in mode.text()
+    assert "VLAN 20 IoT" in tagged.text()
+
+
+def test_interface_writes_count_and_reach_the_job(qtbot, tmp_path, pool, monkeypatch):
+    window = review_window(qtbot, tmp_path, pool, interface_result())
+    base = len(window.review.plan.operations)
+    assert window.execute_plan_button.text() == f"Apply {base + 1} changes..."
+    assert "1 interface writes" in window.selection_label.text()
+
+    window.set_filter("interfaces")
+    window.detail.findChild(QCheckBox, "interface_mode").setChecked(False)
+    assert window.review.interface_operation_count() == 0
+    window.detail.findChild(QCheckBox, "interface_tagged_vlans").setChecked(True)
+    row = window.review.interface_row("interface:10")
+    assert row.selected_fields == ("mode", "tagged_vlans")
+
+    started = fake_runner(monkeypatch, window)
+    window.execute_plan_button.click()
+    assert started["interface_plan"] is window.review.interface_plan
+
+
+def test_interface_blocker_is_shown_without_port_configuration(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.interface_plan import InterfacePlan
+
+    result = replace(
+        preview_result(),
+        interface_plan=InterfacePlan(blocker="Port configuration unavailable."),
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    window.set_filter("interfaces")
+
+    placeholder = window.detail.findChild(QLabel, "detailPlaceholder")
+    assert placeholder.text() == "Port configuration unavailable."
+
+
+def test_confirm_dialog_lists_interface_writes(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, interface_result())
+
+    confirm = ConfirmDialog(
+        window.review,
+        window.review.plan,
+        dry_run=False,
+        interface_plan=window.review.interface_plan,
+    )
+    qtbot.addWidget(confirm)
+
+    assert "1 interface" in confirm.findChild(QLabel, "confirmSummary").text()
