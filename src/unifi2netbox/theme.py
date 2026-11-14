@@ -103,6 +103,11 @@ def tone_colors(tone: str, palette: Colors | None = None) -> tuple[str, str]:
     }.get(tone, (c.text_secondary, c.neutral_soft))
 
 
+def dark_for(choice: str) -> bool | None:
+    """Map a saved theme choice to apply_theme's ``dark`` argument."""
+    return {"light": False, "dark": True}.get(choice)
+
+
 def apply_theme(app: QApplication, dark: bool | None = None) -> None:
     """Apply Fusion, the matching palette and the style sheet; follow changes.
 
@@ -227,6 +232,10 @@ QLineEdit, QComboBox {{
 }}
 QLineEdit:focus, QComboBox:focus {{ border-color: {c.accent}; }}
 QToolButton::menu-indicator {{ image: none; width: 0; }}
+QToolButton[variant="ghost"]::menu-button {{
+    border: none; background: transparent; width: 14px;
+}}
+QToolButton#themeButton {{ padding-right: 18px; }}
 QLabel#cardCount {{ font-size: 18pt; font-weight: 700; background: transparent; }}
 QLabel#cardCaption {{ color: {c.text_secondary}; background: transparent; }}
 QTableView {{

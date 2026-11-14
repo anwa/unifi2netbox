@@ -6,6 +6,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.4.2
+
+### Added
+
+- Theme button next to Settings: one click switches between light and dark,
+	its menu offers Follow system, Light and Dark. The choice is saved in the new
+	`[ui] theme` setting and applied at startup.
+
+### Validation
+
+- Added GUI tests for toggling and saving the theme and a config roundtrip test
+	for the `[ui]` section; offscreen light and dark header renders reviewed.
+
 ## v0.4.1
 
 ### Changed

@@ -1091,3 +1091,31 @@ def test_unified_settings_close_waits_for_both_checks(qtbot, tmp_path, pool):
         release_netbox.set()
         release_unifi.set()
     qtbot.waitUntil(lambda: not widget.isVisible())
+
+
+def test_theme_button_toggles_and_saves_choice(qtbot, qapp, tmp_path, pool):
+    from unifi2netbox import theme
+    from unifi2netbox.config import load_ui_config
+
+    theme.apply_theme(qapp, dark=False)
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    try:
+        assert window.theme_button.toolTip() == "Switch to dark mode"
+
+        window.theme_button.click()
+        assert theme.is_dark()
+        assert qapp.palette().window().color().name() == theme.DARK.window
+        assert load_ui_config(tmp_path / "config.toml").theme == "dark"
+        assert window.theme_button.toolTip() == "Switch to light mode"
+        assert window.theme_actions["dark"].isChecked()
+
+        window.theme_button.click()
+        assert not theme.is_dark()
+        assert load_ui_config(tmp_path / "config.toml").theme == "light"
+
+        window.theme_actions["system"].trigger()
+        assert load_ui_config(tmp_path / "config.toml").theme == "system"
+        assert window.theme_actions["system"].isChecked()
+    finally:
+        theme.apply_theme(qapp, dark=False)

@@ -15,12 +15,17 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtCore import QLocale, QThreadPool
     from PySide6.QtWidgets import QApplication
 
+    from unifi2netbox.config import ConfigError, load_ui_config
     from unifi2netbox.gui import MainWindow
-    from unifi2netbox.theme import apply_theme
+    from unifi2netbox.theme import apply_theme, dark_for
 
     QLocale.setDefault(QLocale("en_GB"))
     app = QApplication([sys.argv[0]])
-    apply_theme(app)
+    try:
+        theme_choice = load_ui_config(arguments.config).theme
+    except ConfigError:
+        theme_choice = "system"
+    apply_theme(app, dark_for(theme_choice))
     app.setApplicationName("unifi2netbox")
     app.setApplicationVersion(version("unifi2netbox"))
     pool = QThreadPool(app)

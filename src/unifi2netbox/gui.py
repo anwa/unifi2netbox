@@ -15,7 +15,7 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -50,11 +50,14 @@ from unifi2netbox.config import (
     BehaviorConfig,
     ConfigError,
     NetBoxConfig,
+    UiConfig,
     UniFiConfig,
     load_behavior_config,
     load_config,
+    load_ui_config,
     load_unifi_config,
     save_connections,
+    save_ui_config,
 )
 from unifi2netbox.connections import Checker, ConnectionRunner, check_unifi_connection
 from unifi2netbox.gui_review import (
@@ -926,6 +929,10 @@ class MainWindow(QMainWindow):
             self.behavior = load_behavior_config(config_path)
         except ConfigError:
             self.behavior = BehaviorConfig()
+        try:
+            self.ui = load_ui_config(config_path)
+        except ConfigError:
+            self.ui = UiConfig()
         self.review = ReviewState(behavior=self.behavior)
         self.last_result: InventoryPreviewResult | None = None
         self.netbox = ConnectionPanel(config_path, pool, checker)
@@ -1049,6 +1056,7 @@ class MainWindow(QMainWindow):
         settings.setProperty("variant", "ghost")
         settings.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         layout.addWidget(settings)
+        layout.addWidget(self._build_theme_button())
         more = QToolButton()
         more.setObjectName("moreButton")
         more.setText("⋯")
@@ -1063,6 +1071,60 @@ class MainWindow(QMainWindow):
         more.setMenu(menu)
         layout.addWidget(more)
         return header
+
+    def _build_theme_button(self) -> QToolButton:
+        button = QToolButton()
+        button.setObjectName("themeButton")
+        button.setProperty("variant", "ghost")
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        button.clicked.connect(self.toggle_theme)
+        menu = QMenu(button)
+        self.theme_actions: dict[str, QAction] = {}
+        group = QActionGroup(menu)
+        for choice, text in (
+            ("system", "Follow system"),
+            ("light", "Light"),
+            ("dark", "Dark"),
+        ):
+            action = QAction(text, menu)
+            action.setCheckable(True)
+            action.triggered.connect(
+                lambda _c=False, value=choice: self.set_theme(value)
+            )
+            group.addAction(action)
+            menu.addAction(action)
+            self.theme_actions[choice] = action
+        button.setMenu(menu)
+        self.theme_button = button
+        self.update_theme_button()
+        return button
+
+    def toggle_theme(self) -> None:
+        """Switch between light and dark, starting from what is shown now."""
+        self.set_theme("light" if theme.is_dark() else "dark")
+
+    def set_theme(self, choice: str) -> None:
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            theme.apply_theme(app, theme.dark_for(choice))
+        self.ui = UiConfig(theme=choice)
+        try:
+            save_ui_config(self.path, self.ui)
+        except ConfigError as error:
+            self.statusBar().showMessage(f"Theme not saved: {error}")
+        self.update_theme_button()
+        self.table.viewport().update()
+
+    def update_theme_button(self) -> None:
+        dark = theme.is_dark()
+        font = self.theme_button.font()
+        font.setPointSizeF(13)
+        self.theme_button.setFont(font)
+        self.theme_button.setText("☀" if dark else "☾")
+        self.theme_button.setToolTip(
+            "Switch to light mode" if dark else "Switch to dark mode"
+        )
+        self.theme_actions[self.ui.theme].setChecked(True)
 
     def _build_empty_page(self) -> QWidget:
         page = QWidget()
