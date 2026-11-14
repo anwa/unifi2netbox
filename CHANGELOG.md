@@ -6,6 +6,27 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.6
+
+### Added
+
+- M6 slice 3: effective UniFi port configuration is read from the internal
+  Network endpoints `stat/device`, `rest/portconf` and `rest/networkconf`
+  (GET only, UniFi Network 11.0 only). Per port: name, configured enable state,
+  profile, mode (`disabled`, `access`, `tagged`, `tagged-all`, `unknown`),
+  native VLAN, tagged VLANs and LAG membership. Profiles take precedence over
+  port overrides; trunks carrying every VLAN stay explicit `tagged-all` and are
+  never expanded. Unknown profiles, networks or rules are reported instead of
+  guessed. Only allow-listed fields leave the raw payloads, so network secrets
+  are never stored; failures keep the official inventory and are recorded.
+
+### Validation
+
+- Added resolver tests (forwarding rules, profile precedence, disabled versus
+  down, unknown inputs, LAG, secret exclusion), reader tests for the version
+  gate and tolerant failures, and a snapshot round trip. Live read-only check:
+  195 of 195 ports resolved on 17 devices without notes.
+
 ## v0.6.5
 
 ### Added

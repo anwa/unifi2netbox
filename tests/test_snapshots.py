@@ -180,3 +180,24 @@ def test_networks_and_ipam_roundtrip(tmp_path):
     store.save_current(snapshot)
 
     assert store.load_current(InventorySource.NETBOX) == snapshot
+
+
+def test_port_configs_round_trip(tmp_path):
+    from unifi2netbox.inventory import InventorySnapshot, InventorySource
+    from unifi2netbox.port_config import InventoryPortConfig
+
+    config = InventoryPortConfig(
+        "sw", 3, "Cam", True, "tagged", 1, (20, 30), "Trunk", 7, ("note",)
+    )
+    snapshot = InventorySnapshot(
+        InventorySource.UNIFI_NETWORK,
+        "2026-11-14T00:00:00+00:00",
+        port_configs=(config,),
+        port_config_error="limited",
+    )
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    store.save_current(snapshot)
+
+    loaded = store.load_current(InventorySource.UNIFI_NETWORK)
+    assert loaded.port_configs == (config,)
+    assert loaded.port_config_error == "limited"

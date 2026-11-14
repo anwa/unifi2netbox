@@ -59,6 +59,19 @@ Read-only probe on 2026-11-14 against the installed Network 11.0.99 (19 devices,
 | Internal `api/s/{site}/rest/portconf` | Port profiles with native network and tagged VLAN rule |
 | Internal `api/s/{site}/rest/networkconf` | Networks with VLAN and subnet; also contains secrets, so only allow-listed fields may be read |
 
+Port configuration resolution (0.6.6, live read-only on 2026-11-14 against
+Network 11.0.99): internal devices map to official devices by MAC (19 of 19).
+Port entries hold their override values; a port with `portconf_id` takes
+`forward`, `native_networkconf_id`, `tagged_vlan_mgmt` and
+`excluded_networkconf_ids` from the profile. `forward` values seen: `all`,
+`native`, `disabled`, `customize` (with `tagged_vlan_mgmt` `auto`, `block_all`
+or `custom`). The default network has no VLAN (`vlan_enabled` false) and is
+VLAN 1. `link_aggregation_groups` was present but empty on all 13 switches and
+`aggregated_by` false on every port, so LAG handling is covered by offline tests
+only. Internal network IDs differ from the official network IDs; networks are
+related by VLAN ID. Result: 195 of 195 ports resolved (90 `tagged-all`, 46
+`access`, 57 `disabled`, 2 `tagged`) without unknown profiles or networks.
+
 The official API therefore leaves a demonstrated coverage gap for M6. Internal
 endpoints are used read-only, gated to the validated 11.0 series and covered by
 version-specific fixtures; see the M6 decision in `IMPLEMENTATION_PLAN.md`.

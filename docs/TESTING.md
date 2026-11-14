@@ -171,6 +171,11 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- internal port configuration resolves profiles before overrides, keeps
+	all-VLAN trunks as explicit `tagged-all`, separates disabled from down,
+	reports unknown profiles, networks and rules, groups LAG members, is only
+	read for UniFi Network 11.0, never keeps network secrets and leaves the
+	official inventory intact when the internal endpoints fail,
 - the Networks view lists networks with separate VLAN and prefix checkboxes,
 	counts selected network writes in the apply bar and passes them to the run,
 - network writes run group -> VLANs -> prefixes with UniFi/NetBox re-reads,

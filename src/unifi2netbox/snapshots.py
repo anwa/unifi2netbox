@@ -19,6 +19,7 @@ from unifi2netbox.inventory import (
     InventoryVlan,
     InventoryVlanGroup,
 )
+from unifi2netbox.port_config import InventoryPortConfig
 
 SNAPSHOT_SCHEMA_VERSION = 1
 
@@ -138,6 +139,8 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "vlans": [asdict(item) for item in snapshot.vlans],
         "prefixes": [asdict(item) for item in snapshot.prefixes],
         "ipam_error": snapshot.ipam_error,
+        "port_configs": [asdict(item) for item in snapshot.port_configs],
+        "port_config_error": snapshot.port_config_error,
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -185,7 +188,16 @@ def _decode(raw: str) -> InventorySnapshot:
     vlan_groups = payload.get("vlan_groups", [])
     vlans = payload.get("vlans", [])
     prefixes = payload.get("prefixes", [])
-    for items in (ports, interfaces, networks, vlan_groups, vlans, prefixes):
+    port_configs = payload.get("port_configs", [])
+    for items in (
+        ports,
+        interfaces,
+        networks,
+        vlan_groups,
+        vlans,
+        prefixes,
+        port_configs,
+    ):
         if not isinstance(items, list) or not all(
             isinstance(item, dict) for item in items
         ):
@@ -211,4 +223,15 @@ def _decode(raw: str) -> InventorySnapshot:
         vlans=tuple(InventoryVlan(**item) for item in vlans),
         prefixes=tuple(InventoryPrefix(**item) for item in prefixes),
         ipam_error=str(payload.get("ipam_error", "")),
+        port_configs=tuple(
+            InventoryPortConfig(
+                **item
+                | {
+                    "tagged_vids": tuple(item.get("tagged_vids", ())),
+                    "notes": tuple(item.get("notes", ())),
+                }
+            )
+            for item in port_configs
+        ),
+        port_config_error=str(payload.get("port_config_error", "")),
     )

@@ -9,6 +9,15 @@ import requests
 
 from unifi2netbox.config import NetBoxConfig, UniFiConfig
 from unifi2netbox.netbox import ReadOnlySession, RedirectError
+from unifi2netbox.port_config import (
+    InventoryPortConfig,
+    allowed_networks,
+    allowed_profiles,
+    resolve_port_configs,
+)
+
+# Internal Network endpoints are only read for validated versions.
+INTERNAL_API_SERIES = ("11.0.",)
 
 
 class InventorySource(StrEnum):
@@ -155,6 +164,8 @@ class InventorySnapshot:
     vlans: tuple[InventoryVlan, ...] = ()
     prefixes: tuple[InventoryPrefix, ...] = ()
     ipam_error: str = ""
+    port_configs: tuple[InventoryPortConfig, ...] = ()
+    port_config_error: str = ""
 
 
 def _text(value: object) -> str:
@@ -618,6 +629,57 @@ def _unifi_json(client: httpx.Client, path: str, **params) -> dict[str, object]:
     return payload
 
 
+def _read_port_configs(
+    client: httpx.Client,
+    config: UniFiConfig,
+    version: str,
+    reference: str,
+    raw_devices: list[dict[str, object]],
+) -> tuple[tuple[InventoryPortConfig, ...], str]:
+    """Port configuration from internal endpoints, or an explanation.
+
+    Read-only and tolerant: any failure leaves the official data untouched.
+    Raw internal payloads are reduced to allow-listed fields right here and
+    never stored, so network secrets do not leave this function.
+    """
+    if not version.startswith(INTERNAL_API_SERIES):
+        return (), (
+            "Port configuration is only read for validated UniFi Network "
+            f"{', '.join(s.rstrip('.') for s in INTERNAL_API_SERIES)}; "
+            f"installed {version or 'unknown'}."
+        )
+    base = f"{config.url.rstrip('/')}/proxy/network/api/s/{reference}/"
+    try:
+        devices = _internal_rows(client, base + "stat/device")
+        profiles = allowed_profiles(_internal_rows(client, base + "rest/portconf"))
+        networks = allowed_networks(_internal_rows(client, base + "rest/networkconf"))
+    except InventoryError as error:
+        return (), f"Port configuration unavailable: {error}"
+    except httpx.HTTPError, OSError, ValueError, TypeError:
+        return (), "Port configuration unavailable due to transport errors."
+    by_mac = {
+        mac: _text(row.get("id"))
+        for row in raw_devices
+        if (mac := _normalize_mac(row.get("macAddress")).replace(":", "").lower())
+    }
+    return resolve_port_configs(devices, profiles, networks, by_mac), ""
+
+
+def _internal_rows(client: httpx.Client, url: str) -> list[object]:
+    response = client.get(url)
+    if 300 <= response.status_code < 400:
+        raise InventoryError("redirect refused.")
+    if response.status_code in {401, 403}:
+        raise InventoryError("permission denied.")
+    if response.status_code != 200:
+        raise InventoryError(f"HTTP {response.status_code}.")
+    payload = response.json()
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        raise InventoryError("unsupported JSON shape.")
+    return rows
+
+
 def _unifi_page(
     data: dict[str, object], offset: int, requested_limit: int
 ) -> list[dict]:
@@ -898,6 +960,10 @@ def read_unifi_inventory(
                 network = _normalize_unifi_network(row, detail)
                 if network is not None:
                     networks.append(network)
+
+            port_configs, port_config_error = _read_port_configs(
+                client, config, version, site["internalReference"], raw_devices
+            )
     except InventoryError:
         raise
     except (httpx.HTTPError, OSError, ValueError, TypeError) as error:
@@ -915,4 +981,6 @@ def read_unifi_inventory(
         unifi_raw_devices=tuple(raw_devices),
         ports=tuple(ports),
         networks=tuple(networks),
+        port_configs=port_configs,
+        port_config_error=port_config_error,
     )

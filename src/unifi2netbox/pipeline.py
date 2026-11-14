@@ -36,6 +36,7 @@ from unifi2netbox.matching import (
 )
 from unifi2netbox.network_execute import execute_network_plan
 from unifi2netbox.networks import NetworkPlan, build_network_plan
+from unifi2netbox.port_config import InventoryPortConfig
 from unifi2netbox.preview import (
     ChangePreview,
     DifferencePreview,
@@ -89,6 +90,8 @@ class InventoryPreviewResult:
     unifi_raw_devices: tuple[dict[str, object], ...] = ()
     unifi_ports: tuple[InventoryPort, ...] = ()
     netbox_interfaces: tuple[InventoryInterface, ...] = ()
+    unifi_port_configs: tuple[InventoryPortConfig, ...] = ()
+    port_config_error: str = ""
     network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
@@ -214,6 +217,8 @@ def build_inventory_preview(
         unifi_raw_devices=unifi_snapshot.unifi_raw_devices,
         unifi_ports=unifi_snapshot.ports,
         netbox_interfaces=netbox_snapshot.interfaces,
+        unifi_port_configs=unifi_snapshot.port_configs,
+        port_config_error=unifi_snapshot.port_config_error,
         network_plan=build_network_plan(
             unifi_snapshot.networks,
             netbox_snapshot.sites,

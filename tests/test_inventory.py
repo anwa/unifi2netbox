@@ -428,6 +428,7 @@ def test_unifi_inventory_reads_ports_from_device_details():
                     "id": "sw",
                     "name": "switch",
                     "model": "US 8 60W",
+                    "macAddress": "aa:bb:cc:00:00:01",
                     "interfaces": ["ports"],
                 },
                 {
@@ -466,9 +467,35 @@ def test_unifi_inventory_reads_ports_from_device_details():
             },
         },
     }
+    internal = {
+        "stat/device": [
+            {
+                "mac": "AA:BB:CC:00:00:01",
+                "port_table": [
+                    {"port_idx": 1, "name": "Uplink", "enable": True, "forward": "all"},
+                    {
+                        "port_idx": 2,
+                        "name": "Port 2",
+                        "enable": False,
+                        "forward": "disabled",
+                    },
+                ],
+            }
+        ],
+        "rest/portconf": [],
+        "rest/networkconf": [
+            {"_id": "lan", "purpose": "corporate", "vlan_enabled": False},
+            {"_id": "wan", "purpose": "wan", "x_password": "synthetic-secret"},
+        ],
+    }
     requested = []
 
     def handle(request):
+        assert request.method == "GET"
+        if "/api/s/d/" in request.url.path:
+            path = request.url.path.split("/api/s/d/", 1)[1]
+            requested.append("internal:" + path)
+            return httpx.Response(200, json={"data": internal[path]})
         path = request.url.path.split("/integration/v1/", 1)[1]
         requested.append(path)
         return httpx.Response(200, json=responses[path])
@@ -479,6 +506,15 @@ def test_unifi_inventory_reads_ports_from_device_details():
     )
 
     assert f"sites/{SITE_ID}/devices/ap" not in requested
+    assert snapshot.port_config_error == ""
+    uplink, disabled = snapshot.port_configs
+    assert (uplink.device_id, uplink.name, uplink.summary()) == (
+        "sw",
+        "Uplink",
+        "tagged-all, native 1",
+    )
+    assert (disabled.enabled, disabled.summary()) == (False, "disabled")
+    assert "synthetic-secret" not in repr(snapshot)
     first, second = snapshot.ports
     assert (first.device_id, first.idx, first.connector) == ("sw", 1, "RJ45")
     assert (first.link_state, first.speed_mbps) == ("UP", 100)
@@ -589,3 +625,37 @@ def test_netbox_inventory_survives_missing_ipam_permission(netbox_transport):
     assert [device.source_id for device in snapshot.devices] == ["7", "8"]
     assert snapshot.vlans == ()
     assert snapshot.ipam_error.startswith("NetBox IPAM could not be read")
+
+
+def test_port_config_is_skipped_for_unvalidated_versions(unifi_api):
+    calls, _, transport = unifi_api
+    snapshot = read_unifi_inventory(
+        UniFiConfig("https://console.invalid", "synthetic-key", site=SITE_ID),
+        page_size=1,
+        transport=transport,
+    )
+
+    assert not any("/api/s/" in str(call) for call in calls)
+
+    assert snapshot.port_configs == ()
+    assert "validated UniFi Network 11.0" in snapshot.port_config_error
+    assert "10.6.100" in snapshot.port_config_error
+
+
+def test_port_config_failure_keeps_the_official_inventory():
+    from unifi2netbox.inventory import _read_port_configs
+
+    def handle(request):
+        return httpx.Response(403, json={"secret": "synthetic-secret"})
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        configs, error = _read_port_configs(
+            client,
+            UniFiConfig("https://console.invalid", "synthetic-key"),
+            "11.0.99",
+            "d",
+            [],
+        )
+
+    assert configs == ()
+    assert error == "Port configuration unavailable: permission denied."
