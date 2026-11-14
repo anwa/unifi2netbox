@@ -191,6 +191,10 @@ The focused tests validate that:
 	bays, sends the key only to the storage endpoint, keeps the device when
 	the storage read fails, round-trips through the snapshot store, joins
 	matching only when fresh and lists bays display-only without serials,
+- drive inventory items are planned per bay (create, update, in sync,
+	conflict, kept), never cleared by empty UniFi values, written after
+	devices with a fresh bay check, duplicate-safe creates, interrupted-create
+	lookup, drift-checked updates, read-back and no writes in dry runs,
 - optional devices merge with precedence Network, Access, Protect; only
 	fresh Access reads join the preview, the pre-write re-read includes
 	Access and tolerates its failure, Access rows never get the default role

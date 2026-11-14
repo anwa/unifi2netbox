@@ -214,10 +214,12 @@ class WriteExecutionJob(QRunnable):
         protect_config=None,
         access_config=None,
         drive_config=None,
+        disk_plan=None,
     ) -> None:
         super().__init__()
         self.access_config = access_config
         self.drive_config = drive_config
+        self.disk_plan = disk_plan
         self.unifi_config = unifi_config
         self.journal_path = journal_path
         self.network_plan = network_plan
@@ -256,6 +258,7 @@ class WriteExecutionJob(QRunnable):
                 protect_config=self.protect_config,
                 access_config=self.access_config,
                 drive_config=self.drive_config,
+                disk_plan=self.disk_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -298,6 +301,7 @@ class WriteExecutionRunner(QObject):
         protect_config=None,
         access_config=None,
         drive_config=None,
+        disk_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -319,6 +323,7 @@ class WriteExecutionRunner(QObject):
             protect_config=protect_config,
             access_config=access_config,
             drive_config=drive_config,
+            disk_plan=disk_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1869,11 +1874,13 @@ class MainWindow(QMainWindow):
         network_ops = self.review.network_operation_count()
         interface_ops = self.review.interface_operation_count()
         cable_ops = self.review.cable_operation_count()
+        disk_ops = self.review.disk_operation_count()
         operations = (
             (len(plan.operations) if plan is not None else 0)
             + network_ops
             + interface_ops
             + cable_ops
+            + disk_ops
         )
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
@@ -2046,6 +2053,8 @@ class MainWindow(QMainWindow):
         cable_plan = self.review.cable_plan if device_key is None else None
         network_ops += interface_plan.operation_count if interface_plan else 0
         network_ops += cable_plan.operation_count if cable_plan else 0
+        disk_plan = self.review.disk_plan if device_key is None else None
+        network_ops += disk_plan.operation_count if disk_plan else 0
         if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
@@ -2063,6 +2072,7 @@ class MainWindow(QMainWindow):
             network_plan=network_plan,
             interface_plan=interface_plan,
             cable_plan=cable_plan,
+            disk_plan=disk_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -2089,6 +2099,7 @@ class MainWindow(QMainWindow):
             protect_config=self.protect.config,
             access_config=self.access.config,
             drive_config=self.drive.config,
+            disk_plan=disk_plan,
         )
         self.update_check_action()
 

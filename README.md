@@ -274,6 +274,8 @@ with device-read permission. UniFi Drive is optional as well and uses
 documents a Drive API only the public system information and the internal
 storage endpoint (drive bays: model, serial, firmware, size, state) are read.
 The UNAS appears as one device; its drive bays are listed in the details.
+Once the UNAS exists in NetBox, its drives can be written as inventory items
+(`Disk <slot>`: part ID, serial, description); items are never deleted.
 Optional services show a header chip once set.
 
 - Windows: `%LOCALAPPDATA%\unifi2netbox\config.toml`.

@@ -898,3 +898,118 @@ def test_reread_includes_the_unas(monkeypatch):
     )
 
     assert error == "" and [d.source_id for d in merged.devices] == ["sw", "drive:u1"]
+
+
+def test_merge_carries_drive_bays_with_prefixed_device_ids():
+    from unifi2netbox.inventory import InventoryDisk
+    from unifi2netbox.pipeline import DRIVE_PREFIX, merge_optional_devices
+
+    network = _snapshot(InventorySource.UNIFI_NETWORK, [InventoryDevice("sw", "s")])
+    drive = InventorySnapshot(
+        InventorySource.UNIFI_DRIVE,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("u1", "NAS", kind="nas"),),
+        disks=(InventoryDisk("u1", "1", "WD80", "S1"),),
+    )
+
+    merged, _ = merge_optional_devices(network, ((DRIVE_PREFIX, drive),))
+
+    assert [(d.device_id, d.slot) for d in merged.disks] == [("drive:u1", "1")]
+
+
+def test_preview_plans_drive_items_for_a_matched_unas(monkeypatch, tmp_path):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import DriveConfig
+    from unifi2netbox.inventory import InventoryDisk, InventoryItem
+    from unifi2netbox.refresh import RefreshResult, RefreshStatus
+
+    netbox = InventorySnapshot(
+        InventorySource.NETBOX,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("9", "NAS", model="UNAS Pro", site="Home"),),
+        inventory_items=(InventoryItem("40", "9", "Disk 2", "WD80", "OLD", ""),),
+    )
+    unifi = _snapshot(InventorySource.UNIFI_NETWORK, [])
+    drive = InventorySnapshot(
+        InventorySource.UNIFI_DRIVE,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("u1", "NAS", model="UNASPRO", kind="nas"),),
+        disks=(
+            InventoryDisk("u1", "1", "WD80", "S1", kind="HDD"),
+            InventoryDisk("u1", "2", "WD80", "S2", kind="HDD"),
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "refresh_snapshots",
+        lambda *args: RefreshResult(
+            RefreshStatus(snapshot=netbox),
+            RefreshStatus(snapshot=unifi),
+            None,
+            None,
+            RefreshStatus(snapshot=drive),
+        ),
+    )
+
+    result = pipeline.build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UniFiConfig("https://udm.invalid", "uf"),
+        include_all_netbox_delete_candidates=False,
+        drive_config=DriveConfig("https://unas.invalid", "k"),
+    )
+
+    rows = {row.disk.slot: row.action for row in result.disk_plan.rows}
+    assert rows == {"1": "create", "2": "update"}
+    assert result.disk_plan.rows[0].netbox_device_id == "9"
+
+
+def test_drive_items_run_after_devices_with_fresh_bays(monkeypatch):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import BehaviorConfig
+    from unifi2netbox.disks import build_disk_plan
+    from unifi2netbox.inventory import InventoryDisk
+    from unifi2netbox.write_execute import WriteExecutionResult
+    from unifi2netbox.write_journal import initialize_journal
+    from unifi2netbox.write_plan import WritePlan, WritePlanSummary
+
+    order = []
+    seen = {}
+    disk = InventoryDisk("drive:u1", "1", "WD80", "S1")
+    plan = WritePlan((), (), False, WritePlanSummary(0, 0, 0, 0, 0, (), False, ""))
+
+    def fake_devices(*args, **kwargs):
+        order.append("devices")
+        return WriteExecutionResult(
+            journal=initialize_journal(plan, run_id="r", started_at="s")
+        )
+
+    def fake_disks(disk_plan, backend, **kwargs):
+        order.append("disks")
+        seen.update(kwargs)
+        return ()
+
+    snapshot = InventorySnapshot(
+        InventorySource.UNIFI_NETWORK, "2026-11-14T12:00:00+00:00", disks=(disk,)
+    )
+    monkeypatch.setattr(pipeline, "execute_write_plan", fake_devices)
+    monkeypatch.setattr(pipeline, "execute_disk_plan", fake_disks)
+    monkeypatch.setattr(pipeline, "reread_unifi_snapshot", lambda *args: (snapshot, ""))
+
+    pipeline.run_write_execution(
+        NETBOX,
+        BehaviorConfig(),
+        None,
+        plan,
+        role_overrides={},
+        site_overrides={},
+        status_overrides={},
+        device_type_overrides={},
+        dry_run=True,
+        unifi_config=UNIFI,
+        disk_plan=build_disk_plan((disk,), {"drive:u1": "9"}, {}, ()),
+    )
+
+    assert order == ["devices", "disks"]
+    assert seen["source_disks"] == {("drive:u1", "1"): disk}
+    assert seen["dry_run"] is True

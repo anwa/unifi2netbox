@@ -120,6 +120,8 @@ def netbox_transport(monkeypatch):
         (200, {"count": 0, "next": None, "previous": None, "results": []}),
         (200, {"count": 0, "next": None, "previous": None, "results": []}),
         (200, {"count": 0, "next": None, "previous": None, "results": []}),
+        # inventory items
+        (200, {"count": 0, "next": None, "previous": None, "results": []}),
         (
             200,
             {
@@ -708,3 +710,35 @@ def test_netbox_interfaces_carry_their_cable_and_interface_peers():
 
     assert (cabled.cable_id, cabled.link_peer_ids) == ("4", ("22",))
     assert (to_port.cable_id, to_port.link_peer_ids) == ("5", ())
+
+
+def test_netbox_inventory_items_are_optional(netbox_transport):
+    _, responses = netbox_transport
+    responses[8] = (403, {"detail": "You do not have permission."})
+
+    snapshot = read_netbox_inventory(
+        NetBoxConfig("https://netbox.invalid", "synthetic-token"),
+        page_size=1,
+    )
+
+    assert [device.source_id for device in snapshot.devices] == ["7", "8"]
+    assert snapshot.inventory_items == ()
+    assert snapshot.inventory_item_error.startswith(
+        "NetBox inventory items could not be read"
+    )
+
+
+def test_netbox_inventory_items_are_normalized():
+    from unifi2netbox.inventory import InventoryItem, _normalize_netbox_inventory_item
+
+    assert _normalize_netbox_inventory_item(
+        {
+            "id": 4,
+            "device": {"id": 9},
+            "name": "Disk 1",
+            "part_id": "WD80",
+            "serial": " S1 ",
+            "description": "HDD",
+        }
+    ) == InventoryItem("4", "9", "Disk 1", "WD80", "S1", "HDD")
+    assert _normalize_netbox_inventory_item({"id": 4, "name": "x"}) is None

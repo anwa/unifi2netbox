@@ -573,6 +573,7 @@ def fake_runner(monkeypatch, window):
         protect_config=None,
         access_config=None,
         drive_config=None,
+        disk_plan=None,
     ):
         started.update(
             plan=write_plan,
@@ -589,6 +590,7 @@ def fake_runner(monkeypatch, window):
             protect_config=protect_config,
             access_config=access_config,
             drive_config=drive_config,
+            disk_plan=disk_plan,
         )
         return True
 
@@ -1807,3 +1809,32 @@ def test_unas_detail_lists_drive_bays_display_only(qtbot):
     assert "WDC WD80" in bays and "8.0 TB" in bays and "health 99" in bays
     assert "Bay 2: empty" in bays
     assert "SERIAL-X" not in bays
+
+
+def test_unas_detail_offers_drive_items_and_counts_them(qtbot):
+    from unifi2netbox.disks import build_disk_plan
+    from unifi2netbox.gui_review import DetailPanel
+    from unifi2netbox.inventory import InventoryDisk
+    from unifi2netbox.review import ReviewState
+
+    state = ReviewState(preview_result(), BehaviorConfig())
+    key = state.rows()[0].key
+    disk = InventoryDisk("u1", "1", "WD80", "S1", kind="HDD")
+    state.drive_disks = (disk,)
+    state.drive_id = lambda k: "u1" if k == key else ""
+    state.disk_plan = build_disk_plan(
+        (InventoryDisk("drive:u1", "1", "WD80", "S1", kind="HDD"),),
+        {"drive:u1": "9"},
+        {"drive:u1": "NAS"},
+        (),
+    )
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show_device(state, key)
+
+    box = panel.findChild(QCheckBox, "disk_1")
+    assert box is not None and box.isChecked()
+    assert box.text() == "Create Disk 1 (part_id, serial, description)"
+    assert state.disk_operation_count() == 1
+    box.setChecked(False)
+    assert state.disk_operation_count() == 0

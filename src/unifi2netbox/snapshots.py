@@ -11,6 +11,7 @@ from unifi2netbox.inventory import (
     InventoryDeviceType,
     InventoryDisk,
     InventoryInterface,
+    InventoryItem,
     InventoryNetwork,
     InventoryPort,
     InventoryPrefix,
@@ -146,6 +147,8 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "links": [asdict(item) for item in snapshot.links],
         "disks": [asdict(item) for item in snapshot.disks],
         "disk_error": snapshot.disk_error,
+        "inventory_items": [asdict(item) for item in snapshot.inventory_items],
+        "inventory_item_error": snapshot.inventory_item_error,
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -196,6 +199,7 @@ def _decode(raw: str) -> InventorySnapshot:
     port_configs = payload.get("port_configs", [])
     links = payload.get("links", [])
     disks = payload.get("disks", [])
+    inventory_items = payload.get("inventory_items", [])
     for items in (
         ports,
         interfaces,
@@ -206,6 +210,7 @@ def _decode(raw: str) -> InventorySnapshot:
         port_configs,
         links,
         disks,
+        inventory_items,
     ):
         if not isinstance(items, list) or not all(
             isinstance(item, dict) for item in items
@@ -255,4 +260,6 @@ def _decode(raw: str) -> InventorySnapshot:
         links=tuple(InventoryLink(**item) for item in links),
         disks=tuple(InventoryDisk(**item) for item in disks),
         disk_error=str(payload.get("disk_error", "")),
+        inventory_items=tuple(InventoryItem(**item) for item in inventory_items),
+        inventory_item_error=str(payload.get("inventory_item_error", "")),
     )

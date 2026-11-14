@@ -431,9 +431,9 @@ display-only.
 - [x] 2. Read the UNAS (public system information) and its drive bays
   (internal storage endpoint, GET, allow-listed fields) into a Drive
   snapshot; match and preview the UNAS; show bays display-only (0.9.2).
-- [ ] 3. Plan and write drives as NetBox inventory items of the matched UNAS
+- [x] 3. Plan and write drives as NetBox inventory items of the matched UNAS
   (name, part ID, serial, description) with re-read, drift checks and
-  read-back; never delete.
+  read-back; never delete (0.9.3).
 - [ ] 4. Approved NetBox write test and live acceptance.
 
 - [ ] Verify Drive 4.4.20 / UNAS Pro 6.0.11 inventory APIs and authentication.

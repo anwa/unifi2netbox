@@ -13,6 +13,7 @@ from datetime import datetime
 
 from unifi2netbox.cables import CablePlan, CablePlanRow, select_cable
 from unifi2netbox.config import BehaviorConfig
+from unifi2netbox.disks import DiskPlan, DiskPlanRow, select_disk
 from unifi2netbox.interface_plan import (
     InterfacePlan,
     InterfacePlanRow,
@@ -142,6 +143,7 @@ class ReviewState:
             result.interface_plan if result else None
         )
         self.cable_plan: CablePlan | None = result.cable_plan if result else None
+        self.disk_plan: DiskPlan | None = result.disk_plan if result else None
         self.protect_kinds: dict[str, str] = {
             device.source_id: device.kind
             for device in (result.protect_devices if result else ())
@@ -452,6 +454,22 @@ class ReviewState:
     def set_cable_selected(self, key: str, selected: bool) -> None:
         if self.cable_plan is not None:
             self.cable_plan = select_cable(self.cable_plan, key, selected)
+
+    # -- drive inventory items ---------------------------------------------
+
+    def disk_rows_for(self, key: str) -> tuple[DiskPlanRow, ...]:
+        """Inventory-item rows of a UNAS device row."""
+        device_id = self.drive_id(key)
+        if not device_id or self.disk_plan is None:
+            return ()
+        return self.disk_plan.rows_for(f"{DRIVE_PREFIX}{device_id}")
+
+    def disk_operation_count(self) -> int:
+        return self.disk_plan.operation_count if self.disk_plan else 0
+
+    def set_disk_selected(self, key: str, selected: bool) -> None:
+        if self.disk_plan is not None:
+            self.disk_plan = select_disk(self.disk_plan, key, selected)
 
     def selected_count(self) -> int:
         return sum(

@@ -22,6 +22,8 @@ from unifi2netbox.config import (
     ProtectConfig,
     UniFiConfig,
 )
+from unifi2netbox.disk_execute import execute_disk_plan
+from unifi2netbox.disks import DiskPlan, build_disk_plan
 from unifi2netbox.interface_execute import execute_interface_plan
 from unifi2netbox.interface_plan import (
     DevicePair,
@@ -111,6 +113,7 @@ class InventoryPreviewResult:
     port_config_error: str = ""
     interface_plan: InterfacePlan | None = None
     cable_plan: CablePlan | None = None
+    disk_plan: DiskPlan | None = None
     protect_devices: tuple[InventoryDevice, ...] = ()
     protect_version: str = ""
     protect_status: str = ""
@@ -314,6 +317,7 @@ def build_inventory_preview(
             dedup.pairs, netbox_snapshot, mapped_unifi, network_plan, netbox_site_name
         ),
         cable_plan=_cable_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
+        disk_plan=_disk_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
         protect_devices=protect_snapshot.devices if protect_snapshot else (),
         protect_version=protect_snapshot.source_version if protect_snapshot else "",
         protect_status=protect_note,
@@ -386,6 +390,24 @@ def _optional_note(status, label: str) -> str:
     return f"{label}: {count} device{'s' if count != 1 else ''} read."
 
 
+def _disk_plan(
+    pairs, netbox_snapshot: InventorySnapshot, unifi_snapshot: InventorySnapshot
+) -> DiskPlan:
+    """Inventory items for the drive bays of matched UNAS devices."""
+    return build_disk_plan(
+        unifi_snapshot.disks,
+        {
+            pair.unifi_observation_id.split(":", 1)[-1]: (
+                pair.netbox_observation_id.split(":", 1)[-1]
+            )
+            for pair in pairs
+        },
+        {device.source_id: device.name for device in unifi_snapshot.devices},
+        netbox_snapshot.inventory_items,
+        item_error=netbox_snapshot.inventory_item_error,
+    )
+
+
 def _cable_plan(
     pairs, netbox_snapshot: InventorySnapshot, unifi_snapshot: InventorySnapshot
 ) -> CablePlan:
@@ -424,13 +446,15 @@ def run_write_execution(
     protect_config: ProtectConfig | None = None,
     access_config: AccessConfig | None = None,
     drive_config: DriveConfig | None = None,
+    disk_plan: DiskPlan | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
     With ``unifi_config`` the UniFi inventory is re-read once first; devices and
     networks whose UniFi values changed since the preview are skipped. Network
     writes (VLAN group, VLANs, prefixes) run first, then interface
-    configuration and cables of matched devices, then device writes.
+    configuration and cables of matched devices, then device writes, then
+    drive inventory items of matched UNAS devices.
     """
     started = _now()
     snapshot, source_error = (
@@ -498,6 +522,17 @@ def run_write_execution(
         status_overrides=status_overrides,
         device_type_overrides=device_type_overrides,
         source_devices=source_devices,
+        source_error=source_error,
+    )
+    network_outcomes += execute_disk_plan(
+        disk_plan,
+        backend,
+        dry_run=dry_run,
+        source_disks=(
+            {(d.device_id, d.slot): d for d in snapshot.disks}
+            if snapshot is not None
+            else None
+        ),
         source_error=source_error,
     )
     journal = finalize_journal(result.journal, _now())
@@ -851,21 +886,36 @@ def merge_optional_devices(
     sites = Counter(d.site for d in network.devices if d.site)
     site = sites.most_common(1)[0][0] if sites else ""
     extra: list[InventoryDevice] = []
+    disks: list[InventoryDisk] = []
     dropped: dict[str, int] = {}
     for prefix, snapshot in sources:
         if snapshot is None or not snapshot.devices:
             continue
+        kept_ids = set()
         kept = [
             replace(device, source_id=f"{prefix}{device.source_id}", site=site)
             for device in snapshot.devices
             if not (device.mac_address and device.mac_address in known)
         ]
         known |= {d.mac_address for d in kept if d.mac_address}
+        kept_ids = {d.source_id for d in kept}
+        disks.extend(
+            replace(disk, device_id=f"{prefix}{disk.device_id}")
+            for disk in snapshot.disks
+            if f"{prefix}{disk.device_id}" in kept_ids
+        )
         dropped[prefix] = len(snapshot.devices) - len(kept)
         extra.extend(kept)
     if not extra:
         return network, dropped
-    return replace(network, devices=network.devices + tuple(extra)), dropped
+    return (
+        replace(
+            network,
+            devices=network.devices + tuple(extra),
+            disks=network.disks + tuple(disks),
+        ),
+        dropped,
+    )
 
 
 def merge_protect_devices(

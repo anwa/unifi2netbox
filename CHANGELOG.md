@@ -6,6 +6,32 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.9.3
+
+### Added
+
+- M9 slice 3: drive inventory items. For a UNAS matched to a NetBox device,
+  each populated drive bay is planned as the inventory item `Disk <slot>`
+  with part ID (model), serial and description (type, size, firmware);
+  creates and updates are preselected, equal items are in sync, duplicate
+  names are conflicts, empty bays keep their NetBox item (never deleted) and
+  empty UniFi values never clear NetBox values. The UNAS detail panel lists
+  these items with checkboxes; the apply bar and confirmation count them.
+- Drive items are written after device writes: UniFi Drive is re-read and
+  the bay must still hold the same drive, creates never duplicate an item of
+  the same name, interrupted creates are looked up by name, updates re-read
+  the item and PATCH only unchanged-since-preview fields, every write is read
+  back and dry runs write nothing.
+- NetBox inventory items are read with the inventory (optional: a missing
+  permission only disables drive planning).
+
+### Validation
+
+- Added plan, execution, NetBox reader, merge, preview, ordering and GUI
+  tests. Live read-only on 2026-11-14: NetBox inventory items were read
+  (none yet); the UNAS is not in NetBox yet, so the drive plan explains that
+  it must be created and refreshed first.
+
 ## v0.9.2
 
 ### Added

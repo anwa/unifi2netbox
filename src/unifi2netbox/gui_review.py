@@ -599,6 +599,7 @@ class DetailPanel(QScrollArea):
         disks = self.state.disks_for(key)
         if not disks:
             return
+        self._add_disk_items(key)
         self.layout_.addWidget(label("Drive bays (from UniFi Drive)", "subheading"))
         lines = []
         for disk in disks:
@@ -618,6 +619,54 @@ class DetailPanel(QScrollArea):
                 parts.append(f"health {disk.health}")
             lines.append(f"Bay {disk.slot}: " + " \N{MIDDLE DOT} ".join(parts))
         self.layout_.addWidget(label("\n".join(lines), "caption"))
+
+    def _add_disk_items(self, key: str) -> None:
+        """Selectable NetBox inventory items for the drives of a matched UNAS."""
+        rows = self.state.disk_rows_for(key)
+        plan = self.state.disk_plan
+        self.layout_.addWidget(label("NetBox inventory items", "subheading"))
+        if not rows:
+            text = (plan.blocker if plan is not None else "") or (
+                "Create or match this device in NetBox and refresh to plan its drives."
+            )
+            self.layout_.addWidget(label(text, "caption"))
+            return
+        for row in rows:
+            outcome = self.state.outcomes.get(row.key)
+            if row.selectable:
+                verb = "Create" if row.action == "create" else "Update"
+                fields = ", ".join(field for field, _, _ in row.changes())
+                box = QCheckBox(f"{verb} {row.name} ({fields})")
+                box.setObjectName(f"disk_{row.disk.slot}")
+                box.setChecked(row.selected)
+                box.toggled.connect(
+                    lambda checked, k=row.key: self._toggle_disk(k, checked)
+                )
+                self.layout_.addWidget(box)
+            else:
+                text = {
+                    "in_sync": "in sync",
+                    "conflict": "conflict",
+                    "reference": "kept",
+                }.get(row.action, row.action)
+                self.layout_.addWidget(label(f"{row.name}: {text}", "secondary"))
+            if row.notes:
+                self.layout_.addWidget(label("\n".join(row.notes), "caption"))
+            if outcome is not None:
+                self.layout_.addWidget(
+                    label(f"{row.name}: {outcome.message}", "caption")
+                )
+        self.layout_.addWidget(
+            label(
+                "Drives are written as inventory items of this device: name, "
+                "part ID (model), serial and description. Items are never deleted.",
+                "caption",
+            )
+        )
+
+    def _toggle_disk(self, key: str, checked: bool) -> None:
+        self.state.set_disk_selected(key, checked)
+        self.changed.emit()
 
     def _add_create_choices(self, item: ReviewRow) -> None:
         self.layout_.addWidget(
@@ -824,6 +873,7 @@ class ConfirmDialog(QDialog):
         network_plan: NetworkPlan | None = None,
         interface_plan: InterfacePlan | None = None,
         cable_plan: CablePlan | None = None,
+        disk_plan=None,
     ) -> None:
         super().__init__(parent)
         creates = sum(
@@ -833,7 +883,10 @@ class ConfirmDialog(QDialog):
         group_ops, vlan_ops, prefix_ops = network_actions(network_plan)
         interface_ops = interface_plan.operation_count if interface_plan else 0
         cable_ops = cable_plan.operation_count if cable_plan else 0
-        network_ops = group_ops + vlan_ops + prefix_ops + interface_ops + cable_ops
+        disk_ops = disk_plan.operation_count if disk_plan else 0
+        network_ops = (
+            group_ops + vlan_ops + prefix_ops + interface_ops + cable_ops + disk_ops
+        )
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
         layout = QVBoxLayout(self)
@@ -860,6 +913,8 @@ class ConfirmDialog(QDialog):
             )
         if cable_ops:
             parts.append(f"{cable_ops} cable{'s' if cable_ops != 1 else ''}")
+        if disk_ops:
+            parts.append(f"{disk_ops} drive item{'s' if disk_ops != 1 else ''}")
         summary = label(", ".join(parts) or "No changes", "subheading")
         summary.setObjectName("confirmSummary")
         layout.addWidget(summary)
