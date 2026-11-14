@@ -15,6 +15,13 @@ the application's MIT license does not relicense Qt or other components.
 - [TOML Kit](https://github.com/python-poetry/tomlkit): MIT.
 - [platformdirs](https://github.com/tox-dev/platformdirs): MIT.
 - [Python](https://www.python.org/): Python Software Foundation license.
+- [PyInstaller](https://pyinstaller.org/): GPL-2.0 with a bootloader exception
+  that allows distributing the bundled executables under other licenses.
+- [Inno Setup](https://jrsoftware.org/isinfo.php) builds the Windows installer;
+  its license permits distributing installers it creates.
+
+The application icon (`src/unifi2netbox/resources/`) is original work of this
+project and covered by its MIT license.
 
 Transitive dependencies have additional notices. The build recipe copies runtime
 distribution metadata recursively, including available license files. Inspect the

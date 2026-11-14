@@ -469,15 +469,17 @@ Slices:
   launcher, `.desktop` entry, icons) built by a GitHub Actions workflow with
   an offscreen smoke test; artifacts only, no public release without approval
   (0.10.4; CI on Ubuntu 24.04, real desktop unverified).
-- [ ] 3. License notices and bundle hygiene check (no settings, cache or
-  tokens in any package); uninstall and upgrade data policy documented.
+- [x] 3. License notices and bundle hygiene check (no settings, cache or
+  tokens in any package); uninstall and upgrade data policy documented
+  (both build scripts check the bundle; Qt platform, image-format, style and
+  TLS plugins are bundled; notices list PyInstaller and Inno Setup).
 - [ ] 4. Acceptance on the workstation: install, start, settings, read and
   preview from the installed Windows app; upgrade over a previous install.
 
 - [ ] Finalize native Windows executable and Ubuntu-compatible package (proposed
   `.deb` plus standalone build). Packaging feasibility is checked already in M1.
-- [ ] Include Qt plugins/license notices; never bundle real settings/cache/tokens.
-- [ ] Preserve per-user settings on upgrades and document uninstall data policy.
+- [x] Include Qt plugins/license notices; never bundle real settings/cache/tokens.
+- [x] Preserve per-user settings on upgrades and document uninstall data policy.
 - [ ] Run source and packaged GUI checks on available requested OS versions.
 
 Acceptance: verified install/start/settings/read/preview workflows. Unavailable
