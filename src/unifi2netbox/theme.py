@@ -165,7 +165,7 @@ def style_sheet(c: Colors) -> str:
 QToolButton[chip="{tone}"] {{
     color: {tone_colors(tone, c)[0]};
     background: {tone_colors(tone, c)[1]};
-    border: none; border-radius: 13px; padding: 4px 14px;
+    border: none; border-radius: 13px; padding: 4px 14px; font-weight: 700;
 }}
 QLabel[badge="{tone}"] {{
     color: {tone_colors(tone, c)[0]};

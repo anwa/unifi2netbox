@@ -6,6 +6,135 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.0.0
+
+### Summary
+
+- First stable release, completing the deployment and platform acceptance
+	milestone (M10). The user authorized the major version on 2026-11-14; M10
+	is released as v1.0.0 instead of the planned v0.11.0.
+- Includes all milestones M1 to M10: NetBox and UniFi Network connections,
+	inventory snapshots, matching and preview, approved NetBox writes with
+	read-back and history, VLANs, prefixes, interfaces and cables, and the
+	optional UniFi Protect, Access and Drive (UNAS) inventories.
+
+### Added
+
+- Per-user Windows installer (Inno Setup): no administrator rights, Start
+	menu entry, in-place upgrades, uninstall keeps settings and data;
+	`tools/build_windows.ps1` builds exe and installer with a bundle check and
+	smoke test.
+- Linux packages: Ubuntu `.deb` (`/opt/unifi2netbox`, launcher, desktop entry,
+	icons) and a standalone tarball, built and smoke-tested by the Packages
+	GitHub Actions workflow.
+- Application icon for windows, taskbar, executable and Linux desktop entry;
+	native Windows title bars follow the app theme.
+- Hidden `--smoke-test` option for packaging checks.
+
+### Fixed
+
+- The Offline Tests workflow now passes on Ubuntu and Windows (it never
+	passed on Ubuntu before because Qt runtime libraries were missing).
+- Header chips stay readable with five connections at the default width.
+
+### Validation
+
+- Offline gate: 540 passed, 2 skipped; Ruff lint and format pass; GitHub
+	Actions Offline Tests and Packages workflows pass.
+- Windows 11 acceptance on the developer workstation: installer install,
+	in-place upgrade and uninstall; the installed app connected to all five
+	services and refreshed the preview read-only; settings were preserved.
+- Linux: verified only offscreen in GitHub Actions (Ubuntu 24.04); a real
+	Linux desktop and Ubuntu/Kubuntu 26.04 are not verified.
+
+### Compatibility
+
+- No configuration change is required. Settings stay in
+	`%LOCALAPPDATA%\unifi2netbox` (Windows) or `~/.config/unifi2netbox`
+	(Linux).
+
+## v0.10.5
+
+### Fixed
+
+- Header chips are no longer squeezed or overlapping at the default window
+  width with five connections: the bold chip text comes from the style
+  sheet and each chip reserves its full width; the UniFi site moved from the
+  chip text into its tooltip (it stays in the detail card).
+
+### Validation
+
+- M10 acceptance on the developer workstation (Windows 11, 2026-11-14): the
+  0.10.3 installer was installed per user with a Start menu entry, the 0.10.4
+  installer upgraded it in place (one Apps entry, new version, smoke test of
+  the installed exe passed) and the configuration folder stayed unchanged.
+  The installed 0.10.4 app started with the real configuration, connected to
+  NetBox 4.7.3, UniFi 11.0.99, Protect 7.3.74, Access and Drive, refreshed the
+  preview read-only (32 UniFi devices: 4 in sync, 28 new, 19 interface
+  changes, 1 cable suggestion) and closed with exit code 0. The overlapping
+  UniFi chip seen there is fixed in this version (checked on screen).
+
+## v0.10.4
+
+### Added
+
+- M10 slice 2: Linux packages. `tools/build_linux.sh` builds the PyInstaller
+  standalone folder, `unifi2netbox-<version>-linux-x86_64.tar.gz` and
+  `unifi2netbox_<version>_amd64.deb` (installs to `/opt/unifi2netbox` with
+  `/usr/bin/unifi2netbox`, a desktop entry and hicolor icons; settings stay
+  in `~/.config/unifi2netbox`). The new **Packages** workflow builds both on
+  Ubuntu, smoke-tests the build and the installed `.deb` offscreen, removes
+  the package again and keeps the files as workflow artifacts (nothing is
+  published).
+- Hidden `--smoke-test` option: shows the main window, prints its title and
+  exits with 0; used by the Linux package test.
+
+### Fixed
+
+- The **Offline Tests** workflow never passed on Ubuntu (PySide6 needs
+  `libEGL` and related libraries, which the runner lacks), and the matrix
+  cancelled the Windows job with it. Both jobs now install their
+  prerequisites and report independently; both pass.
+
+### Validation
+
+- GitHub Actions on 2026-11-14 (commit c6b183d, Ubuntu 24.04 runner): offline
+  tests pass on Ubuntu and Windows; the Packages workflow built the `.deb`
+  and tarball for 0.10.4, both smoke tests passed, `apt install` and
+  `apt remove` worked. Ubuntu/Kubuntu 26.04 and a real Linux desktop remain
+  unverified.
+
+## v0.10.3
+
+### Fixed
+
+- The Windows build script finds `ISCC.exe` under PowerShell strict mode.
+
+### Validation
+
+- `tools/build_windows.ps1` built the exe and
+  `unifi2netbox-0.10.3-setup.exe` (43.5 MB) from a clean tree; bundle
+  hygiene and the native smoke test passed. A silent per-user install into a
+  test folder, a reinstall over it (stale files of the old build removed),
+  the smoke test of the installed exe and a silent uninstall passed; the
+  per-user configuration folder was unchanged throughout.
+
+## v0.10.2
+
+### Added
+
+- M10 slice 1: per-user Windows installer (`packaging/windows/unifi2netbox.iss`,
+  Inno Setup 6): installs without administrator rights to
+  `%LOCALAPPDATA%\Programs\unifi2netbox`, Start menu entry (optional desktop
+  icon), app icon, license page, English or German wizard, in-place upgrades
+  by a fixed AppId that remove files of the previous build, and an
+  uninstaller that keeps `%LOCALAPPDATA%\unifi2netbox` (settings, tokens,
+  snapshots, write history).
+- `tools/build_windows.ps1`: one command for exe and installer; refuses a
+  dirty tree, reads the version from `pyproject.toml`, checks that no
+  configuration, cache, journal or capture file is bundled and that the
+  license notices are, and runs the native smoke test before compiling.
+
 ## v0.10.1
 
 ### Added

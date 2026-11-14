@@ -55,6 +55,41 @@ your configuration, cache, captures or tokens to a build. Dependency metadata,
 including available license files, is copied recursively; review the resulting
 notices/license material before redistribution. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
+## Windows Installer
+
+Since M10 the Windows release is a per-user installer built with Inno Setup 6
+(`winget install --id JRSoftware.InnoSetup --scope user`). From the
+repository root, in the activated `.venv` and on a clean working tree:
+
+```powershell
+.\tools\build_windows.ps1
+```
+
+The script runs the PyInstaller recipe above, fails if a `config.toml`,
+`snapshots.sqlite3`, `write-journal.sqlite3` or capture file is in the bundle
+or a license notice is missing, runs the native smoke test and compiles
+`packaging\windows\unifi2netbox.iss` into
+`dist\installer\unifi2netbox-<version>-setup.exe`.
+
+The installer needs no administrator rights and installs to
+`%LOCALAPPDATA%\Programs\unifi2netbox` with a Start menu entry (desktop icon
+optional). A newer installer upgrades in place (same AppId) and removes the
+files of the previous build first. Silent use:
+`unifi2netbox-<version>-setup.exe /VERYSILENT /SUPPRESSMSGBOXES`.
+
+### Data policy for upgrade and uninstall
+
+Settings, tokens, snapshots and the write history live in
+`%LOCALAPPDATA%\unifi2netbox` (`config.toml`, `snapshots.sqlite3`,
+`write-journal.sqlite3`). Setup, upgrades and the uninstaller never touch this
+folder, so a reinstall keeps the configuration. To remove everything, uninstall
+the app and then delete that folder yourself; it contains your API tokens in
+plain text.
+
+Verified on 2026-11-14 with 0.10.3 on the developer workstation (Windows 11):
+build, silent install into a test folder, reinstall over it, smoke test of the
+installed exe and silent uninstall; the configuration folder was unchanged.
+
 ## Native Windows Smoke Test
 
 Install development requirements too, then explicitly select the artifact:
@@ -70,9 +105,36 @@ does not write tokens. It verifies the exact versioned native window title and
 graceful exit. Without the explicit environment variable, this test is skipped.
 This is not a substitute for live NetBox acceptance on the target PC.
 
-## Linux and Final Deployment
+## Linux Packages
 
-Source-based Ubuntu/Kubuntu execution is a target, not yet locally verified.
-M10 finalizes native Linux packages, proposed `.deb` and standalone build output,
-alongside Windows packaging, signing decisions, upgrade and uninstall behavior.
-Never describe a Windows smoke build as verified Linux deployment.
+Linux packages are built on Ubuntu, normally by the **Packages** GitHub Actions
+workflow (`.github/workflows/package.yml`, on pushes to `main`, this
+milestone branch and `v*` tags, or manually). Locally on Ubuntu with Python
+3.15 in an activated `.venv`:
+
+```bash
+python -m pip install -r requirements-build.txt -r requirements-dev.txt
+bash tools/build_linux.sh
+```
+
+Output in `dist/`: the standalone folder `unifi2netbox/`, the tarball
+`unifi2netbox-<version>-linux-x86_64.tar.gz` and
+`unifi2netbox_<version>_amd64.deb`. The `.deb` installs the folder to
+`/opt/unifi2netbox`, links `/usr/bin/unifi2netbox` and adds a desktop entry
+and hicolor icons; it depends on the usual Qt runtime libraries (OpenGL/EGL,
+fontconfig, D-Bus, xkbcommon, xcb-cursor). Install with
+`sudo apt install ./unifi2netbox_<version>_amd64.deb`.
+
+Settings, tokens, snapshots and the write history stay per user in
+`~/.config/unifi2netbox`; installing, upgrading or removing the package never
+touches them. Delete that folder yourself to remove everything.
+
+The workflow smoke-tests the standalone build and the installed launcher
+offscreen (`--version`, then `--smoke-test`, which shows the main window and
+exits), removes the package again and keeps the `.deb` and tarball as
+workflow artifacts for 14 days. Nothing is published as a release without
+approval.
+
+Verified on 2026-11-14 by GitHub Actions only (Ubuntu 24.04 runner, offscreen,
+commit c6b183d, version 0.10.4). Ubuntu/Kubuntu 26.04 and a real Linux desktop
+are unverified; never describe the CI build as verified desktop deployment.

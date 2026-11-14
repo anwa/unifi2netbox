@@ -135,9 +135,7 @@ Acceptance: NetBox and Network independently display authenticated connectivity.
 
 Branch: `feature/inventory-snapshots`; depends on M2.
 
-Status: all planned M3 implementation slices are completed on the feature
-branch, with offline validation gates passing on 2026-10-28. A separate merge
-decision remains open. No v0.3.0 release or M3 merge is authorized yet.
+Status: completed for release v0.3.0 (merge commit 17f5fc3, tag v0.3.0).
 
 - [x] Read paginated inventories into normalized, timestamped domain models
   (initial internal NetBox/UniFi readers plus offline contract tests on
@@ -152,9 +150,9 @@ decision remains open. No v0.3.0 release or M3 merge is authorized yet.
 - [x] Build an installed-version field capability matrix for ports, profiles,
   overrides, VLANs, PoE, speed/duplex, LAG and LLDP (service-level matrix
   builder and offline contract tests on 2026-10-28).
-- [ ] Obtain explicit merge approval; complete version-only release preparation
+- [x] Obtain explicit merge approval; complete version-only release preparation
   for 0.3.0 on main.
-- [ ] Complete the approved main merge and tag its resulting commit v0.3.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.3.0.
 
 Acceptance: complete reads are repeatable; failures preserve a good baseline;
 exports contain no credentials/personal data and remain useful as test fixtures.
@@ -449,15 +447,49 @@ Gate: suitable Drive API coverage is not yet established. Network client visibil
 is not full hardware inventory. Stop for a decision if no suitable endpoint exists;
 do not substitute SSH or scraping without approval.
 
-### M10: Deployment and Platform Acceptance -> v0.11.0
+### M10: Deployment and Platform Acceptance -> v1.0.0
 
 Branch: `feature/deployment`; follows supported prior milestones.
 
-- [ ] Finalize native Windows executable and Ubuntu-compatible package (proposed
+Status: completed for release v1.0.0. On 2026-11-14 the user explicitly
+approved the merge to main, authorized the major version (v1.0.0 instead of
+the planned v0.11.0) and a public GitHub release with the installers.
+
+Decisions (2026-11-14, user): Windows ships as a per-user Inno Setup installer
+(Start menu entry, in-place upgrades, uninstaller that keeps the per-user
+configuration and data). Linux (`.deb` plus standalone build) is built and
+smoke-tested offscreen by a GitHub Actions workflow on Ubuntu; a real Linux
+desktop check stays explicitly unverified until the user runs it. WSL is not
+installed on the developer workstation.
+
+Slices:
+
+- [x] 1. Windows installer: Inno Setup script (per-user install under
+  `%LOCALAPPDATA%\Programs\unifi2netbox`, Start menu shortcut, icon, license,
+  upgrade by AppId, uninstall keeps `%LOCALAPPDATA%\unifi2netbox`) and one
+  build script for exe plus installer (0.10.2/0.10.3; silent install,
+  upgrade and uninstall tested on the workstation).
+- [x] 2. Linux packaging: PyInstaller standalone build and `.deb` (`/opt`,
+  launcher, `.desktop` entry, icons) built by a GitHub Actions workflow with
+  an offscreen smoke test; artifacts only, no public release without approval
+  (0.10.4; CI on Ubuntu 24.04, real desktop unverified).
+- [x] 3. License notices and bundle hygiene check (no settings, cache or
+  tokens in any package); uninstall and upgrade data policy documented
+  (both build scripts check the bundle; Qt platform, image-format, style and
+  TLS plugins are bundled; notices list PyInstaller and Inno Setup).
+- [x] 4. Acceptance on the workstation: install, start, settings, read and
+  preview from the installed Windows app; upgrade over a previous install
+  (0.10.3 -> 0.10.4 on Windows 11; chip overlap found and fixed in 0.10.5).
+
+- [x] Finalize native Windows executable and Ubuntu-compatible package (proposed
   `.deb` plus standalone build). Packaging feasibility is checked already in M1.
-- [ ] Include Qt plugins/license notices; never bundle real settings/cache/tokens.
-- [ ] Preserve per-user settings on upgrades and document uninstall data policy.
-- [ ] Run source and packaged GUI checks on available requested OS versions.
+- [x] Include Qt plugins/license notices; never bundle real settings/cache/tokens.
+- [x] Preserve per-user settings on upgrades and document uninstall data policy.
+- [x] Run source and packaged GUI checks on available requested OS versions
+  (Windows 11 on the workstation; Ubuntu only offscreen in CI, real Linux
+  desktops and Ubuntu/Kubuntu 26.04 stay unverified).
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 1.0.0.
+- [x] Complete the approved main merge and tag its resulting commit v1.0.0.
 
 Acceptance: verified install/start/settings/read/preview workflows. Unavailable
 platforms stay explicitly unverified rather than being marked supported by CI.

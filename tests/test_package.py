@@ -75,3 +75,32 @@ def load_empty(path):
     from unifi2netbox.config import load_config
 
     return load_config(path) == NetBoxConfig()
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux" or not os.environ.get("UNIFI2NETBOX_EXE"),
+    reason="Requires an explicitly selected Linux build.",
+)
+def test_packaged_linux_build_starts_and_exits(tmp_path):
+    executable = Path(os.environ["UNIFI2NETBOX_EXE"]).resolve(strict=True)
+    config_path = tmp_path / "config.toml"
+    save_config(config_path, NetBoxConfig())
+    env = os.environ | {
+        "QT_QPA_PLATFORM": os.environ.get("QT_QPA_PLATFORM", "offscreen")
+    }
+
+    reported = subprocess.run(
+        [str(executable), "--version"], capture_output=True, text=True, timeout=60
+    )
+    result = subprocess.run(
+        [str(executable), "--config", str(config_path), "--smoke-test"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+    )
+
+    assert reported.stdout.strip() == version("unifi2netbox")
+    assert result.returncode == 0, result.stderr
+    assert f"smoke-test ok: unifi2netbox {version('unifi2netbox')}" in result.stdout
+    assert load_empty(config_path)
