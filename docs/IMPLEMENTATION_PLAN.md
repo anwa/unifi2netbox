@@ -451,6 +451,27 @@ do not substitute SSH or scraping without approval.
 
 Branch: `feature/deployment`; follows supported prior milestones.
 
+Decisions (2026-11-14, user): Windows ships as a per-user Inno Setup installer
+(Start menu entry, in-place upgrades, uninstaller that keeps the per-user
+configuration and data). Linux (`.deb` plus standalone build) is built and
+smoke-tested offscreen by a GitHub Actions workflow on Ubuntu; a real Linux
+desktop check stays explicitly unverified until the user runs it. WSL is not
+installed on the developer workstation.
+
+Slices:
+
+- [ ] 1. Windows installer: Inno Setup script (per-user install under
+  `%LOCALAPPDATA%\Programs\unifi2netbox`, Start menu shortcut, icon, license,
+  upgrade by AppId, uninstall keeps `%LOCALAPPDATA%\unifi2netbox`) and one
+  build script for exe plus installer.
+- [ ] 2. Linux packaging: PyInstaller standalone build and `.deb` (`/opt`,
+  launcher, `.desktop` entry, icons) built by a GitHub Actions workflow with
+  an offscreen smoke test; artifacts only, no public release without approval.
+- [ ] 3. License notices and bundle hygiene check (no settings, cache or
+  tokens in any package); uninstall and upgrade data policy documented.
+- [ ] 4. Acceptance on the workstation: install, start, settings, read and
+  preview from the installed Windows app; upgrade over a previous install.
+
 - [ ] Finalize native Windows executable and Ubuntu-compatible package (proposed
   `.deb` plus standalone build). Packaging feasibility is checked already in M1.
 - [ ] Include Qt plugins/license notices; never bundle real settings/cache/tokens.
