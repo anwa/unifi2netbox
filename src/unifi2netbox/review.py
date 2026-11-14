@@ -13,11 +13,13 @@ from datetime import datetime
 
 from unifi2netbox.cables import CablePlan, CablePlanRow, select_cable
 from unifi2netbox.config import BehaviorConfig
+from unifi2netbox.disks import DiskPlan, DiskPlanRow, select_disk
 from unifi2netbox.interface_plan import (
     InterfacePlan,
     InterfacePlanRow,
     select_interface,
 )
+from unifi2netbox.inventory import InventoryDisk
 from unifi2netbox.networks import NetworkPlan, NetworkPlanRow, select_network
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
@@ -141,6 +143,7 @@ class ReviewState:
             result.interface_plan if result else None
         )
         self.cable_plan: CablePlan | None = result.cable_plan if result else None
+        self.disk_plan: DiskPlan | None = result.disk_plan if result else None
         self.protect_kinds: dict[str, str] = {
             device.source_id: device.kind
             for device in (result.protect_devices if result else ())
@@ -157,6 +160,13 @@ class ReviewState:
             device.source_id: device.state
             for device in (result.access_devices if result else ())
         }
+        self.drive_states: dict[str, str] = {
+            device.source_id: device.state
+            for device in (result.drive_devices if result else ())
+        }
+        self.drive_disks: tuple[InventoryDisk, ...] = (
+            result.drive_disks if result else ()
+        )
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -391,9 +401,28 @@ class ReviewState:
             return ""
         return self.access_states.get(unifi_id[len(ACCESS_PREFIX) :], "")
 
+    def drive_id(self, key: str) -> str:
+        """UNAS source ID for devices that come from UniFi Drive, else ''."""
+        unifi_id, _ = _device_ids(key)
+        if not unifi_id.startswith(DRIVE_PREFIX):
+            return ""
+        return unifi_id[len(DRIVE_PREFIX) :]
+
+    def disks_for(self, key: str) -> tuple[InventoryDisk, ...]:
+        """Drive bays of a UNAS row (display only), ordered by slot."""
+        device_id = self.drive_id(key)
+        if not device_id:
+            return ()
+        disks = [d for d in self.drive_disks if d.device_id == device_id]
+        return tuple(sorted(disks, key=lambda d: (len(d.slot), d.slot)))
+
     def source_kind(self, key: str) -> str:
         """Kind of a device from an optional UniFi application, else ''."""
-        return self.access_kind(key) or self.protect_kind(key)
+        return (
+            self.access_kind(key)
+            or self.protect_kind(key)
+            or ("nas" if self.drive_id(key) else "")
+        )
 
     def source_origin(self, key: str) -> tuple[str, str, str]:
         """(application, kind, state) for optional-source devices, else empty."""
@@ -401,6 +430,8 @@ class ReviewState:
             return "UniFi Access", kind, self.access_state(key)
         if kind := self.protect_kind(key):
             return "UniFi Protect", kind, self.protect_state(key)
+        if device_id := self.drive_id(key):
+            return "UniFi Drive", "nas", self.drive_states.get(device_id, "")
         return "", "", ""
 
     # -- cables -------------------------------------------------------------
@@ -423,6 +454,22 @@ class ReviewState:
     def set_cable_selected(self, key: str, selected: bool) -> None:
         if self.cable_plan is not None:
             self.cable_plan = select_cable(self.cable_plan, key, selected)
+
+    # -- drive inventory items ---------------------------------------------
+
+    def disk_rows_for(self, key: str) -> tuple[DiskPlanRow, ...]:
+        """Inventory-item rows of a UNAS device row."""
+        device_id = self.drive_id(key)
+        if not device_id or self.disk_plan is None:
+            return ()
+        return self.disk_plan.rows_for(f"{DRIVE_PREFIX}{device_id}")
+
+    def disk_operation_count(self) -> int:
+        return self.disk_plan.operation_count if self.disk_plan else 0
+
+    def set_disk_selected(self, key: str, selected: bool) -> None:
+        if self.disk_plan is not None:
+            self.disk_plan = select_disk(self.disk_plan, key, selected)
 
     def selected_count(self) -> int:
         return sum(
@@ -633,6 +680,7 @@ def humanize_timestamp(value: str, now: datetime | None = None) -> str:
 
 PROTECT_PREFIX = "protect:"
 ACCESS_PREFIX = "access:"
+DRIVE_PREFIX = "drive:"
 # Access hints avoid a bare "access", which would also match "Access Point".
 _ACCESS_HINTS = ("access control", "door", "zutritt")
 _ROLE_HINTS = {
@@ -642,6 +690,7 @@ _ROLE_HINTS = {
     "reader": (*_ACCESS_HINTS, "reader"),
     "intercom": ("intercom", "sprechanlage", *_ACCESS_HINTS),
     "access": _ACCESS_HINTS,
+    "nas": ("nas", "storage", "speicher"),
 }
 
 

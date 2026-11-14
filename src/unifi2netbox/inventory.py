@@ -26,6 +26,7 @@ class InventorySource(StrEnum):
     UNIFI_NETWORK = "unifi_network"
     UNIFI_PROTECT = "unifi_protect"
     UNIFI_ACCESS = "unifi_access"
+    UNIFI_DRIVE = "unifi_drive"
 
 
 class InventoryError(ValueError):
@@ -155,6 +156,40 @@ class InventoryPrefix:
 
 
 @dataclass(frozen=True)
+class InventoryDisk:
+    """One drive bay of a UNAS (UniFi Drive), from allow-listed fields.
+
+    ``slot``, ``model``, ``serial``, ``firmware``, ``kind`` and ``size_bytes``
+    describe the hardware; ``state``, ``temperature_c``, ``health`` and
+    ``pool`` are operational and display only. Empty bays have no model.
+    """
+
+    device_id: str
+    slot: str
+    model: str = ""
+    serial: str = ""
+    firmware: str = ""
+    kind: str = ""
+    size_bytes: int = 0
+    state: str = ""
+    temperature_c: int | None = None
+    health: int | None = None
+    pool: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryItem:
+    """A NetBox inventory item (only the fields drive planning needs)."""
+
+    source_id: str
+    device_id: str
+    name: str
+    part_id: str = ""
+    serial: str = ""
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     source: InventorySource
     captured_at: str
@@ -177,6 +212,10 @@ class InventorySnapshot:
     port_configs: tuple[InventoryPortConfig, ...] = ()
     port_config_error: str = ""
     links: tuple[InventoryLink, ...] = ()
+    disks: tuple[InventoryDisk, ...] = ()
+    disk_error: str = ""
+    inventory_items: tuple[InventoryItem, ...] = ()
+    inventory_item_error: str = ""
 
 
 def _text(value: object) -> str:
@@ -272,6 +311,23 @@ def _choice_value(value: object) -> str:
     if isinstance(value, dict):
         return _text(value.get("value"))
     return _text(value)
+
+
+def _normalize_netbox_inventory_item(row: dict[str, object]) -> InventoryItem | None:
+    device = row.get("device")
+    device_id = _identifier(device.get("id")) if isinstance(device, dict) else ""
+    source_id = _identifier(row.get("id"))
+    name = _text(row.get("name"))
+    if not device_id or not source_id or not name:
+        return None
+    return InventoryItem(
+        source_id=source_id,
+        device_id=device_id,
+        name=name,
+        part_id=_text(row.get("part_id")),
+        serial=_text(row.get("serial")),
+        description=_text(row.get("description")),
+    )
 
 
 def _normalize_netbox_interface(row: dict[str, object]) -> InventoryInterface | None:
@@ -495,6 +551,8 @@ def read_netbox_inventory(
     vlans: list[InventoryVlan] = []
     prefixes: list[InventoryPrefix] = []
     ipam_error = ""
+    inventory_items: list[InventoryItem] = []
+    inventory_item_error = ""
     device_types: list[InventoryDeviceType] = []
     device_roles: list[InventoryDeviceRole] = []
     sites: list[InventorySite] = []
@@ -564,6 +622,31 @@ def read_netbox_inventory(
                 vlans.clear()
                 prefixes.clear()
                 ipam_error = f"NetBox IPAM could not be read: {error}"
+
+            # Inventory items are optional (drive planning only); a token
+            # without the permission must not break the device inventory.
+            try:
+                item_rows = _netbox_paginated_rows(
+                    session,
+                    config,
+                    "/api/dcim/inventory-items/",
+                    page_size=page_size,
+                    max_pages=max_pages,
+                    limit_error=(
+                        "NetBox inventory-item pagination exceeded the configured "
+                        "page safety limit."
+                    ),
+                )
+                inventory_items.extend(
+                    item
+                    for item in map(_normalize_netbox_inventory_item, item_rows)
+                    if item is not None
+                )
+            except InventoryError as error:
+                inventory_items.clear()
+                inventory_item_error = (
+                    f"NetBox inventory items could not be read: {error}"
+                )
 
             type_rows = _netbox_paginated_rows(
                 session,
@@ -644,6 +727,8 @@ def read_netbox_inventory(
         vlans=tuple(vlans),
         prefixes=tuple(prefixes),
         ipam_error=ipam_error,
+        inventory_items=tuple(inventory_items),
+        inventory_item_error=inventory_item_error,
     )
 
 

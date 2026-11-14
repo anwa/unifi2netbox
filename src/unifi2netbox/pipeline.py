@@ -17,10 +17,13 @@ from unifi2netbox.cables import CablePlan, build_cable_plan
 from unifi2netbox.config import (
     AccessConfig,
     BehaviorConfig,
+    DriveConfig,
     NetBoxConfig,
     ProtectConfig,
     UniFiConfig,
 )
+from unifi2netbox.disk_execute import execute_disk_plan
+from unifi2netbox.disks import DiskPlan, build_disk_plan
 from unifi2netbox.interface_execute import execute_interface_plan
 from unifi2netbox.interface_plan import (
     DevicePair,
@@ -29,6 +32,7 @@ from unifi2netbox.interface_plan import (
 )
 from unifi2netbox.inventory import (
     InventoryDevice,
+    InventoryDisk,
     InventoryError,
     InventoryInterface,
     InventoryPort,
@@ -109,11 +113,15 @@ class InventoryPreviewResult:
     port_config_error: str = ""
     interface_plan: InterfacePlan | None = None
     cable_plan: CablePlan | None = None
+    disk_plan: DiskPlan | None = None
     protect_devices: tuple[InventoryDevice, ...] = ()
     protect_version: str = ""
     protect_status: str = ""
     access_devices: tuple[InventoryDevice, ...] = ()
     access_status: str = ""
+    drive_devices: tuple[InventoryDevice, ...] = ()
+    drive_disks: tuple[InventoryDisk, ...] = ()
+    drive_status: str = ""
     network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
@@ -153,6 +161,7 @@ def build_inventory_preview(
     netbox_site_name: str = "",
     protect_config: ProtectConfig | None = None,
     access_config: AccessConfig | None = None,
+    drive_config: DriveConfig | None = None,
 ) -> InventoryPreviewResult:
     """Refresh snapshots, match, build the difference preview and write plan.
 
@@ -161,13 +170,22 @@ def build_inventory_preview(
     """
     store = SnapshotStore(config_path.with_name(SNAPSHOT_FILENAME))
     refresh = refresh_snapshots(
-        netbox_config, unifi_config, store, protect_config, access_config
+        netbox_config,
+        unifi_config,
+        store,
+        protect_config,
+        access_config,
+        drive_config,
     )
     diagnostics = (*refresh.netbox.diagnostics, *refresh.unifi.diagnostics)
     protect_snapshot = refresh.protect.snapshot if refresh.protect else None
     protect_note = _protect_note(refresh.protect)
     access_snapshot = refresh.access.snapshot if refresh.access else None
     access_note = _optional_note(refresh.access, "Access")
+    drive_snapshot = refresh.drive.snapshot if refresh.drive else None
+    drive_note = _optional_note(refresh.drive, "Drive")
+    if drive_snapshot is not None and drive_snapshot.disk_error:
+        drive_note += f" {drive_snapshot.disk_error}"
     message = " ".join(item for item in diagnostics if item)
     last_updated = refresh.netbox.last_updated or refresh.unifi.last_updated
 
@@ -208,9 +226,18 @@ def build_inventory_preview(
         if refresh.access is not None and not refresh.access.error
         else None
     )
+    fresh_drive = (
+        drive_snapshot
+        if refresh.drive is not None and not refresh.drive.error
+        else None
+    )
     merged_unifi, dropped = merge_optional_devices(
         unifi_snapshot,
-        ((ACCESS_PREFIX, fresh_access), (PROTECT_PREFIX, fresh_protect)),
+        (
+            (ACCESS_PREFIX, fresh_access),
+            (PROTECT_PREFIX, fresh_protect),
+            (DRIVE_PREFIX, fresh_drive),
+        ),
     )
     if dropped.get(ACCESS_PREFIX):
         access_note += (
@@ -274,7 +301,7 @@ def build_inventory_preview(
             netbox_device_count=len(netbox_snapshot.devices),
             unifi_device_count=len(unifi_snapshot.devices),
         )
-        + tuple(note for note in (protect_note, access_note) if note),
+        + tuple(note for note in (protect_note, access_note, drive_note) if note),
         rows=preview_rows(diff, change, plan, suggestions=suggestions),
         unifi_captured_at=unifi_snapshot.captured_at,
         unifi_scope=unifi_snapshot.scope,
@@ -290,11 +317,15 @@ def build_inventory_preview(
             dedup.pairs, netbox_snapshot, mapped_unifi, network_plan, netbox_site_name
         ),
         cable_plan=_cable_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
+        disk_plan=_disk_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
         protect_devices=protect_snapshot.devices if protect_snapshot else (),
         protect_version=protect_snapshot.source_version if protect_snapshot else "",
         protect_status=protect_note,
         access_devices=access_snapshot.devices if access_snapshot else (),
         access_status=access_note,
+        drive_devices=drive_snapshot.devices if drive_snapshot else (),
+        drive_disks=drive_snapshot.disks if drive_snapshot else (),
+        drive_status=drive_note,
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),
@@ -359,6 +390,24 @@ def _optional_note(status, label: str) -> str:
     return f"{label}: {count} device{'s' if count != 1 else ''} read."
 
 
+def _disk_plan(
+    pairs, netbox_snapshot: InventorySnapshot, unifi_snapshot: InventorySnapshot
+) -> DiskPlan:
+    """Inventory items for the drive bays of matched UNAS devices."""
+    return build_disk_plan(
+        unifi_snapshot.disks,
+        {
+            pair.unifi_observation_id.split(":", 1)[-1]: (
+                pair.netbox_observation_id.split(":", 1)[-1]
+            )
+            for pair in pairs
+        },
+        {device.source_id: device.name for device in unifi_snapshot.devices},
+        netbox_snapshot.inventory_items,
+        item_error=netbox_snapshot.inventory_item_error,
+    )
+
+
 def _cable_plan(
     pairs, netbox_snapshot: InventorySnapshot, unifi_snapshot: InventorySnapshot
 ) -> CablePlan:
@@ -396,18 +445,25 @@ def run_write_execution(
     cable_plan: CablePlan | None = None,
     protect_config: ProtectConfig | None = None,
     access_config: AccessConfig | None = None,
+    drive_config: DriveConfig | None = None,
+    disk_plan: DiskPlan | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
     With ``unifi_config`` the UniFi inventory is re-read once first; devices and
     networks whose UniFi values changed since the preview are skipped. Network
     writes (VLAN group, VLANs, prefixes) run first, then interface
-    configuration and cables of matched devices, then device writes.
+    configuration and cables of matched devices, then device writes, then
+    drive inventory items of matched UNAS devices.
     """
     started = _now()
     snapshot, source_error = (
         reread_unifi_snapshot(
-            unifi_config, behavior.netbox_site_name, protect_config, access_config
+            unifi_config,
+            behavior.netbox_site_name,
+            protect_config,
+            access_config,
+            drive_config,
         )
         if unifi_config is not None
         else (None, "")
@@ -466,6 +522,17 @@ def run_write_execution(
         status_overrides=status_overrides,
         device_type_overrides=device_type_overrides,
         source_devices=source_devices,
+        source_error=source_error,
+    )
+    network_outcomes += execute_disk_plan(
+        disk_plan,
+        backend,
+        dry_run=dry_run,
+        source_disks=(
+            {(d.device_id, d.slot): d for d in snapshot.disks}
+            if snapshot is not None
+            else None
+        ),
         source_error=source_error,
     )
     journal = finalize_journal(result.journal, _now())
@@ -557,6 +624,7 @@ def reread_unifi_snapshot(
     netbox_site_name: str,
     protect_config: ProtectConfig | None = None,
     access_config: AccessConfig | None = None,
+    drive_config: DriveConfig | None = None,
 ) -> tuple[InventorySnapshot | None, str]:
     """Fresh UniFi snapshot with the site mapping, or (None, error text).
 
@@ -584,8 +652,21 @@ def reread_unifi_snapshot(
             access = read_access_inventory(access_config)
         except InventoryError:
             access = None
+    drive = None
+    if drive_config is not None and drive_config.configured:
+        from unifi2netbox.drive import read_drive_inventory
+
+        try:
+            drive = read_drive_inventory(drive_config)
+        except InventoryError:
+            drive = None
     merged, _ = merge_optional_devices(
-        network, ((ACCESS_PREFIX, access), (PROTECT_PREFIX, protect))
+        network,
+        (
+            (ACCESS_PREFIX, access),
+            (PROTECT_PREFIX, protect),
+            (DRIVE_PREFIX, drive),
+        ),
     )
     return map_unifi_site(merged, netbox_site_name), ""
 
@@ -784,6 +865,7 @@ def scope_unmatched_netbox_for_delete(
 
 PROTECT_PREFIX = "protect:"
 ACCESS_PREFIX = "access:"
+DRIVE_PREFIX = "drive:"
 
 
 def merge_optional_devices(
@@ -804,21 +886,36 @@ def merge_optional_devices(
     sites = Counter(d.site for d in network.devices if d.site)
     site = sites.most_common(1)[0][0] if sites else ""
     extra: list[InventoryDevice] = []
+    disks: list[InventoryDisk] = []
     dropped: dict[str, int] = {}
     for prefix, snapshot in sources:
         if snapshot is None or not snapshot.devices:
             continue
+        kept_ids = set()
         kept = [
             replace(device, source_id=f"{prefix}{device.source_id}", site=site)
             for device in snapshot.devices
             if not (device.mac_address and device.mac_address in known)
         ]
         known |= {d.mac_address for d in kept if d.mac_address}
+        kept_ids = {d.source_id for d in kept}
+        disks.extend(
+            replace(disk, device_id=f"{prefix}{disk.device_id}")
+            for disk in snapshot.disks
+            if f"{prefix}{disk.device_id}" in kept_ids
+        )
         dropped[prefix] = len(snapshot.devices) - len(kept)
         extra.extend(kept)
     if not extra:
         return network, dropped
-    return replace(network, devices=network.devices + tuple(extra)), dropped
+    return (
+        replace(
+            network,
+            devices=network.devices + tuple(extra),
+            disks=network.disks + tuple(disks),
+        ),
+        dropped,
+    )
 
 
 def merge_protect_devices(

@@ -21,6 +21,15 @@ all three succeed with a validated Protect series (7.3). A console without
 Protect answers these paths with its HTML page; this is reported as
 Unsupported. Recordings, snapshots and streams are never requested.
 
+## UniFi Drive Configuration
+
+The optional `[unifi_drive]` section stores the base URL of the UNAS console
+(its management address, for example `https://unas.example.lan`, no path), a
+local API key created on the UNAS, TLS verification, private CA path and
+timeout. Ubiquiti documents no Drive device API yet: the check sends one GET
+to the public `/api/system` without the key; Online means a UniFi OS answer
+with a UNAS model. The key is stored for future Drive APIs only.
+
 ## UniFi Access Configuration
 
 The optional `[unifi_access]` section stores the Access API base URL of the

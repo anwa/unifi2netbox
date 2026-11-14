@@ -430,3 +430,10 @@ def test_access_origin_comes_from_the_key():
     assert state.source_origin("create:unifi_network:sw") == ("", "", "")
     assert state.source_kind("create:unifi_network:access:h1") == "hub"
     assert state.access_kind("create:unifi_network:protect:c1") == ""
+
+
+def test_nas_rows_get_a_storage_role_only():
+    from unifi2netbox.review import role_for_kind
+
+    assert role_for_kind("nas", ("Access Point", "Storage", "Switch")) == "Storage"
+    assert role_for_kind("nas", ("Access Point", "Switch")) == ""

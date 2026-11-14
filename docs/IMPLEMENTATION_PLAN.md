@@ -403,9 +403,47 @@ read-only even when the API token itself has broader permissions.
 
 Branch: `feature/drive-inventory`; follows M8.
 
-- [ ] Verify Drive 4.4.20 / UNAS Pro 6.0.11 inventory APIs and authentication.
-- [ ] Add verified chassis/interface/hardware inventory with cross-source matching.
-- [ ] Keep unsupported storage metrics display-only; never access file contents.
+Status: completed for release v0.10.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.10.0 tag.
+
+Gate finding (2026-11-14, read-only): Ubiquiti's developer portal lists no
+Drive or UNAS API. The UNAS Pro (one device: management 1G and data 10G SFP+
+interfaces, both visible as UniFi Network clients) answers the public UniFi OS
+`/api/system` with model and system MAC; `/proxy/drive/...` answers 401 for
+any path; the Network and Protect integration paths return HTML only.
+
+Decision (2026-11-14, user): add a UniFi Drive settings page with URL and
+local API key like Access, so a future Drive API can be used; until then
+only the public system information is read.
+
+Slices:
+
+- [x] 1. Optional Drive connection: config section, settings page, chip and
+  read-only system-information check; key stored, not sent (0.9.1).
+
+Finding (2026-11-14, read-only with the stored key): the UNAS accepts its
+local API key (unknown `/proxy/drive/...` paths then answer 404 instead of
+401); there is no integration path, but the internal
+`/proxy/drive/api/v2/storage` endpoint returns drive bays (model, serial,
+firmware, type, size, state, temperature, health, pool) and pools.
+
+Decision (2026-11-14, user): drives become NetBox inventory items of the UNAS
+device (create and update only, never delete); operational values stay
+display-only.
+
+- [x] 2. Read the UNAS (public system information) and its drive bays
+  (internal storage endpoint, GET, allow-listed fields) into a Drive
+  snapshot; match and preview the UNAS; show bays display-only (0.9.2).
+- [x] 3. Plan and write drives as NetBox inventory items of the matched UNAS
+  (name, part ID, serial, description) with re-read, drift checks and
+  read-back; never delete (0.9.3).
+- [x] 4. Approved NetBox write test and live acceptance (0.9.3, 9/9).
+
+- [x] Verify Drive 4.4.20 / UNAS Pro 6.0.11 inventory APIs and authentication.
+- [x] Add verified chassis/interface/hardware inventory with cross-source matching.
+- [x] Keep unsupported storage metrics display-only; never access file contents.
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.10.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.10.0.
 
 Gate: suitable Drive API coverage is not yet established. Network client visibility
 is not full hardware inventory. Stop for a decision if no suitable endpoint exists;

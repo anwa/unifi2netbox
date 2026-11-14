@@ -184,6 +184,17 @@ The focused tests validate that:
 	skips unadopted devices, rejects duplicates and malformed answers, is
 	refreshed only when configured, keeps a stale snapshot on failure, and a
 	rejected URL without a port points to 12445,
+- the optional Drive connection reads only the public `/api/system` with GET
+	and without sending the key, accepts UNAS models only, never contacts a
+	console while unconfigured and keeps its own config section,
+- the Drive reader returns the UNAS as one device plus allow-listed drive
+	bays, sends the key only to the storage endpoint, keeps the device when
+	the storage read fails, round-trips through the snapshot store, joins
+	matching only when fresh and lists bays display-only without serials,
+- drive inventory items are planned per bay (create, update, in sync,
+	conflict, kept), never cleared by empty UniFi values, written after
+	devices with a fresh bay check, duplicate-safe creates, interrupted-create
+	lookup, drift-checked updates, read-back and no writes in dry runs,
 - optional devices merge with precedence Network, Access, Protect; only
 	fresh Access reads join the preview, the pre-write re-read includes
 	Access and tolerates its failure, Access rows never get the default role
@@ -690,3 +701,22 @@ which is not writable, as for Network devices); the run was in the write
 history; device, type and role were removed afterwards (NetBox again had 4
 devices, 5 roles and 374 device types). Failing Access re-reads and stale
 Access snapshots remain covered by offline tests.
+
+On 2026-11-14 the assistant checked M9 (UniFi Drive / UNAS) live on the
+developer workstation. Read-only first (applications 0.9.0 to 0.9.2): the
+developer portal lists no Drive API; the UNAS Pro (one device with a 1G
+management and a 10G SFP+ data interface) answers the public `/api/system`;
+with its local API key the internal `/proxy/drive/api/v2/storage` endpoint
+returned 7 drive bays (5 HDDs, 2 empty) and one pool. The preview showed the
+UNAS as a create row with the NetBox type "UNAS Pro" preselected. Then, with
+the user's explicit approval and commit 6c38286 (application 0.9.3), a write
+test against the NetBox developer instance passed 9/9 checks: a temporary
+role `u2n test Storage` was created and preselected; the UNAS device
+"HG-DG-R1-NAS" was created through the real pipeline including the Drive
+re-read and verified; a refreshed preview matched it and planned one create
+per populated bay (5); a dry run checked all five and wrote nothing; the real
+run created `Disk 1` to `Disk 5` with part ID, serial and `discovered`, all
+read back as verified; a further refresh showed all five in sync; the three
+runs were in the write history. Items, device and role were removed
+afterwards (NetBox again had 4 devices, 5 roles and 0 inventory items).
+Serial numbers were not printed in the test log.

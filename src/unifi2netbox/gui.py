@@ -51,6 +51,7 @@ from unifi2netbox.config import (
     AccessConfig,
     BehaviorConfig,
     ConfigError,
+    DriveConfig,
     NetBoxConfig,
     ProtectConfig,
     UiConfig,
@@ -58,6 +59,7 @@ from unifi2netbox.config import (
     load_access_config,
     load_behavior_config,
     load_config,
+    load_drive_config,
     load_protect_config,
     load_ui_config,
     load_unifi_config,
@@ -68,6 +70,7 @@ from unifi2netbox.connections import (
     Checker,
     ConnectionRunner,
     check_access_connection,
+    check_drive_connection,
     check_protect_connection,
     check_unifi_connection,
 )
@@ -147,9 +150,11 @@ class InventoryPreviewJob(QRunnable):
         netbox_site_name: str = "",
         protect_config: ProtectConfig | None = None,
         access_config: AccessConfig | None = None,
+        drive_config: DriveConfig | None = None,
     ) -> None:
         super().__init__()
         self.access_config = access_config
+        self.drive_config = drive_config
         self.config_path = config_path
         self.netbox_config = netbox_config
         self.unifi_config = unifi_config
@@ -171,6 +176,7 @@ class InventoryPreviewJob(QRunnable):
                 netbox_site_name=self.netbox_site_name,
                 protect_config=self.protect_config,
                 access_config=self.access_config,
+                drive_config=self.drive_config,
             )
         except Exception:
             result = InventoryPreviewResult(
@@ -207,9 +213,13 @@ class WriteExecutionJob(QRunnable):
         cable_plan=None,
         protect_config=None,
         access_config=None,
+        drive_config=None,
+        disk_plan=None,
     ) -> None:
         super().__init__()
         self.access_config = access_config
+        self.drive_config = drive_config
+        self.disk_plan = disk_plan
         self.unifi_config = unifi_config
         self.journal_path = journal_path
         self.network_plan = network_plan
@@ -247,6 +257,8 @@ class WriteExecutionJob(QRunnable):
                 cable_plan=self.cable_plan,
                 protect_config=self.protect_config,
                 access_config=self.access_config,
+                drive_config=self.drive_config,
+                disk_plan=self.disk_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -288,6 +300,8 @@ class WriteExecutionRunner(QObject):
         cable_plan=None,
         protect_config=None,
         access_config=None,
+        drive_config=None,
+        disk_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -308,6 +322,8 @@ class WriteExecutionRunner(QObject):
             cable_plan=cable_plan,
             protect_config=protect_config,
             access_config=access_config,
+            drive_config=drive_config,
+            disk_plan=disk_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -341,6 +357,7 @@ class InventoryPreviewRunner(QObject):
         netbox_site_name: str = "",
         protect_config: ProtectConfig | None = None,
         access_config: AccessConfig | None = None,
+        drive_config: DriveConfig | None = None,
     ) -> bool:
         if self.busy:
             return False
@@ -352,6 +369,7 @@ class InventoryPreviewRunner(QObject):
             netbox_site_name,
             protect_config,
             access_config,
+            drive_config,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -414,6 +432,20 @@ OPTIONAL_SERVICES = {
         "Optional. Set the Access API URL (port 12445) and an Access API token.",
         AccessConfig,
         load_access_config,
+    ),
+    "drive": OptionalService(
+        "drive",
+        "UniFi Drive",
+        "Drive",
+        "Optional. Management address of your UNAS console and a local API key "
+        "created on it. Ubiquiti documents no Drive device API yet, so only the "
+        "public system information is read; the key is kept for future APIs. "
+        "File contents are never accessed.",
+        "https://unas.example.lan",
+        "Local API key",
+        "Optional. Set the UNAS console URL and its local API key.",
+        DriveConfig,
+        load_drive_config,
     ),
 }
 
@@ -610,6 +642,7 @@ class SettingsDialog(QDialog):
         "UniFi Network",
         "UniFi Protect",
         "UniFi Access",
+        "UniFi Drive",
         "Sync defaults",
     )
 
@@ -628,6 +661,8 @@ class SettingsDialog(QDialog):
         protect_checker: Checker = check_protect_connection,
         access_config: AccessConfig | None = None,
         access_checker: Checker = check_access_connection,
+        drive_config: DriveConfig | None = None,
+        drive_checker: Checker = check_drive_connection,
     ) -> None:
         super().__init__(parent)
         self.path = path
@@ -635,6 +670,7 @@ class SettingsDialog(QDialog):
         self.saved_unifi_config: UniFiConfig | None = None
         self.saved_protect_config: ProtectConfig | None = None
         self.saved_access_config: AccessConfig | None = None
+        self.saved_drive_config: DriveConfig | None = None
         self.saved_behavior_config: BehaviorConfig | None = None
         self.close_pending = False
         try:
@@ -668,6 +704,14 @@ class SettingsDialog(QDialog):
                 access_config = AccessConfig()
         self.access = ConnectionSettingsForm(
             access_config, pool, access_checker, service="access"
+        )
+        if drive_config is None:
+            try:
+                drive_config = load_drive_config(path)
+            except ConfigError:
+                drive_config = DriveConfig()
+        self.drive = ConnectionSettingsForm(
+            drive_config, pool, drive_checker, service="drive"
         )
         sync_page = QWidget()
         sync = QVBoxLayout(sync_page)
@@ -722,7 +766,14 @@ class SettingsDialog(QDialog):
         self.nav.setFixedWidth(170)
         self.nav.addItems(list(self.PAGES))
         self.pages = QStackedWidget()
-        for page in (self.netbox, self.unifi, self.protect, self.access, sync_page):
+        for page in (
+            self.netbox,
+            self.unifi,
+            self.protect,
+            self.access,
+            self.drive,
+            sync_page,
+        ):
             self.pages.addWidget(page)
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
@@ -763,6 +814,7 @@ class SettingsDialog(QDialog):
         self.unifi.changed.connect(self.update_activity)
         self.protect.changed.connect(self.update_activity)
         self.access.changed.connect(self.update_activity)
+        self.drive.changed.connect(self.update_activity)
 
     def show_page(self, name: str) -> None:
         if name in self.PAGES:
@@ -775,6 +827,7 @@ class SettingsDialog(QDialog):
             or self.unifi.runner.busy
             or self.protect.runner.busy
             or self.access.runner.busy
+            or self.drive.runner.busy
         )
 
     def save(self) -> None:
@@ -791,6 +844,9 @@ class SettingsDialog(QDialog):
             access = self.access.config_from_fields()
             if not isinstance(access, AccessConfig):
                 raise ConfigError("Access settings are invalid.")
+            drive = self.drive.config_from_fields()
+            if not isinstance(drive, DriveConfig):
+                raise ConfigError("Drive settings are invalid.")
             behavior = BehaviorConfig(
                 include_all_netbox_delete_candidates=(
                     self.include_all_netbox_delete_candidates.isChecked()
@@ -798,7 +854,7 @@ class SettingsDialog(QDialog):
                 default_device_role_name=self.default_device_role_name.text().strip(),
                 netbox_site_name=self.netbox_site_name.text().strip(),
             )
-            save_connections(self.path, netbox, unifi, behavior, protect, access)
+            save_connections(self.path, netbox, unifi, behavior, protect, access, drive)
         except ConfigError as error:
             self.outcome.setText(str(error))
             return
@@ -806,6 +862,7 @@ class SettingsDialog(QDialog):
         self.saved_unifi_config = unifi
         self.saved_protect_config = protect
         self.saved_access_config = access
+        self.saved_drive_config = drive
         self.saved_behavior_config = behavior
         self.accept()
 
@@ -816,6 +873,7 @@ class SettingsDialog(QDialog):
         self.unifi.test_connection()
         self.protect.test_connection()
         self.access.test_connection()
+        self.drive.test_connection()
         self.update_activity()
 
     def update_activity(self) -> None:
@@ -827,6 +885,7 @@ class SettingsDialog(QDialog):
             f"NetBox: {self.netbox.state}\nUniFi Network: {self.unifi.state}"
             f"\nUniFi Protect: {self.protect.state}"
             f"\nUniFi Access: {self.access.state}"
+            f"\nUniFi Drive: {self.drive.state}"
         )
         if self.close_pending and not busy:
             super().reject()
@@ -1121,6 +1180,7 @@ class MainWindow(QMainWindow):
         unifi_checker: Checker = check_unifi_connection,
         protect_checker: Checker = check_protect_connection,
         access_checker: Checker = check_access_connection,
+        drive_checker: Checker = check_drive_connection,
     ) -> None:
         super().__init__()
         self.path = config_path
@@ -1147,6 +1207,7 @@ class MainWindow(QMainWindow):
         self.access = ConnectionPanel(
             config_path, pool, access_checker, service="access"
         )
+        self.drive = ConnectionPanel(config_path, pool, drive_checker, service="drive")
         self.setWindowTitle(f"unifi2netbox {version('unifi2netbox')}")
         self.resize(1180, 760)
         self.setMinimumSize(860, 560)
@@ -1180,7 +1241,7 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_apply_bar())
         self.setCentralWidget(central)
 
-        for panel in (self.netbox, self.unifi, self.protect, self.access):
+        for panel in (self.netbox, self.unifi, self.protect, self.access, self.drive):
             panel.idle.connect(self.finish_close)
             panel.activity_changed.connect(self.update_check_action)
             panel.status_changed.connect(self.update_empty_state)
@@ -1257,6 +1318,9 @@ class MainWindow(QMainWindow):
         self.access_chip = ConnectionChip(self.access, header)
         self.access_chip.setObjectName("accessChip")
         layout.addWidget(self.access_chip)
+        self.drive_chip = ConnectionChip(self.drive, header)
+        self.drive_chip.setObjectName("driveChip")
+        layout.addWidget(self.drive_chip)
         layout.addStretch()
         check = QToolButton()
         check.setDefaultAction(self.check_action)
@@ -1810,11 +1874,13 @@ class MainWindow(QMainWindow):
         network_ops = self.review.network_operation_count()
         interface_ops = self.review.interface_operation_count()
         cable_ops = self.review.cable_operation_count()
+        disk_ops = self.review.disk_operation_count()
         operations = (
             (len(plan.operations) if plan is not None else 0)
             + network_ops
             + interface_ops
             + cable_ops
+            + disk_ops
         )
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
@@ -1890,6 +1956,8 @@ class MainWindow(QMainWindow):
             protect_checker=self.protect.checker,
             access_config=self.access.config,
             access_checker=self.access.checker,
+            drive_config=self.drive.config,
+            drive_checker=self.drive.checker,
         )
         if page:
             dialog.show_page(page)
@@ -1904,6 +1972,8 @@ class MainWindow(QMainWindow):
                 self.protect.apply_config(dialog.saved_protect_config)
             if dialog.saved_access_config is not None:
                 self.access.apply_config(dialog.saved_access_config)
+            if dialog.saved_drive_config is not None:
+                self.drive.apply_config(dialog.saved_drive_config)
             if dialog.saved_behavior_config is not None:
                 self.behavior = dialog.saved_behavior_config
                 self.review.behavior = self.behavior
@@ -1918,6 +1988,7 @@ class MainWindow(QMainWindow):
         self.unifi.recheck()
         self.protect.recheck()
         self.access.recheck()
+        self.drive.recheck()
 
     # -- refresh ---------------------------------------------------------------
 
@@ -1940,6 +2011,7 @@ class MainWindow(QMainWindow):
             netbox_site_name=self.behavior.netbox_site_name,
             protect_config=self.protect.config,
             access_config=self.access.config,
+            drive_config=self.drive.config,
         )
         self.update_check_action()
 
@@ -1981,6 +2053,8 @@ class MainWindow(QMainWindow):
         cable_plan = self.review.cable_plan if device_key is None else None
         network_ops += interface_plan.operation_count if interface_plan else 0
         network_ops += cable_plan.operation_count if cable_plan else 0
+        disk_plan = self.review.disk_plan if device_key is None else None
+        network_ops += disk_plan.operation_count if disk_plan else 0
         if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
@@ -1998,6 +2072,7 @@ class MainWindow(QMainWindow):
             network_plan=network_plan,
             interface_plan=interface_plan,
             cable_plan=cable_plan,
+            disk_plan=disk_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -2023,6 +2098,8 @@ class MainWindow(QMainWindow):
             cable_plan=cable_plan,
             protect_config=self.protect.config,
             access_config=self.access.config,
+            drive_config=self.drive.config,
+            disk_plan=disk_plan,
         )
         self.update_check_action()
 
@@ -2163,6 +2240,7 @@ class MainWindow(QMainWindow):
             or self.unifi.runner.busy
             or self.protect.runner.busy
             or self.access.runner.busy
+            or self.drive.runner.busy
         )
         self.settings_action.setEnabled(not self.closing)
         self.check_action.setEnabled(not self.closing and not connections_busy)
@@ -2185,6 +2263,7 @@ class MainWindow(QMainWindow):
             or self.unifi.runner.busy
             or self.protect.runner.busy
             or self.access.runner.busy
+            or self.drive.runner.busy
             or self.inventory_runner.busy
             or self.write_runner.busy
         ):
@@ -2196,12 +2275,14 @@ class MainWindow(QMainWindow):
         self.unifi.stop_for_close()
         self.protect.stop_for_close()
         self.access.stop_for_close()
+        self.drive.stop_for_close()
         self.update_check_action()
         if (
             self.netbox.runner.busy
             or self.unifi.runner.busy
             or self.protect.runner.busy
             or self.access.runner.busy
+            or self.drive.runner.busy
             or self.inventory_runner.busy
             or self.write_runner.busy
         ):

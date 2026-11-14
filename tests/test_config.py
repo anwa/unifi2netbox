@@ -135,3 +135,26 @@ def test_access_section_round_trips_next_to_protect(tmp_path):
 
     assert load_access_config(path) == access
     assert load_protect_config(path) == protect
+
+
+def test_drive_section_round_trips_next_to_access(tmp_path):
+    from unifi2netbox.config import (
+        AccessConfig,
+        DriveConfig,
+        load_access_config,
+        load_drive_config,
+    )
+
+    path = tmp_path / "config.toml"
+    access = AccessConfig("https://udm.invalid:12445", "ac")
+    drive = DriveConfig("https://unas.invalid", "dk", verify_tls=False)
+    save_connections(
+        path,
+        NetBoxConfig("https://netbox.invalid", "nb"),
+        UniFiConfig("https://udm.invalid", "uf"),
+        access=access,
+        drive=drive,
+    )
+
+    assert load_drive_config(path) == drive
+    assert load_access_config(path) == access

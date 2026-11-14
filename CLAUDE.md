@@ -70,17 +70,21 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   atomic writes). Sections `[netbox]`, `[unifi_network]`, plus behavior settings.
   Default path from `platformdirs.user_config_path`, outside the repo.
   Optional `[unifi_protect]` (own console URL and key) for UniFi Protect and
-  `[unifi_access]` (Access API URL with port 12445 and Access token).
+  `[unifi_access]` (Access API URL with port 12445 and Access token) and
+  `[unifi_drive]` (UNAS console URL and local key for the internal storage
+  endpoint).
 - **Connection checks** (`netbox.py`, `unifi.py`, `protect.py`, `access.py`,
-  `connections.py`): NetBox via pynetbox over a `ReadOnlySession` that only
+  `drive.py`, `connections.py`): NetBox via pynetbox over a `ReadOnlySession` that only
   permits GET; UniFi Network and Protect via httpx against the official local
   integration APIs (read-only, no proxy env, no redirect or login fallback).
   "Online" means authenticated inventory reads succeed.
 - **Access inventory** (`access.py`): optional; hubs, readers and intercoms
   (name, MAC from the device ID, model, kind, state) into a `unifi_access`
-  snapshot; users, logs and doors are never read. Optional devices join
-  matching via `merge_optional_devices` (prefixes `access:`, `protect:`;
-  precedence Network > Access > Protect by MAC).
+  snapshot; users, logs and doors are never read. **Drive inventory**
+  (`drive.py`): the UNAS as one device plus allow-listed drive bays
+  (`InventoryDisk`) in a `unifi_drive` snapshot; file contents never. Optional devices join
+  matching via `merge_optional_devices` (prefixes `access:`, `protect:`,
+  `drive:`; precedence Network > Access > Protect > Drive by MAC).
 - **Protect inventory** (`protect.py`): optional; NVR and cameras (name, MAC,
   model, kind, state) into a separate `unifi_protect` snapshot; failures never
   block NetBox or Network.
@@ -106,6 +110,9 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   from internal uplink/LLDP data; cables are suggested only from agreeing,
   unclaimed evidence between interfaces of matched devices and only created,
   never replaced or deleted.
+- **Drive items** (`disks.py`, `disk_execute.py`): drive bays of a matched
+  UNAS become NetBox inventory items `Disk <slot>` (create/update only),
+  written after device writes with a fresh bay check and read-back.
 - **Ports** (`ports.py`): pairs UniFi ports with NetBox interfaces of a
   matched device by connector kind, then family, in numbering order; link
   state and speed are operational and display-only.

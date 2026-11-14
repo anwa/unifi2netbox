@@ -572,6 +572,8 @@ def fake_runner(monkeypatch, window):
         cable_plan=None,
         protect_config=None,
         access_config=None,
+        drive_config=None,
+        disk_plan=None,
     ):
         started.update(
             plan=write_plan,
@@ -587,6 +589,8 @@ def fake_runner(monkeypatch, window):
             cable_plan=cable_plan,
             protect_config=protect_config,
             access_config=access_config,
+            drive_config=drive_config,
+            disk_plan=disk_plan,
         )
         return True
 
@@ -1712,3 +1716,125 @@ def test_optional_chip_appears_once_configured(qtbot, tmp_path, pool):
 
     assert not window.access_chip.isHidden()
     assert window.access_chip.text().endswith("Access")
+
+
+def test_drive_settings_page_saves_its_own_section(qtbot, tmp_path, pool):
+    from unifi2netbox.config import DriveConfig, load_drive_config
+
+    seen = []
+
+    def drive_online(config):
+        seen.append(config)
+        return ConnectionResult(ConnectionState.ONLINE, "Synthetic UNAS read.")
+
+    path = tmp_path / "config.toml"
+    widget = SettingsDialog(
+        path,
+        NetBoxConfig(),
+        pool,
+        online,
+        unifi_config=UniFiConfig(),
+        unifi_checker=unifi_online,
+        drive_checker=drive_online,
+    )
+    qtbot.addWidget(widget)
+    widget.show_page("UniFi Drive")
+    assert widget.pages.currentWidget() is widget.drive
+    widget.drive.url.setText("https://unas.invalid/")
+    widget.drive.token.setText("drive-synthetic")
+    widget.test_connections()
+    qtbot.waitUntil(lambda: not widget.busy)
+    assert isinstance(seen[0], DriveConfig)
+    assert "UniFi Drive: Online" in widget.outcome.text()
+    widget.save()
+
+    assert load_drive_config(path) == DriveConfig(
+        "https://unas.invalid", "drive-synthetic"
+    )
+
+
+def test_drive_chip_is_hidden_until_configured(qtbot, tmp_path, pool):
+    from unifi2netbox.config import DriveConfig
+
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+        drive_checker=lambda config: ConnectionResult(
+            ConnectionState.ONLINE, "Synthetic."
+        ),
+    )
+    qtbot.addWidget(window)
+    assert window.drive_chip.isHidden()
+    assert window.drive_chip.text().endswith("Drive · Off")
+
+    window.drive.apply_config(DriveConfig("https://unas.invalid", "k"))
+    qtbot.waitUntil(lambda: not window.drive.runner.busy)
+
+    assert not window.drive_chip.isHidden()
+    assert window.drive_chip.text().endswith("Drive")
+
+
+def test_unas_detail_lists_drive_bays_display_only(qtbot):
+    from unifi2netbox.gui_review import DetailPanel
+    from unifi2netbox.inventory import InventoryDisk
+    from unifi2netbox.review import ReviewState
+
+    state = ReviewState(preview_result(), BehaviorConfig())
+    key = state.rows()[0].key
+    state.drive_disks = (
+        InventoryDisk(
+            "u1",
+            "1",
+            "WDC WD80",
+            "SERIAL-X",
+            "fw",
+            "HDD",
+            8 * 10**12,
+            "optimal",
+            34,
+            99,
+        ),
+        InventoryDisk("u1", "2", state="empty"),
+    )
+    state.drive_id = lambda k: "u1" if k == key else ""
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show_device(state, key)
+
+    texts = [w.text() for w in panel.findChildren(QLabel)]
+    assert "Drive bays (from UniFi Drive)" in texts
+    bays = next(t for t in texts if t.startswith("Bay 1"))
+    assert "WDC WD80" in bays and "8.0 TB" in bays and "health 99" in bays
+    assert "Bay 2: empty" in bays
+    assert "SERIAL-X" not in bays
+
+
+def test_unas_detail_offers_drive_items_and_counts_them(qtbot):
+    from unifi2netbox.disks import build_disk_plan
+    from unifi2netbox.gui_review import DetailPanel
+    from unifi2netbox.inventory import InventoryDisk
+    from unifi2netbox.review import ReviewState
+
+    state = ReviewState(preview_result(), BehaviorConfig())
+    key = state.rows()[0].key
+    disk = InventoryDisk("u1", "1", "WD80", "S1", kind="HDD")
+    state.drive_disks = (disk,)
+    state.drive_id = lambda k: "u1" if k == key else ""
+    state.disk_plan = build_disk_plan(
+        (InventoryDisk("drive:u1", "1", "WD80", "S1", kind="HDD"),),
+        {"drive:u1": "9"},
+        {"drive:u1": "NAS"},
+        (),
+    )
+    panel = DetailPanel()
+    qtbot.addWidget(panel)
+    panel.show_device(state, key)
+
+    box = panel.findChild(QCheckBox, "disk_1")
+    assert box is not None and box.isChecked()
+    assert box.text() == "Create Disk 1 (part_id, serial, description)"
+    assert state.disk_operation_count() == 1
+    box.setChecked(False)
+    assert state.disk_operation_count() == 0

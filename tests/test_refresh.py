@@ -236,3 +236,29 @@ def test_access_is_refreshed_only_when_configured_and_fails_softly(
     assert "rejected" in failed.access.error
     assert not failed.netbox.error and not failed.unifi.error
     assert store.load_current(InventorySource.UNIFI_ACCESS) == good
+
+
+def test_drive_is_refreshed_only_when_configured(tmp_path, monkeypatch):
+    from unifi2netbox.config import DriveConfig
+
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    netbox = NetBoxConfig("https://netbox.invalid", "nb")
+    unifi = UniFiConfig("https://udm.invalid", "uf")
+    good = snapshot(InventorySource.UNIFI_DRIVE, "2026-11-14T12:00:00+00:00")
+    monkeypatch.setattr(
+        "unifi2netbox.refresh.read_netbox_inventory",
+        lambda config, **kw: snapshot(InventorySource.NETBOX, good.captured_at),
+    )
+    monkeypatch.setattr(
+        "unifi2netbox.refresh.read_unifi_inventory",
+        lambda config, **kw: snapshot(InventorySource.UNIFI_NETWORK, good.captured_at),
+    )
+    monkeypatch.setattr("unifi2netbox.drive.read_drive_inventory", lambda c: good)
+
+    assert refresh_snapshots(netbox, unifi, store).drive is None
+    result = refresh_snapshots(
+        netbox, unifi, store, None, None, DriveConfig("https://unas.invalid", "k")
+    )
+
+    assert result.drive.snapshot == good and not result.drive.error
+    assert store.load_current(InventorySource.UNIFI_DRIVE) == good
