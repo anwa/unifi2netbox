@@ -46,7 +46,9 @@ python -m unifi2netbox [--config PATH] [--version]
 ```
 
 CI (`.github/workflows/tests.yml`) runs ruff + offline pytest on Windows and Ubuntu
-with `QT_QPA_PLATFORM=offscreen`. `tests/conftest.py` autouse-blocks all socket
+with `QT_QPA_PLATFORM=offscreen` (Ubuntu installs the Qt runtime libraries first).
+`.github/workflows/package.yml` builds and smoke-tests the Linux `.deb` and tarball
+(`tools/build_linux.sh`). `tests/conftest.py` autouse-blocks all socket
 connects, so tests must use synthetic transports (`httpx.MockTransport` for UniFi,
 a fake requests transport for pynetbox/NetBox). `tests/test_package.py` is skipped
 unless `UNIFI2NETBOX_EXE` points at a PyInstaller build (see `docs/DEPLOYMENT.md`).

@@ -219,8 +219,9 @@ Install the matching venv package if required. Never replace system Python or us
 `--break-system-packages`. On Windows the app can also be installed per user
 with the installer built by `tools/build_windows.ps1`
 (`unifi2netbox-<version>-setup.exe`, no administrator rights); upgrades and
-uninstall keep your settings in `%LOCALAPPDATA%\unifi2netbox`. Linux packages
-remain part of M10. See [deployment instructions](docs/DEPLOYMENT.md); real
+uninstall keep your settings in `%LOCALAPPDATA%\unifi2netbox`. For Ubuntu, a
+`.deb` and a standalone tarball are built by the **Packages** workflow
+(CI-tested offscreen only; a real Linux desktop is not verified yet). See [deployment instructions](docs/DEPLOYMENT.md); real
 settings/tokens are never bundled.
 
 ## Start

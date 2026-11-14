@@ -465,9 +465,10 @@ Slices:
   upgrade by AppId, uninstall keeps `%LOCALAPPDATA%\unifi2netbox`) and one
   build script for exe plus installer (0.10.2/0.10.3; silent install,
   upgrade and uninstall tested on the workstation).
-- [ ] 2. Linux packaging: PyInstaller standalone build and `.deb` (`/opt`,
+- [x] 2. Linux packaging: PyInstaller standalone build and `.deb` (`/opt`,
   launcher, `.desktop` entry, icons) built by a GitHub Actions workflow with
-  an offscreen smoke test; artifacts only, no public release without approval.
+  an offscreen smoke test; artifacts only, no public release without approval
+  (0.10.4; CI on Ubuntu 24.04, real desktop unverified).
 - [ ] 3. License notices and bundle hygiene check (no settings, cache or
   tokens in any package); uninstall and upgrade data policy documented.
 - [ ] 4. Acceptance on the workstation: install, start, settings, read and

@@ -184,6 +184,9 @@ The focused tests validate that:
 	skips unadopted devices, rejects duplicates and malformed answers, is
 	refreshed only when configured, keeps a stale snapshot on failure, and a
 	rejected URL without a port points to 12445,
+- `--smoke-test` shows the main window, prints its title and exits with 0;
+	with `UNIFI2NETBOX_EXE` set on Linux, `tests/test_package.py` runs it
+	against the standalone build or the installed launcher,
 - the application icon bundles every PNG size, the `.ico` holds PNG
 	entries for all sizes, title-bar caption colors follow the theme (the
 	main window uses the header color) and theme changes restyle windows,

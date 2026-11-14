@@ -105,9 +105,36 @@ does not write tokens. It verifies the exact versioned native window title and
 graceful exit. Without the explicit environment variable, this test is skipped.
 This is not a substitute for live NetBox acceptance on the target PC.
 
-## Linux and Final Deployment
+## Linux Packages
 
-Source-based Ubuntu/Kubuntu execution is a target, not yet locally verified.
-M10 finalizes native Linux packages, proposed `.deb` and standalone build output,
-alongside Windows packaging, signing decisions, upgrade and uninstall behavior.
-Never describe a Windows smoke build as verified Linux deployment.
+Linux packages are built on Ubuntu, normally by the **Packages** GitHub Actions
+workflow (`.github/workflows/package.yml`, on pushes to `main`, this
+milestone branch and `v*` tags, or manually). Locally on Ubuntu with Python
+3.15 in an activated `.venv`:
+
+```bash
+python -m pip install -r requirements-build.txt -r requirements-dev.txt
+bash tools/build_linux.sh
+```
+
+Output in `dist/`: the standalone folder `unifi2netbox/`, the tarball
+`unifi2netbox-<version>-linux-x86_64.tar.gz` and
+`unifi2netbox_<version>_amd64.deb`. The `.deb` installs the folder to
+`/opt/unifi2netbox`, links `/usr/bin/unifi2netbox` and adds a desktop entry
+and hicolor icons; it depends on the usual Qt runtime libraries (OpenGL/EGL,
+fontconfig, D-Bus, xkbcommon, xcb-cursor). Install with
+`sudo apt install ./unifi2netbox_<version>_amd64.deb`.
+
+Settings, tokens, snapshots and the write history stay per user in
+`~/.config/unifi2netbox`; installing, upgrading or removing the package never
+touches them. Delete that folder yourself to remove everything.
+
+The workflow smoke-tests the standalone build and the installed launcher
+offscreen (`--version`, then `--smoke-test`, which shows the main window and
+exits), removes the package again and keeps the `.deb` and tarball as
+workflow artifacts for 14 days. Nothing is published as a release without
+approval.
+
+Verified on 2026-11-14 by GitHub Actions only (Ubuntu 24.04 runner, offscreen,
+commit c6b183d, version 0.10.4). Ubuntu/Kubuntu 26.04 and a real Linux desktop
+are unverified; never describe the CI build as verified desktop deployment.

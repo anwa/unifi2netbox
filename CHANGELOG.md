@@ -6,6 +6,36 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.10.4
+
+### Added
+
+- M10 slice 2: Linux packages. `tools/build_linux.sh` builds the PyInstaller
+  standalone folder, `unifi2netbox-<version>-linux-x86_64.tar.gz` and
+  `unifi2netbox_<version>_amd64.deb` (installs to `/opt/unifi2netbox` with
+  `/usr/bin/unifi2netbox`, a desktop entry and hicolor icons; settings stay
+  in `~/.config/unifi2netbox`). The new **Packages** workflow builds both on
+  Ubuntu, smoke-tests the build and the installed `.deb` offscreen, removes
+  the package again and keeps the files as workflow artifacts (nothing is
+  published).
+- Hidden `--smoke-test` option: shows the main window, prints its title and
+  exits with 0; used by the Linux package test.
+
+### Fixed
+
+- The **Offline Tests** workflow never passed on Ubuntu (PySide6 needs
+  `libEGL` and related libraries, which the runner lacks), and the matrix
+  cancelled the Windows job with it. Both jobs now install their
+  prerequisites and report independently; both pass.
+
+### Validation
+
+- GitHub Actions on 2026-11-14 (commit c6b183d, Ubuntu 24.04 runner): offline
+  tests pass on Ubuntu and Windows; the Packages workflow built the `.deb`
+  and tarball for 0.10.4, both smoke tests passed, `apt install` and
+  `apt remove` worked. Ubuntu/Kubuntu 26.04 and a real Linux desktop remain
+  unverified.
+
 ## v0.10.3
 
 ### Fixed
