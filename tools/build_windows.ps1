@@ -60,8 +60,9 @@ try {
 if ($SkipInstaller) { return }
 
 if (-not $Iscc) {
+    $onPath = Get-Command ISCC.exe -ErrorAction SilentlyContinue
     $candidates = @(
-        (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source,
+        $(if ($onPath) { $onPath.Source } else { "" }),
         "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
         "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
