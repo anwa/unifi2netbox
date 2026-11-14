@@ -172,6 +172,10 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 The focused tests validate that:
 
 - only unmatched UniFi observations receive suggestions,
+- UniFi model names resolve to NetBox library types by model, part number or
+	alias (`AC Pro` -> `UAP-AC-PRO`, `US 16 PoE 150W` -> `US-16-150W`),
+- different port counts and manufacturer-only candidates are never suggested,
+- only a single top exact/part-number/alias candidate is preselected,
 - suggested candidates are ranked and include explainable reasons,
 - no suggestions are emitted when no target catalog evidence exists.
 
@@ -521,4 +525,8 @@ Observed limitation: only 1 of 11 UniFi model names in this installation
 rank manufacturer-only candidates (score 20) and partial matches such as
 `USW-Pro-8-PoE` for `USW Pro 24 PoE`, so creates currently need a manually
 chosen `Device type` per row.
+After 0.3.40 a read-only live preview preselects the correct NetBox device type
+for all 11 UniFi models in this installation (15 of 15 create rows): one by
+exact model, seven by part number and three by alias. 203 of 210 Ubiquiti
+device types in this NetBox carry a part number.
 

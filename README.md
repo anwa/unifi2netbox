@@ -37,7 +37,10 @@ version-by-version history.
   normalized name, serial number, MAC address. Multiple hits in one pass are an
   ambiguity conflict and are never auto-matched.
 - Unmatched UniFi devices get ranked, explainable Device Type suggestions from
-  existing NetBox manufacturer/model combinations.
+  existing NetBox device types, using model names, part numbers and common
+  UniFi aliases. Candidates with a different port count or only a matching
+  manufacturer are not suggested. An unambiguous match is preselected as the
+  create row's `Device type`.
 - The difference preview shows source/target values with provenance,
   configured vs. operational fields and unsupported-field markers, with batch,
   device and field selection plus explicit write dependencies.

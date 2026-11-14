@@ -6,6 +6,27 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.40
+
+### Changed
+
+- Device Type suggestions now compare UniFi model names with NetBox device-type
+	models and part numbers (`part_number` is read from NetBox), plus two UniFi
+	aliases: `AC ...` models map to `UAP-AC-...` and a `PoE` token next to a
+	wattage is dropped (`US 16 PoE 150W` -> `US-16-150W`).
+- Fuzzy candidates with different port counts and candidates that only share
+	the manufacturer are no longer suggested.
+- An unambiguous exact, part-number or alias suggestion is preselected as the
+	`Device type` of a create row; it stays editable before confirmation.
+
+### Validation
+
+- Added matching tests with NetBox device-type library names, port-count and
+	manufacturer guards, preselection rules and a GUI preselection test.
+- Live read-only check: all 11 UniFi models in this installation get the
+	correct NetBox type preselected (15 of 15 create rows); before, only 1 model
+	matched exactly.
+
 ## v0.3.39
 
 ### Added

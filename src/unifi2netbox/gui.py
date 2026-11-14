@@ -967,6 +967,14 @@ class MainWindow(QMainWindow):
                 type_ids = type_ids_by_name.get(type_key, [])
                 if len(type_ids) == 1:
                     self.create_device_type_by_device_key[row.device_key] = type_ids[0]
+            if (
+                row.device_key not in self.create_device_type_by_device_key
+                and row.suggested_device_type_id
+            ):
+                # Unambiguous part-number/alias suggestion; editable before writes.
+                self.create_device_type_by_device_key[row.device_key] = (
+                    row.suggested_device_type_id
+                )
             if "active" in self.netbox_device_statuses:
                 self.create_status_by_device_key[row.device_key] = "active"
             elif self.netbox_device_statuses:

@@ -35,6 +35,7 @@ class InventoryDeviceType:
     source_id: str
     manufacturer: str
     model: str
+    part_number: str = ""
 
 
 @dataclass(frozen=True)
@@ -148,6 +149,7 @@ def _normalize_netbox_device_type(row: dict[str, object]) -> InventoryDeviceType
         source_id=source_id,
         manufacturer=manufacturer,
         model=model,
+        part_number=_text(row.get("part_number")),
     )
 
 

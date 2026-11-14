@@ -886,6 +886,33 @@ def test_inventory_preview_rows_dialog_shows_create_device_type_suggestions(
     window.preview_rows_dialog.close()
 
 
+def test_confident_type_suggestion_preselects_create_device_type(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi_network:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                    suggested_device_types="Ubiquiti UniFi Switch 24 Pro (95)",
+                    suggested_device_type_id="101",
+                ),
+            ),
+            netbox_device_types=(("101", "Ubiquiti", "UniFi Switch 24 Pro"),),
+        )
+    )
+
+    assert window.create_device_type_by_device_key == {"create:unifi_network:a": "101"}
+
+
 def test_inventory_preview_rows_dialog_shows_role_dropdown_for_create_rows(
     qtbot, tmp_path, pool
 ):

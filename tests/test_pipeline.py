@@ -136,3 +136,19 @@ def test_unknown_unifi_site_without_mapping_is_not_written(tmp_path, monkeypatch
     assert [op.operation_type for op in result.write_plan.operations] == [
         "create_device"
     ]
+
+
+def test_netbox_device_type_part_number_is_normalized():
+    from unifi2netbox.inventory import _normalize_netbox_device_type
+
+    item = _normalize_netbox_device_type(
+        {
+            "id": 7,
+            "model": "UniFi Switch 24 Pro",
+            "part_number": " USW-Pro-24 ",
+            "manufacturer": {"name": "Ubiquiti"},
+        }
+    )
+
+    assert item is not None
+    assert item.part_number == "USW-Pro-24"

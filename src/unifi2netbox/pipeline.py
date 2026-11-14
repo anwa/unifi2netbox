@@ -15,6 +15,7 @@ from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, Inventory
 from unifi2netbox.matching import (
     DeduplicationResult,
     DeviceTypeSuggestion,
+    confident_device_type_id,
     deduplicate_inventory,
     suggest_device_types_for_unmatched,
 )
@@ -43,6 +44,7 @@ class InventoryPreviewRow:
     executable: str
     blocked_reason: str = ""
     suggested_device_types: str = ""
+    suggested_device_type_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -315,6 +317,7 @@ def preview_rows(
         selected_fields = ""
         blocked_reason = ""
         suggested_device_types = ""
+        suggested_device_type_id = ""
         change_item = change_by_key.get(device.device_key)
         if change_item is not None and change_item.selected_fields:
             selected_fields = ", ".join(change_item.selected_fields)
@@ -327,6 +330,7 @@ def preview_rows(
                     f"{candidate.manufacturer} {candidate.model} ({candidate.score})"
                     for candidate in candidates[:3]
                 )
+                suggested_device_type_id = confident_device_type_id(candidates)
 
         if not executable_by_key.get(device.device_key, False):
             if change_item is None:
@@ -362,6 +366,7 @@ def preview_rows(
                 ),
                 blocked_reason=blocked_reason,
                 suggested_device_types=suggested_device_types,
+                suggested_device_type_id=suggested_device_type_id,
             )
         )
     return tuple(rows)
