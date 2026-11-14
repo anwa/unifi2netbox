@@ -11,10 +11,20 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
+from unifi2netbox.cable_execute import execute_cable_plan
+from unifi2netbox.cables import CablePlan, build_cable_plan
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
+from unifi2netbox.interface_execute import execute_interface_plan
+from unifi2netbox.interface_plan import (
+    DevicePair,
+    InterfacePlan,
+    build_interface_plan,
+)
 from unifi2netbox.inventory import (
     InventoryDevice,
     InventoryError,
+    InventoryInterface,
+    InventoryPort,
     InventorySnapshot,
     InventorySource,
     read_unifi_inventory,
@@ -32,6 +42,9 @@ from unifi2netbox.matching import (
     deduplicate_inventory,
     suggest_device_types_for_unmatched,
 )
+from unifi2netbox.network_execute import execute_network_plan
+from unifi2netbox.networks import NetworkPlan, build_network_plan, group_name_for
+from unifi2netbox.port_config import InventoryPortConfig
 from unifi2netbox.preview import (
     ChangePreview,
     DifferencePreview,
@@ -40,8 +53,11 @@ from unifi2netbox.preview import (
 )
 from unifi2netbox.refresh import refresh_snapshots
 from unifi2netbox.snapshots import SnapshotStore
-from unifi2netbox.write_execute import execute_write_plan
-from unifi2netbox.write_journal import finalize_journal, summarize_journal
+from unifi2netbox.write_execute import (
+    RequestsNetBoxWriteBackend,
+    execute_write_plan,
+)
+from unifi2netbox.write_journal import finalize_journal
 from unifi2netbox.write_plan import WritePlan, build_write_plan
 
 SNAPSHOT_FILENAME = "snapshots.sqlite3"
@@ -80,6 +96,13 @@ class InventoryPreviewResult:
     unifi_version: str = ""
     unifi_api_feedback: tuple[dict[str, object], ...] = ()
     unifi_raw_devices: tuple[dict[str, object], ...] = ()
+    unifi_ports: tuple[InventoryPort, ...] = ()
+    netbox_interfaces: tuple[InventoryInterface, ...] = ()
+    unifi_port_configs: tuple[InventoryPortConfig, ...] = ()
+    port_config_error: str = ""
+    interface_plan: InterfacePlan | None = None
+    cable_plan: CablePlan | None = None
+    network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
     netbox_sites: tuple[str, ...] = ()
@@ -175,6 +198,15 @@ def build_inventory_preview(
     )
     change = build_change_preview(diff)
     plan = build_write_plan(diff, change, netbox_sites=site_catalog)
+    network_plan = build_network_plan(
+        unifi_snapshot.networks,
+        netbox_snapshot.sites,
+        netbox_snapshot.vlan_groups,
+        netbox_snapshot.vlans,
+        netbox_snapshot.prefixes,
+        site_name=netbox_site_name.strip(),
+        ipam_error=netbox_snapshot.ipam_error,
+    )
 
     return InventoryPreviewResult(
         status="Ready",
@@ -202,6 +234,15 @@ def build_inventory_preview(
         unifi_version=unifi_snapshot.source_version,
         unifi_api_feedback=unifi_snapshot.unifi_api_feedback,
         unifi_raw_devices=unifi_snapshot.unifi_raw_devices,
+        unifi_ports=unifi_snapshot.ports,
+        netbox_interfaces=netbox_snapshot.interfaces,
+        unifi_port_configs=unifi_snapshot.port_configs,
+        port_config_error=unifi_snapshot.port_config_error,
+        network_plan=network_plan,
+        interface_plan=_interface_plan(
+            dedup.pairs, netbox_snapshot, mapped_unifi, network_plan, netbox_site_name
+        ),
+        cable_plan=_cable_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),
@@ -212,6 +253,61 @@ def build_inventory_preview(
         ),
         difference_preview=diff,
         write_plan=plan,
+    )
+
+
+def _interface_plan(
+    pairs,
+    netbox_snapshot: InventorySnapshot,
+    unifi_snapshot: InventorySnapshot,
+    network_plan: NetworkPlan,
+    site_name: str,
+) -> InterfacePlan:
+    """Interface changes for matched devices against the site VLAN group."""
+    names = {device.source_id: device.name for device in unifi_snapshot.devices}
+    device_pairs = []
+    for pair in pairs:
+        unifi_id = pair.unifi_observation_id.split(":", 1)[-1]
+        netbox_id = pair.netbox_observation_id.split(":", 1)[-1]
+        device_pairs.append(
+            DevicePair(
+                f"{pair.unifi_observation_id}->{pair.netbox_observation_id}",
+                names.get(unifi_id, unifi_id),
+                unifi_id,
+                netbox_id,
+            )
+        )
+    group = network_plan.group
+    group_id = group.netbox_id if group is not None else ""
+    group_name = group.name if group is not None else group_name_for(site_name)
+    return build_interface_plan(
+        device_pairs,
+        unifi_snapshot.ports,
+        netbox_snapshot.interfaces,
+        unifi_snapshot.port_configs,
+        netbox_snapshot.vlans,
+        vlan_group_id=group_id,
+        vlan_group_name=group_name,
+        port_config_error=unifi_snapshot.port_config_error,
+    )
+
+
+def _cable_plan(
+    pairs, netbox_snapshot: InventorySnapshot, unifi_snapshot: InventorySnapshot
+) -> CablePlan:
+    """Cable suggestions between matched devices from UniFi link evidence."""
+    return build_cable_plan(
+        unifi_snapshot.links,
+        {device.source_id: device.name for device in unifi_snapshot.devices},
+        {
+            pair.unifi_observation_id.split(":", 1)[-1]: (
+                pair.netbox_observation_id.split(":", 1)[-1]
+            )
+            for pair in pairs
+        },
+        unifi_snapshot.ports,
+        netbox_snapshot.interfaces,
+        port_config_error=unifi_snapshot.port_config_error,
     )
 
 
@@ -228,17 +324,62 @@ def run_write_execution(
     dry_run: bool,
     unifi_config: UniFiConfig | None = None,
     journal_path: Path | None = None,
+    network_plan: NetworkPlan | None = None,
+    interface_plan: InterfacePlan | None = None,
+    cable_plan: CablePlan | None = None,
 ) -> WriteExecutionReport:
-    """Execute an approved write plan and summarize the journal for display.
+    """Execute approved network and device writes and summarize them.
 
-    With ``unifi_config`` the UniFi inventory is re-read first, and operations
-    whose UniFi values changed since the preview are skipped.
+    With ``unifi_config`` the UniFi inventory is re-read once first; devices and
+    networks whose UniFi values changed since the preview are skipped. Network
+    writes (VLAN group, VLANs, prefixes) run first, then interface
+    configuration and cables of matched devices, then device writes.
     """
     started = _now()
-    source_devices, source_error = (
-        reread_unifi_sources(unifi_config, behavior.netbox_site_name)
+    snapshot, source_error = (
+        reread_unifi_snapshot(unifi_config, behavior.netbox_site_name)
         if unifi_config is not None
         else (None, "")
+    )
+    source_devices = (
+        {_snapshot_observation_id(snapshot.source, d): d for d in snapshot.devices}
+        if snapshot is not None
+        else None
+    )
+    source_networks = (
+        {f"network:{n.source_id}": n for n in snapshot.networks}
+        if snapshot is not None
+        else None
+    )
+
+    source_configs = (
+        {(c.device_id, c.idx): c for c in snapshot.port_configs}
+        if snapshot is not None
+        else None
+    )
+    backend = RequestsNetBoxWriteBackend(netbox_config)
+    network_outcomes = (
+        execute_network_plan(
+            network_plan,
+            backend,
+            dry_run=dry_run,
+            source_networks=source_networks,
+            source_error=source_error,
+        )
+        + execute_interface_plan(
+            interface_plan,
+            backend,
+            dry_run=dry_run,
+            source_configs=source_configs,
+            source_error=source_error,
+        )
+        + execute_cable_plan(
+            cable_plan,
+            backend,
+            dry_run=dry_run,
+            source_links=snapshot.links if snapshot is not None else None,
+            source_error=source_error,
+        )
     )
     result = execute_write_plan(
         write_plan,
@@ -257,28 +398,51 @@ def run_write_execution(
         source_error=source_error,
     )
     journal = finalize_journal(result.journal, _now())
-    result = replace(result, journal=journal)
-    summary = summarize_journal(result.journal)
-    verified = sum(
-        outcome.verification == "verified" for outcome in result.journal.outcomes
-    )
-    mismatched = sum(
-        outcome.verification == "mismatch" for outcome in result.journal.outcomes
-    )
+    labels = {
+        op.sequence: op.source_label or op.target_label or op.device_key
+        for op in write_plan.operations
+    }
+    stored = [
+        StoredOutcome(
+            device_key=item.key,
+            label=item.label,
+            operation_type=item.operation,
+            status=item.status,
+            message=item.message,
+            netbox_object_id=item.object_id,
+            verification=item.verification,
+            verification_detail=item.verification_detail,
+        )
+        for item in network_outcomes
+    ] + [
+        StoredOutcome(
+            device_key=item.device_key,
+            label=labels.get(item.sequence, item.device_key),
+            operation_type=str(item.operation_type),
+            status=str(item.status),
+            message=item.message,
+            netbox_object_id=item.netbox_object_id,
+            verification=item.verification,
+            verification_detail=item.verification_detail,
+        )
+        for item in journal.outcomes
+    ]
+
+    def count(status: str) -> int:
+        return sum(item.status == status for item in stored)
+
+    verified = sum(item.verification == "verified" for item in stored)
+    mismatched = sum(item.verification == "mismatch" for item in stored)
     details = (
         "Write execution finished: "
-        f"{summary.successful} success, {summary.failed} failed, "
-        f"{summary.skipped} skipped."
+        f"{count('success')} success, {count('failed')} failed, "
+        f"{count('skipped')} skipped."
     )
-    if summary.successful:
+    if count("success"):
         details += f" Read-back: {verified} verified"
         details += f", {mismatched} mismatch." if mismatched else "."
 
     if journal_path is not None:
-        labels = {
-            op.sequence: op.source_label or op.target_label or op.device_key
-            for op in write_plan.operations
-        }
         try:
             JournalStore(journal_path).save(
                 StoredRun(
@@ -286,28 +450,15 @@ def run_write_execution(
                     started_at=journal.started_at,
                     finished_at=journal.finished_at,
                     dry_run=dry_run,
-                    outcomes=tuple(
-                        StoredOutcome(
-                            device_key=item.device_key,
-                            label=labels.get(item.sequence, item.device_key),
-                            operation_type=str(item.operation_type),
-                            status=str(item.status),
-                            message=item.message,
-                            netbox_object_id=item.netbox_object_id,
-                            verification=item.verification,
-                            verification_detail=item.verification_detail,
-                        )
-                        for item in journal.outcomes
-                    ),
+                    outcomes=tuple(stored),
                 )
             )
         except (JournalStoreError, sqlite3.Error, OSError) as error:
             details += f" Write history not saved: {error}"
 
     lines = tuple(
-        f"Write #{outcome.sequence} {outcome.operation_type}: "
-        f"{outcome.status} {outcome.message}".strip()
-        for outcome in result.journal.outcomes[:8]
+        f"{item.operation_type}: {item.label} {item.status} {item.message}".strip()
+        for item in stored[:8]
     )
     return WriteExecutionReport(
         status="Dry run" if dry_run else "Applied",
@@ -315,14 +466,14 @@ def run_write_execution(
         detail_lines=lines or (details,),
         outcomes=tuple(
             WriteOutcome(
-                device_key=outcome.device_key,
-                status=str(outcome.status),
-                message=outcome.message,
-                netbox_object_id=outcome.netbox_object_id,
-                verification=outcome.verification,
-                verification_detail=outcome.verification_detail,
+                device_key=item.device_key,
+                status=item.status,
+                message=item.message,
+                netbox_object_id=item.netbox_object_id,
+                verification=item.verification,
+                verification_detail=item.verification_detail,
             )
-            for outcome in result.journal.outcomes
+            for item in stored
         ),
         dry_run=dry_run,
         run_id=journal.run_id,
@@ -330,14 +481,23 @@ def run_write_execution(
     )
 
 
+def reread_unifi_snapshot(
+    unifi_config: UniFiConfig, netbox_site_name: str
+) -> tuple[InventorySnapshot | None, str]:
+    """Fresh UniFi snapshot with the site mapping, or (None, error text)."""
+    try:
+        return map_unifi_site(read_unifi_inventory(unifi_config), netbox_site_name), ""
+    except InventoryError as error:
+        return None, str(error) or "UniFi read failed"
+
+
 def reread_unifi_sources(
     unifi_config: UniFiConfig, netbox_site_name: str
 ) -> tuple[dict[str, InventoryDevice] | None, str]:
     """Fresh UniFi devices by observation ID, or (None, error text)."""
-    try:
-        snapshot = map_unifi_site(read_unifi_inventory(unifi_config), netbox_site_name)
-    except InventoryError as error:
-        return None, str(error) or "UniFi read failed"
+    snapshot, error = reread_unifi_snapshot(unifi_config, netbox_site_name)
+    if snapshot is None:
+        return None, error
     return {
         _snapshot_observation_id(snapshot.source, device): device
         for device in snapshot.devices

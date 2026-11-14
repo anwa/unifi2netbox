@@ -171,6 +171,43 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- the Cables view lists links with evidence and change, offers a checkbox
+	only for creatable cables and passes selected cables to the run,
+- cable creates re-check UniFi evidence and both interfaces, treat an
+	existing joining cable as done, never replace other cables, look up
+	interrupted creates, read back every cable and write nothing in dry runs,
+- link evidence comes from wired uplinks and LLDP of known UniFi devices;
+	the cable plan suggests only agreeing, unclaimed, fully mapped links,
+	preselects two-source evidence, never replaces cables and keeps unmatched
+	devices reference-only,
+- the Interfaces view lists paired ports with field checkboxes, keeps VLAN
+	fields tied to the mode, counts interface writes and passes them to the run,
+- interface writes patch only selected fields, skip on NetBox or UniFi drift,
+	read back every write, write nothing in dry runs and run between network
+	and device writes,
+- the interface plan compares enabled, mode, untagged and tagged VLANs per
+	paired port, uses only the site VLAN group, turns missing VLANs into notes,
+	never expands `tagged-all`, never clears values for unknown configurations,
+	keeps LAG display-only and ties VLAN fields to the mode selection,
+- the detail panel shows port name and effective configuration per port,
+	the profile as tooltip, resolution notes and why configuration is missing,
+- internal port configuration resolves profiles before overrides, keeps
+	all-VLAN trunks as explicit `tagged-all`, separates disabled from down,
+	reports unknown profiles, networks and rules, groups LAG members, is only
+	read for UniFi Network 11.0, never keeps network secrets and leaves the
+	official inventory intact when the internal endpoints fail,
+- the Networks view lists networks with separate VLAN and prefix checkboxes,
+	counts selected network writes in the apply bar and passes them to the run,
+- network writes run group -> VLANs -> prefixes with UniFi/NetBox re-reads,
+	no duplicates for objects that appeared, lookup of interrupted creates,
+	read-back and dry runs without writes,
+- the network plan creates a site-scoped VLAN group, VLANs and prefixes,
+	completes existing ones and never selects conflicts or disabled networks,
+- UniFi networks carry VLAN ID and IPv4 subnet; NetBox VLAN groups, VLANs and
+	prefixes are read, and missing IPAM rights are recorded instead of failing,
+- UniFi ports pair with NetBox interfaces by exact connector kind, then by
+	copper/optical family, in numbering order; speed, PoE and unpaired entries
+	become notes, and devices without UniFi ports show no comparison,
 - only unmatched UniFi observations receive suggestions,
 - UniFi model names resolve to NetBox library types by model, part number or
 	alias (`AC Pro` -> `UAP-AC-PRO`, `US 16 PoE 150W` -> `US-16-150W`),
@@ -540,4 +577,56 @@ temporary test site was written and verified, both runs appeared in the write
 history, and the test device and test site were removed afterwards (NetBox
 again held 4 devices and 1 site). Interrupted creates and changed UniFi values
 cannot be produced safely on live systems and remain covered by offline tests.
+
+On 2026-11-14 the assistant checked M6 slice 2 (UniFi networks to NetBox VLANs
+and prefixes) live on the developer workstation (commit c71d1ad, application
+0.6.5). Read-only first: UniFi Network 11.0.99 returned 16 networks (15
+enabled, VLANs 1-300, all with subnets); NetBox IPAM was empty, and the plan
+for site "Wiesenthau" held 1 VLAN group, 15 VLANs and 15 prefixes (31
+operations). A real dry run of all 31 operations passed the UniFi and NetBox
+re-read checks in 0.68 s without writing. Then, with the user's explicit
+approval, a write test against the NetBox developer instance passed 10/10
+checks: with one network selected (VLAN 2, 10.10.1.0/24) the real pipeline
+created the site-scoped VLAN group "UniFi Wiesenthau", the VLAN and the prefix
+linked to it, all three read back as verified; a fresh plan showed the network
+in sync with nothing selected, a second apply wrote nothing, both runs appeared
+in the write history, and the prefix, VLAN and group were removed afterwards
+(NetBox IPAM empty again). VLAN name alignment, prefix conflicts and
+interrupted creates remain covered by offline tests.
+
+On 2026-11-14 the assistant checked M6 slices 3 and 4 live on the developer
+workstation. Read-only first (application 0.6.6): the internal port
+configuration resolved 195 of 195 UniFi ports on 17 devices without notes
+(90 `tagged-all`, 46 `access`, 57 `disabled`, 2 `tagged`; no LAG configured).
+With commit 67d5a3e (application 0.6.10) the interface plan held 19 paired
+interfaces on the UDM Pro Max and one USW (13 mode, 6 enabled changes; VLAN
+fields waited for the missing VLAN group), and a real dry run of all 19 passed
+the UniFi and NetBox re-read checks in 5.1 s without writing. Then, with the
+user's explicit approval, a write test against the NetBox developer instance
+passed 8/8 checks: the VLAN group "UniFi Wiesenthau" and VLAN 1 were created
+and verified through the network plan; after a refresh, UDM `port.1` was set
+to `tagged-all` with untagged VLAN 1 and USW `SFP+ 1` was disabled, both read
+back as verified; a fresh plan showed both interfaces in sync, a second apply
+wrote nothing, all three runs were in the write history, and afterwards both
+interfaces were restored and the VLAN and group removed (all NetBox interfaces
+equal to before, IPAM empty). Tagged VLAN lists, drift skips and LAG remain
+covered by offline tests.
+
+On 2026-11-14 the assistant checked M6 slice 5 (cable suggestions) live on the
+developer workstation (commit e43a5c0, application 0.6.13). Read-only first:
+UniFi reported 53 link observations (35 LLDP, 18 uplink) on 18 device pairs
+without disagreement; the plan suggested one cable, UDM `port.5` to RPS
+`Port 1` (LLDP from the UDM and uplink from the RPS, preselected), and kept 17
+pairs reference-only because one device is not in NetBox. A real dry run passed
+the UniFi and NetBox re-read checks in 3.8 s without writing. Then, with the
+user's explicit approval, a write test against the NetBox developer instance
+passed 7/7 checks: the cable was created with status connected between both
+interfaces and read back as verified, a fresh plan showed it in sync, a second
+apply wrote nothing, both runs were in the write history, and the cable was
+deleted afterwards (NetBox again had 0 cables). A first attempt of this test
+created the same cable but the test script read the wrong outcome field and
+skipped its cleanup; the assistant confirmed that the leftover cable joined
+exactly the two test interfaces, deleted it, and repeated the test. Disagreeing
+evidence, occupied interfaces and interrupted creates remain covered by
+offline tests.
 

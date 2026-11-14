@@ -35,7 +35,24 @@ from PySide6.QtWidgets import (
 )
 
 from unifi2netbox import theme
+from unifi2netbox.cables import CONFLICT as CABLE_CONFLICT
+from unifi2netbox.cables import CREATE as CABLE_CREATE
+from unifi2netbox.cables import IN_SYNC as CABLE_IN_SYNC
+from unifi2netbox.cables import REFERENCE as CABLE_REFERENCE
+from unifi2netbox.cables import CablePlan, CablePlanRow
+from unifi2netbox.interface_plan import FIELD_LABELS as IF_FIELD_LABELS
+from unifi2netbox.interface_plan import InterfacePlan, InterfacePlanRow
 from unifi2netbox.journal_store import StoredRun
+from unifi2netbox.networks import (
+    CONFLICT as NET_CONFLICT,
+)
+from unifi2netbox.networks import (
+    CREATE as NET_CREATE,
+)
+from unifi2netbox.networks import (
+    UPDATE as NET_UPDATE,
+)
+from unifi2netbox.networks import NetworkPlan, NetworkPlanRow
 from unifi2netbox.review import (
     CATEGORY_LABELS,
     CREATE,
@@ -314,11 +331,201 @@ class DetailPanel(QScrollArea):
             elif item.layout() is not None:
                 _delete_layout(item.layout())
 
-    def show_placeholder(self) -> None:
+    def show_placeholder(self, text: str = "Select a device to see details.") -> None:
         self._clear()
         self.key = ""
-        self.layout_.addWidget(label("Select a device to see details.", "secondary"))
+        placeholder = label(text, "secondary")
+        placeholder.setObjectName("detailPlaceholder")
+        self.layout_.addWidget(placeholder)
         self.layout_.addStretch()
+
+    def show_network(self, state: ReviewState, key: str) -> None:
+        self.state = state
+        row = state.network_row(key)
+        plan = state.network_plan
+        if row is None or plan is None:
+            self.show_placeholder("Select a network to see details.")
+            return
+        self.key = key
+        self._clear()
+        title = label(row.name, "heading")
+        title.setObjectName("detailTitle")
+        self.layout_.addWidget(title)
+        subtitle = f"UniFi network, VLAN {row.vid}"
+        if row.subnet:
+            subtitle += f", {row.subnet}"
+        self.layout_.addWidget(label(subtitle, "secondary"))
+        outcomes = state.network_outcomes.get(key, [])
+        if outcomes:
+            text = "\n".join(
+                f"{o.status}: {o.message}"
+                + (f" (read-back {o.verification})" if o.verification else "")
+                for o in outcomes
+            )
+            tone = (
+                "danger"
+                if any(o.status == "failed" for o in outcomes)
+                else (
+                    "success"
+                    if all(o.status == "success" for o in outcomes)
+                    else "warning"
+                )
+            )
+            self.layout_.addWidget(banner(text, tone))
+        elif row.notes:
+            tone = "danger" if row.category == NET_CONFLICT else "neutral"
+            self.layout_.addWidget(banner("\n".join(row.notes), tone))
+
+        group = plan.group
+        self.layout_.addWidget(label("NetBox", "subheading"))
+        if group is not None:
+            group_text = f"VLAN group '{group.name}' for site {group.site_name}" + (
+                " will be created." if group.action == NET_CREATE else " exists."
+            )
+            self.layout_.addWidget(label(group_text, "caption"))
+        for part, action, selected, text in (
+            ("vlan", row.vlan_action, row.vlan_selected, _vlan_text(row)),
+            ("prefix", row.prefix_action, row.prefix_selected, _prefix_text(row)),
+        ):
+            if (
+                action in (NET_CREATE, NET_UPDATE)
+                and row.enabled
+                and row.category != NET_CONFLICT
+            ):
+                box = QCheckBox(text)
+                box.setObjectName(f"network_{part}")
+                box.setChecked(selected)
+                box.toggled.connect(
+                    lambda checked, p=part: self._toggle_network(p, checked)
+                )
+                self.layout_.addWidget(box)
+            elif text:
+                self.layout_.addWidget(label(text, "secondary"))
+        self.layout_.addWidget(
+            label(
+                "Only checked items are written. Prefixes are linked to the VLAN "
+                "and scoped to the NetBox site; nothing is deleted.",
+                "caption",
+            )
+        )
+        self.layout_.addStretch()
+
+    def show_interface(self, state: ReviewState, key: str) -> None:
+        self.state = state
+        row = state.interface_row(key)
+        if row is None:
+            self.show_placeholder("Select an interface to see details.")
+            return
+        self.key = key
+        self._clear()
+        title = label(row.label, "heading")
+        title.setObjectName("detailTitle")
+        self.layout_.addWidget(title)
+        port = f"UniFi port {row.port_idx}"
+        if row.port_name:
+            port += f" '{row.port_name}'"
+        port += f": {row.config.summary()}"
+        if row.config.profile:
+            port += f" (profile {row.config.profile})"
+        self.layout_.addWidget(label(port, "secondary"))
+        outcome = state.outcomes.get(key)
+        if outcome is not None:
+            text = f"{outcome.status}: {outcome.message}"
+            if outcome.verification:
+                text += f" (read-back {outcome.verification})"
+            tone = {"success": "success", "failed": "danger"}.get(
+                outcome.status, "warning"
+            )
+            if outcome.verification == "mismatch":
+                tone = "danger"
+            self.layout_.addWidget(banner(text, tone))
+        if row.notes:
+            self.layout_.addWidget(banner("\n".join(row.notes), "neutral"))
+        self.layout_.addWidget(label("NetBox interface", "subheading"))
+        if row.in_sync:
+            self.layout_.addWidget(
+                label("Enabled state, mode and VLANs match UniFi.", "secondary")
+            )
+        for change in row.changes:
+            box = QCheckBox(
+                f"{IF_FIELD_LABELS[change.field]}: {change.current_label} "
+                f"\u2192 {change.desired_label}"
+            )
+            box.setObjectName(f"interface_{change.field}")
+            box.setChecked(change.field in row.selected_fields)
+            box.toggled.connect(
+                lambda checked, f=change.field: self._toggle_interface(f, checked)
+            )
+            self.layout_.addWidget(box)
+        self.layout_.addWidget(
+            label(
+                "Only checked fields are written. VLAN fields need the mode "
+                "change. Link state and speed are never written; LAGs and cables "
+                "are not changed.",
+                "caption",
+            )
+        )
+        self.layout_.addStretch()
+
+    def show_cable(self, state: ReviewState, key: str) -> None:
+        self.state = state
+        row = state.cable_row(key)
+        if row is None:
+            self.show_placeholder("Select a link to see details.")
+            return
+        self.key = key
+        self._clear()
+        title = label(row.label, "heading")
+        title.setObjectName("detailTitle")
+        self.layout_.addWidget(title)
+        self.layout_.addWidget(
+            label("UniFi evidence: " + "; ".join(row.sources), "secondary")
+        )
+        outcome = state.outcomes.get(key)
+        if outcome is not None:
+            text = f"{outcome.status}: {outcome.message}"
+            if outcome.verification:
+                text += f" (read-back {outcome.verification})"
+            tone = {"success": "success", "failed": "danger"}.get(
+                outcome.status, "warning"
+            )
+            self.layout_.addWidget(banner(text, tone))
+        if row.notes:
+            tone = "danger" if row.action == CABLE_CONFLICT else "neutral"
+            self.layout_.addWidget(banner("\n".join(row.notes), tone))
+        self.layout_.addWidget(label("NetBox", "subheading"))
+        if row.selectable:
+            box = QCheckBox(f"Create cable {row.label}")
+            box.setObjectName("cable_create")
+            box.setChecked(row.selected)
+            box.toggled.connect(self._toggle_cable)
+            self.layout_.addWidget(box)
+        else:
+            self.layout_.addWidget(
+                label(CABLE_ACTION_TEXT.get(row.action, ""), "secondary")
+            )
+        self.layout_.addWidget(
+            label(
+                "Cables are only created between two interfaces without a cable. "
+                "Existing cables are never changed or deleted.",
+                "caption",
+            )
+        )
+        self.layout_.addStretch()
+
+    def _toggle_cable(self, checked: bool) -> None:
+        self.state.set_cable_selected(self.key, checked)
+        self.changed.emit()
+
+    def _toggle_interface(self, field: str, checked: bool) -> None:
+        self.state.set_interface_selected(self.key, field, checked)
+        # Dependent fields may change too (VLAN fields follow the mode).
+        self.show_interface(self.state, self.key)
+        self.changed.emit()
+
+    def _toggle_network(self, part: str, checked: bool) -> None:
+        self.state.set_network_selected(self.key, part, checked)
+        self.changed.emit()
 
     def show_device(self, state: ReviewState, key: str) -> None:
         self.state = state
@@ -350,6 +557,8 @@ class DetailPanel(QScrollArea):
         if item.category == CREATE:
             self._add_create_choices(item)
         self._add_fields(item)
+
+        self._add_ports(item)
 
         if item.row.suggested_device_types and item.category == CREATE:
             self.layout_.addWidget(label("Type suggestions", "subheading"))
@@ -484,6 +693,70 @@ class DetailPanel(QScrollArea):
                 )
             )
 
+    def _add_ports(self, item: ReviewRow) -> None:
+        matches = self.state.ports_for(item.key)
+        if not matches:
+            return
+        ports = [m.port for m in matches if m.port is not None]
+        up = sum(port.link_state == "UP" for port in ports)
+        heading = label(f"Ports ({len(ports)})", "subheading")
+        heading.setObjectName("portsHeading")
+        self.layout_.addWidget(heading)
+        summary = f"{up} up, {len(ports) - up} down. Link and speed are live values"
+        summary += " and never written."
+        if item.category == CREATE:
+            summary += " NetBox adds interfaces from the device type on create."
+        configs = self.state.port_configs_for(item.key)
+        if configs:
+            summary += " Configuration is read from the internal UniFi API."
+        elif self.state.port_config_error:
+            summary += f" {self.state.port_config_error}"
+        caption = label(summary, "caption")
+        caption.setObjectName("portsSummary")
+        self.layout_.addWidget(caption)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(3)
+        titles = ("Port", "Name", "NetBox", "Type", "Config", "Link", "PoE")
+        for column, text in enumerate(titles):
+            grid.addWidget(label(text, "caption"), 0, column)
+        notes: list[str] = []
+        for row, match in enumerate(matches, start=1):
+            port, interface = match.port, match.interface
+            config = configs.get(port.idx) if port else None
+            match_notes = list(match.notes) + list(config.notes if config else ())
+            values = (
+                str(port.idx) if port else "-",
+                config.name if config else "",
+                interface.name if interface else "-",
+                _port_type(port) if port else (interface.type if interface else ""),
+                _port_config(config),
+                _port_link(port) if port else "",
+                _port_poe(port) if port else "",
+            )
+            for column, value in enumerate(values):
+                cell = label(value, "secondary" if column == 5 else "")
+                if column == 4 and config is not None:
+                    cell.setObjectName(f"portConfig{config.idx}")
+                tips = list(match_notes)
+                if column == 4 and config is not None and config.profile:
+                    tips.insert(0, f"Port profile: {config.profile}")
+                if tips:
+                    cell.setToolTip("\n".join(tips))
+                grid.addWidget(cell, row, column)
+            for note in match_notes:
+                prefix = f"Port {port.idx}" if port else interface.name
+                notes.append(f"{prefix}: {note}")
+        grid.setColumnStretch(4, 1)
+        self.layout_.addLayout(grid)
+        if notes and item.category != CREATE:
+            shown = notes[:8]
+            if len(notes) > 8:
+                shown.append(f"... and {len(notes) - 8} more")
+            note_label = label("\n".join(shown), "caption")
+            note_label.setObjectName("portNotes")
+            self.layout_.addWidget(note_label)
+
     def _toggle_field(self, name: str, checked: bool) -> None:
         self.state.set_field_selected(self.key, name, checked)
         self.changed.emit()
@@ -511,12 +784,19 @@ class ConfirmDialog(QDialog):
         dry_run: bool,
         single: bool = False,
         parent=None,
+        network_plan: NetworkPlan | None = None,
+        interface_plan: InterfacePlan | None = None,
+        cable_plan: CablePlan | None = None,
     ) -> None:
         super().__init__(parent)
         creates = sum(
             op.operation_type == OperationType.CREATE_DEVICE for op in plan.operations
         )
         updates = len(plan.operations) - creates
+        group_ops, vlan_ops, prefix_ops = network_actions(network_plan)
+        interface_ops = interface_plan.operation_count if interface_plan else 0
+        cable_ops = cable_plan.operation_count if cable_plan else 0
+        network_ops = group_ops + vlan_ops + prefix_ops + interface_ops + cable_ops
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
         layout = QVBoxLayout(self)
@@ -531,7 +811,19 @@ class ConfirmDialog(QDialog):
             parts.append(f"{creates} new device{'s' if creates != 1 else ''}")
         if updates:
             parts.append(f"{updates} changed device{'s' if updates != 1 else ''}")
-        summary = label(" and ".join(parts) or "No changes", "subheading")
+        if vlan_ops:
+            parts.append(f"{vlan_ops} VLAN{'s' if vlan_ops != 1 else ''}")
+        if prefix_ops:
+            parts.append(f"{prefix_ops} prefix{'es' if prefix_ops != 1 else ''}")
+        if group_ops:
+            parts.append("1 VLAN group")
+        if interface_ops:
+            parts.append(
+                f"{interface_ops} interface{'s' if interface_ops != 1 else ''}"
+            )
+        if cable_ops:
+            parts.append(f"{cable_ops} cable{'s' if cable_ops != 1 else ''}")
+        summary = label(", ".join(parts) or "No changes", "subheading")
         summary.setObjectName("confirmSummary")
         layout.addWidget(summary)
         names = [op.source_label or op.target_label for op in plan.operations]
@@ -563,7 +855,7 @@ class ConfirmDialog(QDialog):
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.reject)
         buttons.addWidget(cancel)
-        count = len(plan.operations)
+        count = len(plan.operations) + network_ops
         action_text = (
             "Run dry run"
             if dry_run
@@ -577,10 +869,71 @@ class ConfirmDialog(QDialog):
         self.confirm_button.setObjectName("confirmApply")
         self.confirm_button.setProperty("variant", "primary")
         self.confirm_button.setDefault(True)
-        self.confirm_button.setEnabled(bool(plan.operations) and not self.blockers)
+        self.confirm_button.setEnabled(bool(count) and not self.blockers)
         self.confirm_button.clicked.connect(self.accept)
         buttons.addWidget(self.confirm_button)
         layout.addLayout(buttons)
+
+
+_CONNECTOR_NAMES = {"SFPPLUS": "SFP+", "SFP28": "SFP28", "SFP": "SFP"}
+
+
+def _short_speed(mbps: int) -> str:
+    if not mbps:
+        return ""
+    return f"{mbps / 1000:g}G" if mbps >= 1000 else f"{mbps}M"
+
+
+def _port_type(port) -> str:
+    connector = _CONNECTOR_NAMES.get(port.connector, port.connector)
+    return f"{connector} {_short_speed(port.max_speed_mbps)}".strip()
+
+
+def _port_config(config) -> str:
+    """Configured mode and VLANs, e.g. 'access 20' or 'tagged-all, native 1'."""
+    if config is None:
+        return ""
+    text = config.summary()
+    if config.enabled is False and config.mode != "disabled":
+        text = f"off, {text}"
+    if config.lag_id is not None:
+        text += f", LAG {config.lag_id}"
+    return text
+
+
+def _port_link(port) -> str:
+    if port.link_state == "UP":
+        return f"Up {_short_speed(port.speed_mbps)}".strip()
+    return port.link_state.capitalize() or "-"
+
+
+def _port_poe(port) -> str:
+    if not port.poe_standard:
+        return ""
+    state = "off" if port.poe_enabled is False else port.poe_state.lower() or "on"
+    return f"{port.poe_standard} ({state})"
+
+
+def _vlan_text(row: NetworkPlanRow) -> str:
+    if row.vlan_action == NET_CREATE:
+        return f"Create VLAN {row.vid} '{row.name}'"
+    if row.vlan_action == NET_UPDATE:
+        return f"Rename VLAN {row.vid} from '{row.netbox_vlan_name}' to '{row.name}'"
+    if row.vlan_action == "in_sync":
+        return f"VLAN {row.vid} '{row.name}' is in sync."
+    return f"VLAN {row.vid} has a conflict."
+
+
+def _prefix_text(row: NetworkPlanRow) -> str:
+    if row.prefix_action == NET_CREATE:
+        return f"Create prefix {row.subnet} linked to VLAN {row.vid}"
+    if row.prefix_action == NET_UPDATE:
+        return f"Link existing prefix {row.subnet} to VLAN {row.vid}"
+    if row.prefix_action == "in_sync":
+        return f"Prefix {row.subnet} is in sync."
+    if row.prefix_action == NET_CONFLICT:
+        return f"Prefix {row.subnet} has a conflict."
+    return ""
 
 
 def _subtitle(item: ReviewRow) -> str:
@@ -701,3 +1054,443 @@ class HistoryDialog(QDialog):
                     item.setToolTip(tip)
                 self.table.setItem(row, column, item)
         self.table.resizeColumnsToContents()
+
+
+NET_HEADERS = ("", "Network", "VLAN", "Subnet", "Change", "Status")
+NET_CHANGE_LABELS = {
+    NET_CREATE: ("New", "accent"),
+    NET_UPDATE: ("Changed", "warning"),
+    NET_CONFLICT: ("Conflict", "danger"),
+    "in_sync": ("In sync", "success"),
+}
+
+
+def network_status(state: ReviewState, row: NetworkPlanRow) -> tuple[str, str]:
+    outcomes = state.network_outcomes.get(row.key, [])
+    if outcomes:
+        if any(o.status == "failed" or o.verification == "mismatch" for o in outcomes):
+            return "Failed", "danger"
+        if all(o.status == "success" for o in outcomes):
+            if all(o.verification == "verified" for o in outcomes):
+                return "Verified", "success"
+            return "Written", "success"
+        return "Skipped", "warning"
+    if row.category == NET_CONFLICT:
+        return row.notes[0] if row.notes else "Conflict", "danger"
+    if not row.enabled:
+        return "Disabled in UniFi", "neutral"
+    if row.selectable and not row.selected:
+        return "Not selected", "neutral"
+    if row.selected:
+        return "Ready", "success"
+    return "", "neutral"
+
+
+class NetworkTableModel(QAbstractTableModel):
+    selection_changed = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.state = ReviewState()
+        self.search = ""
+        self.items: tuple[NetworkPlanRow, ...] = ()
+
+    def set_state(self, state: ReviewState) -> None:
+        self.state = state
+        self.reload()
+
+    def set_filter(self, search: str) -> None:
+        self.search = search
+        self.reload()
+
+    def reload(self) -> None:
+        self.beginResetModel()
+        self.items = self.state.network_rows(self.search)
+        self.endResetModel()
+
+    def refresh_rows(self) -> None:
+        keys = [row.key for row in self.items]
+        fresh = {row.key: row for row in self.state.network_rows()}
+        self.items = tuple(fresh[key] for key in keys if key in fresh)
+        if self.items:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self.items) - 1, len(NET_HEADERS) - 1),
+            )
+
+    def key_at(self, row: int) -> str:
+        return self.items[row].key if 0 <= row < len(self.items) else ""
+
+    def row_of(self, key: str) -> int:
+        return next((i for i, row in enumerate(self.items) if row.key == key), -1)
+
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(self.items)
+
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(NET_HEADERS)
+
+    def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
+            return NET_HEADERS[section]
+        return None
+
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        row = self.items[index.row()] if 0 <= index.row() < len(self.items) else None
+        if index.column() == 0 and row is not None and row.enabled and row.selectable:
+            base |= Qt.ItemFlag.ItemIsUserCheckable
+        return base
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
+        if not index.isValid():
+            return None
+        row = self.items[index.row()]
+        column = index.column()
+        if role == KEY_ROLE:
+            return row.key
+        if column == 0 and role == Qt.ItemDataRole.CheckStateRole:
+            if not (row.enabled and row.selectable):
+                return None
+            return Qt.CheckState.Checked if row.selected else Qt.CheckState.Unchecked
+        if role == Qt.ItemDataRole.DisplayRole:
+            if column == 1:
+                return row.name
+            if column == 2:
+                return str(row.vid)
+            if column == 3:
+                return row.subnet or "-"
+            if column == 4:
+                return NET_CHANGE_LABELS.get(row.category, ("", ""))[0]
+            if column == 5:
+                return network_status(self.state, row)[0]
+        if role == TONE_ROLE:
+            if column == 4:
+                return NET_CHANGE_LABELS.get(row.category, ("", "neutral"))[1]
+            if column == 5:
+                return network_status(self.state, row)[1]
+        if role == Qt.ItemDataRole.ToolTipRole and row.notes:
+            return "\n".join(row.notes)
+        return None
+
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value,
+        role=Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        if index.column() != 0 or role != Qt.ItemDataRole.CheckStateRole:
+            return False
+        row = self.items[index.row()]
+        if not (row.enabled and row.selectable):
+            return False
+        checked = Qt.CheckState(value) == Qt.CheckState.Checked
+        self.state.set_network_selected(row.key, "all", checked)
+        self.refresh_rows()
+        self.selection_changed.emit()
+        return True
+
+
+IF_HEADERS = ("", "Device", "Interface", "UniFi port", "Config", "Change", "Status")
+
+
+def interface_status(state: ReviewState, row: InterfacePlanRow) -> tuple[str, str]:
+    outcome = state.outcomes.get(row.key)
+    if outcome is not None:
+        if outcome.status == "failed" or outcome.verification == "mismatch":
+            return "Failed", "danger"
+        if outcome.status == "success":
+            verified = outcome.verification == "verified"
+            return ("Verified" if verified else "Written"), "success"
+        return "Skipped", "warning"
+    if row.in_sync:
+        return ("Note" if row.notes else ""), "neutral"
+    if not row.selected_fields:
+        return "Not selected", "neutral"
+    if len(row.selected_fields) < len(row.changes):
+        return "Partly selected", "accent"
+    return "Ready", "success"
+
+
+class InterfaceTableModel(QAbstractTableModel):
+    selection_changed = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.state = ReviewState()
+        self.search = ""
+        self.items: tuple[InterfacePlanRow, ...] = ()
+
+    def set_state(self, state: ReviewState) -> None:
+        self.state = state
+        self.reload()
+
+    def set_filter(self, search: str) -> None:
+        self.search = search
+        self.reload()
+
+    def reload(self) -> None:
+        self.beginResetModel()
+        self.items = self.state.interface_rows(self.search)
+        self.endResetModel()
+
+    def refresh_rows(self) -> None:
+        keys = [row.key for row in self.items]
+        fresh = {row.key: row for row in self.state.interface_rows()}
+        self.items = tuple(fresh[key] for key in keys if key in fresh)
+        if self.items:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self.items) - 1, len(IF_HEADERS) - 1),
+            )
+
+    def key_at(self, row: int) -> str:
+        return self.items[row].key if 0 <= row < len(self.items) else ""
+
+    def row_of(self, key: str) -> int:
+        return next((i for i, row in enumerate(self.items) if row.key == key), -1)
+
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(self.items)
+
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(IF_HEADERS)
+
+    def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
+            return IF_HEADERS[section]
+        return None
+
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        row = self.items[index.row()] if 0 <= index.row() < len(self.items) else None
+        if index.column() == 0 and row is not None and not row.in_sync:
+            base |= Qt.ItemFlag.ItemIsUserCheckable
+        return base
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
+        if not index.isValid():
+            return None
+        row = self.items[index.row()]
+        column = index.column()
+        if role == KEY_ROLE:
+            return row.key
+        if column == 0 and role == Qt.ItemDataRole.CheckStateRole:
+            if row.in_sync:
+                return None
+            if not row.selected_fields:
+                return Qt.CheckState.Unchecked
+            if len(row.selected_fields) < len(row.changes):
+                return Qt.CheckState.PartiallyChecked
+            return Qt.CheckState.Checked
+        if role == Qt.ItemDataRole.DisplayRole:
+            if column == 1:
+                return row.device_name
+            if column == 2:
+                return row.interface_name
+            if column == 3:
+                return f"{row.port_idx} {row.port_name}".strip()
+            if column == 4:
+                return row.config.summary()
+            if column == 5:
+                return "In sync" if row.in_sync else "Changed"
+            if column == 6:
+                return interface_status(self.state, row)[0]
+        if role == TONE_ROLE:
+            if column == 5:
+                return "success" if row.in_sync else "warning"
+            if column == 6:
+                return interface_status(self.state, row)[1]
+        if role == Qt.ItemDataRole.ToolTipRole:
+            lines = [
+                f"{IF_FIELD_LABELS[c.field]}: {c.current_label} -> {c.desired_label}"
+                for c in row.changes
+            ] + list(row.notes)
+            return "\n".join(lines) or None
+        return None
+
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value,
+        role=Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        if index.column() != 0 or role != Qt.ItemDataRole.CheckStateRole:
+            return False
+        row = self.items[index.row()]
+        if row.in_sync:
+            return False
+        checked = Qt.CheckState(value) == Qt.CheckState.Checked
+        self.state.set_interface_selected(row.key, "all", checked)
+        self.refresh_rows()
+        self.selection_changed.emit()
+        return True
+
+
+CABLE_HEADERS = ("", "Link", "Evidence", "Change", "Status")
+CABLE_CHANGE_LABELS = {
+    CABLE_CREATE: ("New cable", "accent"),
+    CABLE_IN_SYNC: ("In sync", "success"),
+    CABLE_CONFLICT: ("Conflict", "danger"),
+    CABLE_REFERENCE: ("Reference", "neutral"),
+}
+CABLE_ACTION_TEXT = {
+    CABLE_IN_SYNC: "NetBox already connects both interfaces.",
+    CABLE_CONFLICT: "Not written; see the notes above.",
+    CABLE_REFERENCE: "Shown for reference; both ends must be NetBox interfaces.",
+}
+
+
+def cable_status(state: ReviewState, row: CablePlanRow) -> tuple[str, str]:
+    outcome = state.outcomes.get(row.key)
+    if outcome is not None:
+        if outcome.status == "failed" or outcome.verification == "mismatch":
+            return "Failed", "danger"
+        if outcome.status == "success":
+            return ("Verified" if outcome.verification == "verified" else "Done"), (
+                "success"
+            )
+        return "Skipped", "warning"
+    if row.selectable:
+        return ("Ready", "success") if row.selected else ("Not selected", "neutral")
+    return "", "neutral"
+
+
+class CableTableModel(QAbstractTableModel):
+    selection_changed = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.state = ReviewState()
+        self.search = ""
+        self.items: tuple[CablePlanRow, ...] = ()
+
+    def set_state(self, state: ReviewState) -> None:
+        self.state = state
+        self.reload()
+
+    def set_filter(self, search: str) -> None:
+        self.search = search
+        self.reload()
+
+    def reload(self) -> None:
+        self.beginResetModel()
+        self.items = self.state.cable_rows(self.search)
+        self.endResetModel()
+
+    def refresh_rows(self) -> None:
+        keys = [row.key for row in self.items]
+        fresh = {row.key: row for row in self.state.cable_rows()}
+        self.items = tuple(fresh[key] for key in keys if key in fresh)
+        if self.items:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self.items) - 1, len(CABLE_HEADERS) - 1),
+            )
+
+    def key_at(self, row: int) -> str:
+        return self.items[row].key if 0 <= row < len(self.items) else ""
+
+    def row_of(self, key: str) -> int:
+        return next((i for i, row in enumerate(self.items) if row.key == key), -1)
+
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(self.items)
+
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(CABLE_HEADERS)
+
+    def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
+            return CABLE_HEADERS[section]
+        return None
+
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        row = self.items[index.row()] if 0 <= index.row() < len(self.items) else None
+        if index.column() == 0 and row is not None and row.selectable:
+            base |= Qt.ItemFlag.ItemIsUserCheckable
+        return base
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
+        if not index.isValid():
+            return None
+        row = self.items[index.row()]
+        column = index.column()
+        if role == KEY_ROLE:
+            return row.key
+        if column == 0 and role == Qt.ItemDataRole.CheckStateRole:
+            if not row.selectable:
+                return None
+            return Qt.CheckState.Checked if row.selected else Qt.CheckState.Unchecked
+        if role == Qt.ItemDataRole.DisplayRole:
+            if column == 1:
+                return row.label
+            if column == 2:
+                return f"{len(row.sources)} observation" + (
+                    "s" if len(row.sources) != 1 else ""
+                )
+            if column == 3:
+                return CABLE_CHANGE_LABELS[row.action][0]
+            if column == 4:
+                return cable_status(self.state, row)[0]
+        if role == TONE_ROLE:
+            if column == 3:
+                return CABLE_CHANGE_LABELS[row.action][1]
+            if column == 4:
+                return cable_status(self.state, row)[1]
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return "\n".join(row.sources + row.notes) or None
+        return None
+
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value,
+        role=Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        if index.column() != 0 or role != Qt.ItemDataRole.CheckStateRole:
+            return False
+        row = self.items[index.row()]
+        if not row.selectable:
+            return False
+        checked = Qt.CheckState(value) == Qt.CheckState.Checked
+        self.state.set_cable_selected(row.key, checked)
+        self.refresh_rows()
+        self.selection_changed.emit()
+        return True
+
+
+def network_actions(plan: NetworkPlan | None) -> tuple[int, int, int]:
+    """(VLAN group creates, VLAN writes, prefix writes) for selected rows."""
+    if plan is None:
+        return 0, 0, 0
+    vlans = sum(row.vlan_selected for row in plan.rows)
+    prefixes = sum(row.prefix_selected for row in plan.rows)
+    group = int(
+        bool(vlans or prefixes)
+        and plan.group is not None
+        and plan.group.action == NET_CREATE
+    )
+    return group, vlans, prefixes

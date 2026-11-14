@@ -199,10 +199,14 @@ def test_run_write_execution_passes_fresh_sources(monkeypatch):
         )
 
     monkeypatch.setattr(pipeline, "execute_write_plan", fake_execute)
+    fresh_device = InventoryDevice(source_id="a", name="switch-a")
     monkeypatch.setattr(
         pipeline,
-        "reread_unifi_sources",
-        lambda config, site: ({"unifi_network:a": "fresh"}, ""),
+        "reread_unifi_snapshot",
+        lambda config, site: (
+            _snapshot(InventorySource.UNIFI_NETWORK, [fresh_device]),
+            "",
+        ),
     )
 
     pipeline.run_write_execution(
@@ -218,7 +222,7 @@ def test_run_write_execution_passes_fresh_sources(monkeypatch):
         unifi_config=UNIFI,
     )
 
-    assert captured["source_devices"] == {"unifi_network:a": "fresh"}
+    assert captured["source_devices"] == {"unifi_network:a": fresh_device}
     assert captured["source_error"] == ""
 
 
@@ -289,3 +293,133 @@ def test_history_save_failure_is_reported_not_raised(monkeypatch, tmp_path):
 
     assert "Write history not saved" in report.details
     assert report.outcomes[0].status == "success"
+
+
+def test_preview_result_carries_ports_and_interfaces(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+
+    netbox = _snapshot(
+        InventorySource.NETBOX,
+        [InventoryDevice(source_id="1", name="switch-a", site="HQ")],
+        interfaces=(InventoryInterface("10", "1", "Port 1", "1000base-t"),),
+    )
+    unifi = replace(
+        _snapshot(
+            InventorySource.UNIFI_NETWORK,
+            [InventoryDevice(source_id="a", name="switch-a", site="HQ")],
+        ),
+        ports=(InventoryPort("a", 1, "RJ45", 1000, "UP", 1000),),
+    )
+    _patch_readers(monkeypatch, lambda c, **kw: netbox, lambda c, **kw: unifi)
+
+    result = build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UNIFI,
+        include_all_netbox_delete_candidates=False,
+    )
+
+    assert [p.idx for p in result.unifi_ports] == [1]
+    assert [i.name for i in result.netbox_interfaces] == ["Port 1"]
+
+
+def test_preview_result_carries_network_plan(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryNetwork
+
+    netbox = _snapshot(
+        InventorySource.NETBOX,
+        [],
+        sites=(InventorySite(source_id="7", name="Home"),),
+    )
+    unifi = replace(
+        _snapshot(InventorySource.UNIFI_NETWORK, []),
+        networks=(InventoryNetwork("n1", "IoT", 20, True, "10.0.20.0/24"),),
+    )
+    _patch_readers(monkeypatch, lambda c, **kw: netbox, lambda c, **kw: unifi)
+
+    result = build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UNIFI,
+        include_all_netbox_delete_candidates=False,
+        netbox_site_name="Home",
+    )
+
+    assert result.network_plan.group.name == "UniFi Home"
+    assert [row.name for row in result.network_plan.rows] == ["IoT"]
+
+
+def test_run_write_execution_runs_networks_first_and_records_them(
+    monkeypatch, tmp_path
+):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import BehaviorConfig
+    from unifi2netbox.journal_store import JournalStore
+    from unifi2netbox.network_execute import NetworkOutcome
+    from unifi2netbox.write_execute import WriteExecutionResult
+    from unifi2netbox.write_journal import initialize_journal
+    from unifi2netbox.write_plan import WritePlan, WritePlanSummary
+
+    plan = WritePlan((), (), False, WritePlanSummary(0, 0, 0, 0, 0, (), False, ""))
+    order = []
+
+    def fake_networks(network_plan, backend, **kwargs):
+        order.append("networks")
+        return (
+            NetworkOutcome(
+                "network:n1",
+                "create_vlan",
+                "VLAN 20 IoT",
+                "success",
+                "Created.",
+                "9",
+                "verified",
+                "ok",
+            ),
+        )
+
+    def fake_execute(*args, **kwargs):
+        order.append("devices")
+        return WriteExecutionResult(
+            journal=initialize_journal(plan, run_id="r", started_at="s")
+        )
+
+    monkeypatch.setattr(pipeline, "execute_network_plan", fake_networks)
+
+    def fake_interfaces(interface_plan, backend, **kwargs):
+        order.append("interfaces")
+        return ()
+
+    monkeypatch.setattr(pipeline, "execute_interface_plan", fake_interfaces)
+
+    def fake_cables(cable_plan, backend, **kwargs):
+        order.append("cables")
+        return ()
+
+    monkeypatch.setattr(pipeline, "execute_cable_plan", fake_cables)
+    monkeypatch.setattr(pipeline, "execute_write_plan", fake_execute)
+    path = tmp_path / "write-journal.sqlite3"
+
+    report = pipeline.run_write_execution(
+        NETBOX,
+        BehaviorConfig(),
+        None,
+        plan,
+        role_overrides={},
+        site_overrides={},
+        status_overrides={},
+        device_type_overrides={},
+        dry_run=False,
+        journal_path=path,
+        network_plan=object(),
+    )
+
+    assert order == ["networks", "interfaces", "cables", "devices"]
+    assert "1 success" in report.details and "1 verified" in report.details
+    assert report.outcomes[0].device_key == "network:n1"
+    stored = JournalStore(path).recent()[0].outcomes[0]
+    assert (stored.label, stored.operation_type) == ("VLAN 20 IoT", "create_vlan")

@@ -80,6 +80,50 @@ def netbox_transport(monkeypatch):
             200,
             {
                 "count": 2,
+                "next": "https://netbox.invalid/api/dcim/interfaces/?limit=1&offset=1",
+                "previous": None,
+                "results": [
+                    {
+                        "id": 501,
+                        "device": {"id": 7, "name": "edge-a"},
+                        "name": "Port 1",
+                        "type": {"value": "1000base-t", "label": "1000BASE-T"},
+                        "enabled": True,
+                        "mgmt_only": False,
+                        "mode": None,
+                        "poe_mode": {"value": "pse", "label": "PSE"},
+                        "poe_type": {"value": "type2-ieee802.3at", "label": "x"},
+                        "speed": None,
+                    }
+                ],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": None,
+                "previous": "https://netbox.invalid/api/dcim/interfaces/?limit=1&offset=0",
+                "results": [
+                    {
+                        "id": 502,
+                        "device": {"id": 7, "name": "edge-a"},
+                        "name": "SFP+ 1",
+                        "type": {"value": "10gbase-x-sfpp", "label": "SFP+"},
+                        "enabled": False,
+                        "mode": {"value": "tagged", "label": "Tagged"},
+                        "speed": 10000000,
+                    }
+                ],
+            },
+        ),
+        (200, {"count": 0, "next": None, "previous": None, "results": []}),
+        (200, {"count": 0, "next": None, "previous": None, "results": []}),
+        (200, {"count": 0, "next": None, "previous": None, "results": []}),
+        (
+            200,
+            {
+                "count": 2,
                 "next": "https://netbox.invalid/api/dcim/device-types/?limit=1&offset=1",
                 "previous": None,
                 "results": [
@@ -231,6 +275,7 @@ def unifi_api():
                 limit=1,
             ),
         ),
+        httpx.Response(200, json=page([], limit=1)),
     ]
 
     def handle(request):
@@ -268,6 +313,15 @@ def test_netbox_inventory_is_paginated_and_normalized(netbox_transport):
     assert snapshot.sites[1].name == "Branch"
     assert [item.value for item in snapshot.device_statuses] == ["active", "planned"]
     assert snapshot.device_statuses[0].label == "Active"
+    first, second = snapshot.interfaces
+    assert (first.source_id, first.device_id, first.name) == ("501", "7", "Port 1")
+    assert (first.type, first.poe_mode, first.enabled) == ("1000base-t", "pse", True)
+    assert (second.type, second.mode, second.enabled) == (
+        "10gbase-x-sfpp",
+        "tagged",
+        False,
+    )
+    assert second.speed_kbps == 10000000
 
     for request, options in calls:
         assert request.method == "GET"
@@ -333,6 +387,7 @@ def test_unifi_inventory_is_paginated_and_normalized(unifi_api):
         "/proxy/network/integration/v1/sites",
         f"/proxy/network/integration/v1/sites/{SITE_ID}/devices",
         f"/proxy/network/integration/v1/sites/{SITE_ID}/devices",
+        f"/proxy/network/integration/v1/sites/{SITE_ID}/networks",
     ]
 
 
@@ -361,3 +416,295 @@ def test_unifi_inventory_rejects_bad_pagination(unifi_api):
             page_size=1,
             transport=unifi_api[2],
         )
+
+
+def test_unifi_inventory_reads_ports_from_device_details():
+    responses = {
+        "info": {"applicationVersion": "11.0.99"},
+        "sites": page([{"id": SITE_ID, "name": "Default", "internalReference": "d"}]),
+        f"sites/{SITE_ID}/devices": page(
+            [
+                {
+                    "id": "sw",
+                    "name": "switch",
+                    "model": "US 8 60W",
+                    "macAddress": "aa:bb:cc:00:00:01",
+                    "interfaces": ["ports"],
+                },
+                {
+                    "id": "ap",
+                    "name": "ap",
+                    "model": "U6 Lite",
+                    "interfaces": ["radios"],
+                },
+            ]
+        ),
+        f"sites/{SITE_ID}/networks": page([]),
+        f"sites/{SITE_ID}/devices/sw": {
+            "id": "sw",
+            "interfaces": {
+                "ports": [
+                    {
+                        "idx": 2,
+                        "state": "DOWN",
+                        "connector": "RJ45",
+                        "maxSpeedMbps": 1000,
+                    },
+                    {
+                        "idx": 1,
+                        "state": "UP",
+                        "connector": "rj45",
+                        "maxSpeedMbps": 1000,
+                        "speedMbps": 100,
+                        "poe": {
+                            "standard": "802.3at",
+                            "type": 2,
+                            "enabled": True,
+                            "state": "UP",
+                        },
+                    },
+                ]
+            },
+        },
+    }
+    internal = {
+        "stat/device": [
+            {
+                "mac": "AA:BB:CC:00:00:01",
+                "port_table": [
+                    {"port_idx": 1, "name": "Uplink", "enable": True, "forward": "all"},
+                    {
+                        "port_idx": 2,
+                        "name": "Port 2",
+                        "enable": False,
+                        "forward": "disabled",
+                    },
+                ],
+            }
+        ],
+        "rest/portconf": [],
+        "rest/networkconf": [
+            {"_id": "lan", "purpose": "corporate", "vlan_enabled": False},
+            {"_id": "wan", "purpose": "wan", "x_password": "synthetic-secret"},
+        ],
+    }
+    requested = []
+
+    def handle(request):
+        assert request.method == "GET"
+        if "/api/s/d/" in request.url.path:
+            path = request.url.path.split("/api/s/d/", 1)[1]
+            requested.append("internal:" + path)
+            return httpx.Response(200, json={"data": internal[path]})
+        path = request.url.path.split("/integration/v1/", 1)[1]
+        requested.append(path)
+        return httpx.Response(200, json=responses[path])
+
+    snapshot = read_unifi_inventory(
+        UniFiConfig("https://console.invalid", "synthetic-key"),
+        transport=httpx.MockTransport(handle),
+    )
+
+    assert f"sites/{SITE_ID}/devices/ap" not in requested
+    assert snapshot.port_config_error == ""
+    uplink, disabled = snapshot.port_configs
+    assert (uplink.device_id, uplink.name, uplink.summary()) == (
+        "sw",
+        "Uplink",
+        "tagged-all, native 1",
+    )
+    assert (disabled.enabled, disabled.summary()) == (False, "disabled")
+    assert "synthetic-secret" not in repr(snapshot)
+    first, second = snapshot.ports
+    assert (first.device_id, first.idx, first.connector) == ("sw", 1, "RJ45")
+    assert (first.link_state, first.speed_mbps) == ("UP", 100)
+    assert (first.poe_standard, first.poe_type, first.poe_enabled) == (
+        "802.3at",
+        2,
+        True,
+    )
+    assert (second.idx, second.link_state, second.speed_mbps) == (2, "DOWN", 0)
+    assert second.poe_enabled is None
+
+
+@pytest.mark.parametrize(
+    "ports",
+    [
+        "not-a-list",
+        [{"state": "UP"}],
+        [{"idx": 1}, {"idx": 1}],
+    ],
+)
+def test_unifi_port_lists_are_validated(ports):
+    from unifi2netbox.inventory import _normalize_unifi_ports
+
+    with pytest.raises(InventoryError):
+        _normalize_unifi_ports("sw", {"interfaces": {"ports": ports}})
+
+
+def test_unifi_networks_carry_vlan_and_subnet():
+    from unifi2netbox.inventory import _normalize_unifi_network
+
+    row = {"id": "n1", "name": "IoT", "vlanId": 20, "enabled": True}
+    detail = {"ipv4Configuration": {"hostIpAddress": "10.0.20.1", "prefixLength": 24}}
+
+    network = _normalize_unifi_network(row, detail)
+
+    assert (network.name, network.vlan_id, network.subnet, network.gateway_ip) == (
+        "IoT",
+        20,
+        "10.0.20.0/24",
+        "10.0.20.1",
+    )
+    assert _normalize_unifi_network(row, {}).subnet == ""
+    assert _normalize_unifi_network({"id": "n2", "name": "x"}, {}) is None
+    bad = {"ipv4Configuration": {"hostIpAddress": "nope", "prefixLength": 24}}
+    assert _normalize_unifi_network(row, bad).subnet == ""
+
+
+def test_netbox_ipam_rows_are_normalized():
+    from unifi2netbox.inventory import (
+        _normalize_netbox_prefix,
+        _normalize_netbox_vlan,
+        _normalize_netbox_vlan_group,
+    )
+
+    group = _normalize_netbox_vlan_group(
+        {
+            "id": 3,
+            "name": "UniFi Home",
+            "slug": "unifi-home",
+            "scope_type": "dcim.site",
+            "scope_id": 7,
+        }
+    )
+    vlan = _normalize_netbox_vlan(
+        {
+            "id": 9,
+            "vid": 20,
+            "name": "IoT",
+            "group": {"id": 3},
+            "status": {"value": "active"},
+        }
+    )
+    prefix = _normalize_netbox_prefix(
+        {
+            "id": 5,
+            "prefix": "10.0.20.0/24",
+            "vlan": {"id": 9},
+            "scope_type": "dcim.site",
+            "scope_id": 7,
+            "status": {"value": "active"},
+        }
+    )
+
+    assert (group.source_id, group.scope_type, group.scope_id) == (
+        "3",
+        "dcim.site",
+        "7",
+    )
+    assert (vlan.vid, vlan.group_id, vlan.status) == (20, "3", "active")
+    assert (prefix.prefix, prefix.vlan_id, prefix.scope_id) == (
+        "10.0.20.0/24",
+        "9",
+        "7",
+    )
+    assert _normalize_netbox_vlan({"id": 1, "vid": "20"}) is None
+
+
+def test_netbox_inventory_survives_missing_ipam_permission(netbox_transport):
+    _, responses = netbox_transport
+    responses[5] = (403, {"detail": "You do not have permission."})
+    del responses[6:8]
+
+    snapshot = read_netbox_inventory(
+        NetBoxConfig("https://netbox.invalid", "synthetic-token"),
+        page_size=1,
+    )
+
+    assert [device.source_id for device in snapshot.devices] == ["7", "8"]
+    assert snapshot.vlans == ()
+    assert snapshot.ipam_error.startswith("NetBox IPAM could not be read")
+
+
+def test_port_config_is_skipped_for_unvalidated_versions(unifi_api):
+    calls, _, transport = unifi_api
+    snapshot = read_unifi_inventory(
+        UniFiConfig("https://console.invalid", "synthetic-key", site=SITE_ID),
+        page_size=1,
+        transport=transport,
+    )
+
+    assert not any("/api/s/" in str(call) for call in calls)
+
+    assert snapshot.port_configs == ()
+    assert "validated UniFi Network 11.0" in snapshot.port_config_error
+    assert "10.6.100" in snapshot.port_config_error
+
+
+def test_port_config_failure_keeps_the_official_inventory():
+    from unifi2netbox.inventory import _read_port_configs
+
+    def handle(request):
+        return httpx.Response(403, json={"secret": "synthetic-secret"})
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        configs, links, error = _read_port_configs(
+            client,
+            UniFiConfig("https://console.invalid", "synthetic-key"),
+            "11.0.99",
+            "d",
+            [],
+        )
+
+    assert configs == () and links == ()
+    assert error == "Port configuration unavailable: permission denied."
+
+
+def test_netbox_interfaces_carry_vlan_assignments_and_lag():
+    from unifi2netbox.inventory import _normalize_netbox_interface
+
+    interface = _normalize_netbox_interface(
+        {
+            "id": 10,
+            "device": {"id": 1},
+            "name": "Port 1",
+            "type": {"value": "1000base-t"},
+            "mode": {"value": "tagged"},
+            "untagged_vlan": {"id": 5},
+            "tagged_vlans": [{"id": 11}, {"id": 7}, {"id": 7}, "bad"],
+            "lag": {"id": 12},
+        }
+    )
+
+    assert (interface.mode, interface.untagged_vlan_id) == ("tagged", "5")
+    assert interface.tagged_vlan_ids == ("7", "11")
+    assert interface.lag_id == "12"
+
+
+def test_netbox_interfaces_carry_their_cable_and_interface_peers():
+    from unifi2netbox.inventory import _normalize_netbox_interface
+
+    cabled = _normalize_netbox_interface(
+        {
+            "id": 10,
+            "device": {"id": 1},
+            "name": "Port 1",
+            "cable": {"id": 4},
+            "link_peers_type": "dcim.interface",
+            "link_peers": [{"id": 22}],
+        }
+    )
+    to_port = _normalize_netbox_interface(
+        {
+            "id": 11,
+            "device": {"id": 1},
+            "name": "Port 2",
+            "cable": {"id": 5},
+            "link_peers_type": "dcim.frontport",
+            "link_peers": [{"id": 3}],
+        }
+    )
+
+    assert (cabled.cable_id, cabled.link_peer_ids) == ("4", ("22",))
+    assert (to_port.cable_id, to_port.link_peer_ids) == ("5", ())

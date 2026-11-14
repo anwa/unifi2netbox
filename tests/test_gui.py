@@ -567,6 +567,9 @@ def fake_runner(monkeypatch, window):
         dry_run,
         unifi_config=None,
         journal_path=None,
+        network_plan=None,
+        interface_plan=None,
+        cable_plan=None,
     ):
         started.update(
             plan=write_plan,
@@ -577,6 +580,9 @@ def fake_runner(monkeypatch, window):
             type=device_type_overrides,
             unifi_config=unifi_config,
             journal_path=journal_path,
+            network_plan=network_plan,
+            interface_plan=interface_plan,
+            cable_plan=cable_plan,
         )
         return True
 
@@ -1199,3 +1205,354 @@ def test_history_dialog_without_runs_shows_empty_hint(qtbot):
 
     assert dialog.findChild(QLabel, "historyEmpty") is not None
     assert dialog.table.rowCount() == 0
+
+
+def test_detail_panel_lists_ports_with_notes(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+
+    result = replace(
+        preview_result(),
+        unifi_ports=(
+            InventoryPort("a", 1, "RJ45", 2500, "UP", 1000, "802.3at", 2, True, "UP"),
+            InventoryPort("a", 2, "SFPPLUS", 10000, "DOWN", 0),
+        ),
+        netbox_interfaces=(
+            InventoryInterface("10", "1", "Port 1", "1000base-t"),
+            InventoryInterface("11", "1", "SFP+ 1", "10gbase-x-sfpp"),
+        ),
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    select_row(window, "sw-a")
+
+    heading = window.detail.findChild(QLabel, "portsHeading")
+    notes = window.detail.findChild(QLabel, "portNotes")
+    assert heading is not None and heading.text() == "Ports (2)"
+    assert notes is not None
+    assert "Port 1: UniFi port supports 2.5 Gbit/s" in notes.text()
+    assert "PSE mode" in notes.text()
+
+
+def network_result():
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryNetwork
+    from unifi2netbox.networks import build_network_plan
+
+    result = preview_result()
+    plan = build_network_plan(
+        (
+            InventoryNetwork("n1", "IoT", 20, True, "10.0.20.0/24"),
+            InventoryNetwork("n2", "Guest", 60, False, "10.0.60.0/24"),
+        ),
+        (InventorySite("7", "Home"),),
+        (),
+        (),
+        (),
+        site_name="Home",
+    )
+    return replace(result, network_plan=plan)
+
+
+def test_networks_filter_shows_network_table_and_detail(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, network_result())
+
+    assert window.segments["networks"].text() == "Networks 2"
+    assert window.cards["networks"].count == 1
+    window.set_filter("networks")
+
+    assert window.table_stack.currentWidget() is window.network_table
+    model = window.network_model
+    assert [model.data(model.index(r, 1)) for r in range(model.rowCount())] == [
+        "IoT",
+        "Guest",
+    ]
+    assert model.data(model.index(1, 5)) == "Disabled in UniFi"
+    title = window.detail.findChild(QLabel, "detailTitle")
+    assert title.text() == "IoT"
+    vlan_box = window.detail.findChild(QCheckBox, "network_vlan")
+    assert vlan_box is not None and vlan_box.isChecked()
+    assert "Create VLAN 20 'IoT'" in vlan_box.text()
+
+
+def test_network_writes_count_in_apply_bar_and_reach_the_job(
+    qtbot, tmp_path, pool, monkeypatch
+):
+    window = review_window(qtbot, tmp_path, pool, network_result())
+    assert window.execute_plan_button.text() == "Apply 6 changes..."
+    assert "3 network writes" in window.selection_label.text()
+
+    window.set_filter("networks")
+    window.detail.findChild(QCheckBox, "network_prefix").setChecked(False)
+    assert window.execute_plan_button.text() == "Apply 5 changes..."
+
+    started = fake_runner(monkeypatch, window)
+    window.execute_plan_button.click()
+    assert started["network_plan"] is window.review.network_plan
+    assert started["network_plan"].operation_count == 2
+
+
+def test_network_blocker_is_shown_when_no_site_is_set(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.networks import NetworkPlan
+
+    result = replace(
+        preview_result(),
+        network_plan=NetworkPlan(None, (), blocker="Set the NetBox site first."),
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    window.set_filter("networks")
+
+    placeholder = window.detail.findChild(QLabel, "detailPlaceholder")
+    assert (
+        placeholder is not None and placeholder.text() == "Set the NetBox site first."
+    )
+
+
+def test_confirm_dialog_lists_network_writes(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, network_result())
+
+    confirm = ConfirmDialog(
+        window.review,
+        window.review.plan,
+        dry_run=False,
+        network_plan=window.review.network_plan,
+    )
+    qtbot.addWidget(confirm)
+
+    summary = confirm.findChild(QLabel, "confirmSummary").text()
+    assert "1 VLAN" in summary and "1 prefix" in summary and "1 VLAN group" in summary
+    assert confirm.confirm_button.text() == "Apply 6 changes"
+
+
+def test_detail_panel_shows_port_configuration(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+    from unifi2netbox.port_config import InventoryPortConfig
+
+    result = replace(
+        preview_result(),
+        unifi_ports=(
+            InventoryPort("a", 1, "RJ45", 1000, "UP", 1000),
+            InventoryPort("a", 2, "RJ45", 1000, "DOWN", 0),
+        ),
+        netbox_interfaces=(
+            InventoryInterface("10", "1", "Port 1", "1000base-t"),
+            InventoryInterface("11", "1", "Port 2", "1000base-t"),
+        ),
+        unifi_port_configs=(
+            InventoryPortConfig("a", 1, "Uplink", True, "tagged-all", 1, (), "", 1),
+            InventoryPortConfig(
+                "a", 2, "Cam", True, "access", 30, (), "Cams", None, ("note x",)
+            ),
+        ),
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    select_row(window, "sw-a")
+
+    first = window.detail.findChild(QLabel, "portConfig1")
+    second = window.detail.findChild(QLabel, "portConfig2")
+    assert first.text() == "tagged-all, native 1, LAG 1"
+    assert second.text() == "access 30"
+    assert "Port profile: Cams" in second.toolTip()
+    assert "Port 2: note x" in window.detail.findChild(QLabel, "portNotes").text()
+    summary = window.detail.findChild(QLabel, "portsSummary").text()
+    assert "internal UniFi API" in summary
+
+
+def test_detail_panel_explains_missing_port_configuration(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryPort
+
+    result = replace(
+        preview_result(),
+        unifi_ports=(InventoryPort("a", 1, "RJ45", 1000, "UP", 1000),),
+        port_config_error="Port configuration unavailable: permission denied.",
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    select_row(window, "sw-a")
+
+    summary = window.detail.findChild(QLabel, "portsSummary").text()
+    assert "permission denied" in summary
+
+
+def interface_result():
+    from dataclasses import replace
+
+    from unifi2netbox.interface_plan import DevicePair, build_interface_plan
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort, InventoryVlan
+    from unifi2netbox.port_config import InventoryPortConfig
+
+    plan = build_interface_plan(
+        (DevicePair("unifi_network:a->netbox:1", "sw-a", "a", "1"),),
+        (
+            InventoryPort("a", 1, "RJ45", 1000),
+            InventoryPort("a", 2, "RJ45", 1000),
+        ),
+        (
+            InventoryInterface("10", "1", "Port 1", "1000base-t"),
+            InventoryInterface(
+                "11", "1", "Port 2", "1000base-t", mode="access", untagged_vlan_id="120"
+            ),
+        ),
+        (
+            InventoryPortConfig("a", 1, "Uplink", True, "tagged", 1, (20,)),
+            InventoryPortConfig("a", 2, "Cam", True, "access", 20),
+        ),
+        (InventoryVlan("101", 1, "Default", "9"), InventoryVlan("120", 20, "IoT", "9")),
+        vlan_group_id="9",
+        vlan_group_name="UniFi Home",
+    )
+    return replace(preview_result(), interface_plan=plan)
+
+
+def test_interfaces_filter_shows_table_and_field_checkboxes(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, interface_result())
+
+    assert window.segments["interfaces"].text() == "Interfaces 2"
+    assert window.cards["interfaces"].count == 1
+    window.set_filter("interfaces")
+
+    assert window.table_stack.currentWidget() is window.interface_table
+    model = window.interface_model
+    assert [model.data(model.index(r, 2)) for r in range(model.rowCount())] == [
+        "Port 1",
+        "Port 2",
+    ]
+    assert model.data(model.index(0, 4)) == "tagged 20, native 1"
+    assert model.data(model.index(1, 5)) == "In sync"
+    title = window.detail.findChild(QLabel, "detailTitle")
+    assert title.text() == "sw-a Port 1"
+    mode = window.detail.findChild(QCheckBox, "interface_mode")
+    tagged = window.detail.findChild(QCheckBox, "interface_tagged_vlans")
+    assert mode.isChecked() and "- \u2192 tagged" in mode.text()
+    assert "VLAN 20 IoT" in tagged.text()
+
+
+def test_interface_writes_count_and_reach_the_job(qtbot, tmp_path, pool, monkeypatch):
+    window = review_window(qtbot, tmp_path, pool, interface_result())
+    base = len(window.review.plan.operations)
+    assert window.execute_plan_button.text() == f"Apply {base + 1} changes..."
+    assert "1 interface writes" in window.selection_label.text()
+
+    window.set_filter("interfaces")
+    window.detail.findChild(QCheckBox, "interface_mode").setChecked(False)
+    assert window.review.interface_operation_count() == 0
+    window.detail.findChild(QCheckBox, "interface_tagged_vlans").setChecked(True)
+    row = window.review.interface_row("interface:10")
+    assert row.selected_fields == ("mode", "tagged_vlans")
+
+    started = fake_runner(monkeypatch, window)
+    window.execute_plan_button.click()
+    assert started["interface_plan"] is window.review.interface_plan
+
+
+def test_interface_blocker_is_shown_without_port_configuration(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.interface_plan import InterfacePlan
+
+    result = replace(
+        preview_result(),
+        interface_plan=InterfacePlan(blocker="Port configuration unavailable."),
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    window.set_filter("interfaces")
+
+    placeholder = window.detail.findChild(QLabel, "detailPlaceholder")
+    assert placeholder.text() == "Port configuration unavailable."
+
+
+def test_confirm_dialog_lists_interface_writes(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, interface_result())
+
+    confirm = ConfirmDialog(
+        window.review,
+        window.review.plan,
+        dry_run=False,
+        interface_plan=window.review.interface_plan,
+    )
+    qtbot.addWidget(confirm)
+
+    assert "1 interface" in confirm.findChild(QLabel, "confirmSummary").text()
+
+
+def cable_result():
+    from dataclasses import replace
+
+    from unifi2netbox.cables import build_cable_plan
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+    from unifi2netbox.links import LLDP, UPLINK, InventoryLink
+
+    plan = build_cable_plan(
+        (
+            InventoryLink("rps", 1, "udm", 5, UPLINK),
+            InventoryLink("udm", 5, "rps", None, LLDP),
+            InventoryLink("sw", 3, "udm", 4, UPLINK),
+        ),
+        {"udm": "UDM", "rps": "RPS", "sw": "SW"},
+        {"udm": "1", "rps": "2"},
+        (InventoryPort("udm", 5, "RJ45", 1000), InventoryPort("rps", 1, "RJ45", 1000)),
+        (
+            InventoryInterface("15", "1", "port.5", "1000base-t"),
+            InventoryInterface("21", "2", "eth0", "1000base-t"),
+        ),
+    )
+    return replace(preview_result(), cable_plan=plan)
+
+
+def test_cables_filter_shows_suggestions_and_detail(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, cable_result())
+
+    assert window.segments["cables"].text() == "Cables 2"
+    assert window.cards["cables"].count == 1
+    window.set_filter("cables")
+
+    assert window.table_stack.currentWidget() is window.cable_table
+    model = window.cable_model
+    assert model.data(model.index(0, 1)) == "RPS eth0 \u2194 UDM port.5"
+    assert model.data(model.index(0, 2)) == "2 observations"
+    assert model.data(model.index(1, 3)) == "Reference"
+    box = window.detail.findChild(QCheckBox, "cable_create")
+    assert box is not None and box.isChecked()
+
+
+def test_cable_writes_count_and_reach_the_job(qtbot, tmp_path, pool, monkeypatch):
+    window = review_window(qtbot, tmp_path, pool, cable_result())
+    base = len(window.review.plan.operations)
+    assert window.execute_plan_button.text() == f"Apply {base + 1} changes..."
+    assert "1 cables" in window.selection_label.text()
+
+    started = fake_runner(monkeypatch, window)
+    window.execute_plan_button.click()
+    assert started["cable_plan"].operation_count == 1
+
+    window.set_filter("cables")
+    window.detail.findChild(QCheckBox, "cable_create").setChecked(False)
+    assert window.review.cable_operation_count() == 0
+
+
+def test_reference_cable_has_no_checkbox(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, cable_result())
+    window.set_filter("cables")
+    window.show_detail(window.cable_model.key_at(1))
+
+    assert window.detail.findChild(QCheckBox, "cable_create") is None
+
+
+def test_confirm_dialog_lists_cables(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, cable_result())
+
+    confirm = ConfirmDialog(
+        window.review,
+        window.review.plan,
+        dry_run=False,
+        cable_plan=window.review.cable_plan,
+    )
+    qtbot.addWidget(confirm)
+
+    assert "1 cable" in confirm.findChild(QLabel, "confirmSummary").text()

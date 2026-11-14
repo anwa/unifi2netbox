@@ -6,6 +6,292 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.7.0
+
+### Summary
+
+- Switch ports and VLANs milestone (M6): ports, port configuration, networks,
+	interfaces and cables are compared with NetBox and can be written with the
+	same safeguards as devices.
+
+### Added
+
+- Ports of matched devices are paired with NetBox interfaces; link state and
+	speed are shown as live values and never written.
+- UniFi networks become a site-scoped VLAN group "UniFi <site>", VLANs and
+	prefixes linked to their VLAN (Networks view).
+- Effective port configuration (name, enable state, profile, mode, native and
+	tagged VLANs, LAG) is read from internal UniFi Network 11.0 endpoints, GET
+	only, with an allow-list that keeps network secrets out of all models.
+- Interface configuration (enabled, 802.1Q mode, untagged and tagged VLANs) is
+	planned and written field by field (Interfaces view); LAG stays display-only.
+- Cables are suggested only from agreeing LLDP and uplink evidence between
+	interfaces without a cable, and are only created (Cables view).
+- Write order in one run: networks, interfaces, cables, devices; every write
+	is re-checked against UniFi and NetBox, read back and recorded.
+
+### Validation
+
+- Milestone-wide offline gate: 415 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): read-only checks of ports
+	(195), networks (16), port configuration (195 of 195 resolved) and link
+	evidence (53 observations); dry runs of 31 network, 19 interface and 1 cable
+	operations; approved NetBox developer-instance write tests for networks
+	(10/10), interfaces (8/8) and cables (7/7), each with a no-op second apply
+	and all test objects restored or removed. LAG, tagged VLAN lists and
+	interrupted creates are covered by offline tests only.
+
+### Compatibility
+
+- Requires no configuration changes. Snapshots gain ports, interfaces,
+	networks, IPAM objects, port configuration and links; older snapshots load
+	without migration. Internal endpoints are only read for UniFi Network 11.0.
+
+## v0.6.13
+
+### Added
+
+- M6 slice 5, review window: a **Cables** filter and summary card list every
+  link UniFi reports between devices with its evidence, change type (new
+  cable, in sync, conflict, reference) and status. The detail panel shows the
+  observations, notes and a checkbox for creatable cables. Selected cables
+  count in the apply bar, appear in the confirmation dialog and run with the
+  other writes.
+
+### Validation
+
+- Added GUI tests for the cables table, preselection, reference rows without
+  a checkbox, apply counts and the confirmation summary; offscreen render with
+  live data reviewed.
+
+## v0.6.12
+
+### Added
+
+- M6 slice 5, execution: selected cable suggestions are created in NetBox
+  after interface writes and before device writes. UniFi must still report the
+  link; both interfaces are re-read, a cable that already joins them counts as
+  done and any other cable skips the row (never replaced). Interrupted creates
+  are looked up on the interface instead of retried; every cable is read back.
+  Dry runs run all checks. Cables are never changed or deleted.
+
+### Validation
+
+- Added executor tests (create and verify, existing cable, other cable, dry
+  run, vanished evidence, unreadable UniFi, interrupted create found or lost,
+  transport failure) and pipeline ordering.
+
+## v0.6.11
+
+### Added
+
+- M6 slice 5, planning: link evidence between UniFi devices is read from the
+  internal `stat/device` payload (wired `uplink` and `lldp_table`), resolved
+  from MAC to device IDs without storing MACs. NetBox interfaces carry their
+  cable and interface link peers. A cable plan groups the evidence per device
+  pair and suggests a cable only when all observations agree on the ports, no
+  port is claimed by another neighbor, both devices are matched and both ports
+  map to NetBox interfaces (port pairing, or the only physical interface of a
+  device without port data), and neither interface has another cable.
+  Two or more observations preselect a suggestion; single observations stay
+  unchecked. Existing cables are never replaced.
+
+### Validation
+
+- Added link reader, cable planner, interface cable and snapshot tests. Live
+  read-only: 53 observations (35 LLDP, 18 uplink) on 18 device pairs without
+  disagreement; one cable suggested (UDM port.5 to RPS, LLDP and uplink), 17
+  pairs reference-only because a device is not in NetBox.
+
+## v0.6.10
+
+### Added
+
+- M6 slice 4, review window: an **Interfaces** filter and summary card list
+  paired UniFi ports and NetBox interfaces of matched devices with port name,
+  effective configuration, change and status. The detail panel shows one
+  checkbox per field change (enabled, 802.1Q mode, untagged VLAN, tagged VLANs)
+  with current and target values; VLAN fields follow the mode selection and
+  the panel updates immediately. Selected interface writes count in the apply
+  bar, appear in the confirmation dialog and run with the other writes.
+
+### Validation
+
+- Added review and GUI tests for interface rows, field selection and
+  dependencies, apply counts, the blocker message and the confirmation
+  summary; offscreen render with live data reviewed.
+
+## v0.6.9
+
+### Added
+
+- M6 slice 4, execution: selected interface changes are written with one PATCH
+  per interface after the network writes and before device writes. UniFi is
+  re-read and rows whose port configuration changed are skipped; each NetBox
+  interface is re-read and skipped when a selected field no longer has its
+  preview value; dry runs run all checks; every write is read back as
+  verified, mismatch or unverified and recorded in the write history.
+  Interfaces are never created or deleted.
+
+### Validation
+
+- Added executor tests (payload of selected fields only, verification, second
+  run without changes, dry run, NetBox and UniFi drift, missing interface,
+  transport failure, read-back mismatch) and pipeline ordering.
+
+## v0.6.8
+
+### Added
+
+- M6 slice 4, planning: NetBox interfaces now carry their untagged VLAN,
+  tagged VLANs and LAG. A new interface plan compares each paired UniFi port of
+  a matched device with its NetBox interface field by field (enabled, 802.1Q
+  mode, untagged VLAN, tagged VLANs). VLANs come only from the site's
+  "UniFi <site>" VLAN group; missing VLANs or a missing group become notes
+  instead of writes. `tagged-all` ports get no VLAN list, leftover tagged VLANs
+  are cleared outside `tagged` mode, disabled ports only change `enabled`,
+  unknown configurations never clear NetBox values, and LAG membership is shown
+  but not written. VLAN fields follow the mode selection.
+
+### Validation
+
+- Added planner tests and an interface VLAN snapshot round trip. Live
+  read-only: 19 interfaces on 2 matched devices planned (13 mode, 6 enabled);
+  VLAN fields wait for the VLAN group as expected.
+
+## v0.6.7
+
+### Added
+
+- M6 slice 3, review window: the port list in the detail panel shows the UniFi
+  port name and the effective configuration per port (for example `access 20`,
+  `tagged-all, native 1`, `disabled`, `off`, `LAG 7`); the port profile and
+  resolution notes appear as tooltips and in the notes list. When the internal
+  endpoints were not read, the reason is shown above the list.
+
+### Validation
+
+- Added review and GUI tests for per-device port configuration, profile
+  tooltips, notes and the missing-configuration message; offscreen render
+  with live data reviewed (UDM Pro Max, 11 ports).
+
+## v0.6.6
+
+### Added
+
+- M6 slice 3: effective UniFi port configuration is read from the internal
+  Network endpoints `stat/device`, `rest/portconf` and `rest/networkconf`
+  (GET only, UniFi Network 11.0 only). Per port: name, configured enable state,
+  profile, mode (`disabled`, `access`, `tagged`, `tagged-all`, `unknown`),
+  native VLAN, tagged VLANs and LAG membership. Profiles take precedence over
+  port overrides; trunks carrying every VLAN stay explicit `tagged-all` and are
+  never expanded. Unknown profiles, networks or rules are reported instead of
+  guessed. Only allow-listed fields leave the raw payloads, so network secrets
+  are never stored; failures keep the official inventory and are recorded.
+
+### Validation
+
+- Added resolver tests (forwarding rules, profile precedence, disabled versus
+  down, unknown inputs, LAG, secret exclusion), reader tests for the version
+  gate and tolerant failures, and a snapshot round trip. Live read-only check:
+  195 of 195 ports resolved on 17 devices without notes.
+
+## v0.6.5
+
+### Added
+
+- M6 slice 2, review window: a **Networks** filter and summary card show the
+	UniFi networks with VLAN, subnet, change type and status. The detail panel
+	explains what is created or aligned (VLAN group, VLAN, prefix) with separate
+	checkboxes for the VLAN and the prefix, or shows why planning is blocked.
+	Selected network writes count in the apply bar, are listed in the
+	confirmation dialog and run with the device writes; results appear per
+	network.
+
+### Validation
+
+- Added review and GUI tests for network rows, selection, apply counts, the
+	blocker message and the confirmation summary; offscreen render with live
+	data reviewed (16 networks, 31 planned writes).
+
+## v0.6.4
+
+### Added
+
+- M6 slice 2, execution: the new `network_execute` module writes the selected
+	parts of the network plan in the order VLAN group, VLANs, prefixes (a new
+	prefix links the VLAN created in the same run). It applies the device-write
+	safeguards: UniFi networks are re-read and changed ones skipped, NetBox is
+	checked before each write (objects that appeared are not duplicated, an
+	existing VLAN group is reused, changed baselines are skipped), interrupted
+	creates are looked up instead of retried, and every write is read back.
+	Dry runs perform all checks without writing.
+- Network writes run before device writes in one run; their outcomes share
+	the run summary and the write history. UniFi is re-read once per run.
+
+### Validation
+
+- Added executor tests (order and linking, dry run, appeared objects, update
+	baselines, interrupted create, UniFi changes) and pipeline tests.
+
+## v0.6.3
+
+### Added
+
+- M6 slice 2, planning: the new `networks` module compares UniFi networks with
+	NetBox IPAM for the configured NetBox site. It plans one site-scoped VLAN
+	group ("UniFi <site>"), a VLAN per enabled network and a site-scoped prefix
+	per subnet linked to its VLAN. Existing VLAN names are aligned and missing
+	prefix VLANs filled in; prefixes pointing at another VLAN, duplicate
+	prefixes and duplicate UniFi VLAN IDs are conflicts and never selected.
+	Disabled networks are reference-only. The plan is part of the preview
+	result; without a NetBox site setting or IPAM access, planning is blocked
+	with the reason.
+
+### Validation
+
+- Added planner tests (create, in-sync, completion, conflicts, disabled
+	networks, blockers, selection) and a pipeline test.
+- Live read-only check: 16 networks planned against the empty NetBox IPAM
+	(VLAN group plus 15 VLANs and 15 prefixes selected, 31 operations; the
+	disabled network is reference-only).
+
+## v0.6.2
+
+### Added
+
+- M6 slice 2, reading: UniFi networks (name, VLAN ID, enabled, default flag
+	and IPv4 subnet from the official network details) and NetBox VLAN groups,
+	VLANs and prefixes are read into the snapshots. A NetBox token without IPAM
+	rights no longer breaks the refresh; the IPAM error is recorded instead.
+
+### Validation
+
+- Added network/IPAM normalization, missing-permission and snapshot tests.
+- Live read-only check: 16 UniFi networks (15 enabled, all with a subnet, no
+	duplicate VLAN IDs) read in 0.49 s; NetBox IPAM readable and still empty.
+
+## v0.6.1
+
+### Added
+
+- M6 slice 1: UniFi switch ports (official device details: index, connector,
+	maximum speed, PoE, live link state and speed) and NetBox interfaces are read
+	into the snapshots. For matched devices, ports are paired with NetBox
+	interfaces by exact connector kind (RJ45, SFP, SFP+, SFP28), then by copper
+	or optical family, in numbering order. The detail panel lists the ports with
+	their NetBox interface and notes for speed or PoE differences and unpaired
+	ports or interfaces. Link state and speed are display-only and never written.
+
+### Validation
+
+- Added inventory, snapshot, port matching, review and GUI tests.
+- Live read-only check: 195 UniFi ports on 17 devices and 47 NetBox interfaces
+	read; the UDM Pro Max pairs 11/11 ports, and a USW Aggregation pairs 8 SFP+
+	ports while its NetBox device has 24 further interfaces from another device
+	type.
+
 ## v0.6.0
 
 ### Summary

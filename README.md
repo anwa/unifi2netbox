@@ -1,18 +1,20 @@
 # unifi2netbox
 
-Latest main release: **v0.6.0**, the approved NetBox writes milestone (M5).
+Latest main release: **v0.7.0**, the switch ports and VLANs milestone (M6).
 
-Release **v0.6.0** compares UniFi Network inventory with NetBox in a modern
+Release **v0.7.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
-history. UniFi stays read-only.
+history. Beyond devices it covers VLANs and prefixes, switch port
+configuration on NetBox interfaces and cable suggestions from LLDP. UniFi
+stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v0.6.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v0.7.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities
@@ -52,6 +54,32 @@ history.
   `serial`, `site`). Other differences, such as UniFi model names versus NetBox
   device types, are shown as preview-only. Empty UniFi values never clear
   NetBox values.
+- The **Networks** filter lists the UniFi networks and plans NetBox IPAM for
+  the configured NetBox site: a VLAN group "UniFi <site>", one VLAN per enabled
+  network and a site-scoped prefix per subnet linked to its VLAN. Existing VLAN
+  names are aligned and missing prefix VLANs filled in; conflicts (a prefix
+  linked to another VLAN, duplicate prefixes or VLAN IDs) are shown but never
+  written. Disabled networks are reference-only. Network writes use the same
+  re-read, read-back and history safeguards as device writes.
+- With UniFi Network 11.0 the port list also shows each port's name and
+  effective configuration (mode, native and tagged VLANs, profile, LAG), read
+  from internal Network endpoints with GET only. All-VLAN trunks stay
+  `tagged-all`; unknown profiles or networks are reported, never guessed.
+- The **Interfaces** filter compares the effective UniFi port configuration
+  with the paired NetBox interfaces of matched devices and offers field-level
+  writes for enabled state, 802.1Q mode, untagged and tagged VLANs. VLANs come
+  from the site's "UniFi <site>" VLAN group, so write the networks first and
+  refresh. Interfaces are only updated, never created or deleted; LAGs and
+  cables are not changed, and a second apply after a refresh writes nothing.
+- The **Cables** filter lists links that UniFi reports between devices
+  (wired uplinks and LLDP). A NetBox cable is suggested only when the evidence
+  agrees on both ports, both ends are interfaces of matched devices and neither
+  has a cable; suggestions seen twice are preselected. Existing cables are
+  never changed or deleted.
+- For matched switches, the detail panel lists each UniFi port with its
+  NetBox interface (paired by connector kind and number), connector and speed,
+  live link state and PoE, plus notes for speed or PoE differences and
+  unpaired ports or interfaces. Link state and speed are never written.
 - NetBox-only devices (delete proposals) are limited to the active UniFi site
   by default; a setting includes all NetBox devices. Nothing is deleted.
 

@@ -9,10 +9,18 @@ from unifi2netbox.inventory import (
     InventoryDeviceRole,
     InventoryDeviceStatus,
     InventoryDeviceType,
+    InventoryInterface,
+    InventoryNetwork,
+    InventoryPort,
+    InventoryPrefix,
     InventorySite,
     InventorySnapshot,
     InventorySource,
+    InventoryVlan,
+    InventoryVlanGroup,
 )
+from unifi2netbox.links import InventoryLink
+from unifi2netbox.port_config import InventoryPortConfig
 
 SNAPSHOT_SCHEMA_VERSION = 1
 
@@ -125,6 +133,16 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "device_statuses": [asdict(item) for item in snapshot.device_statuses],
         "unifi_api_feedback": list(snapshot.unifi_api_feedback),
         "unifi_raw_devices": list(snapshot.unifi_raw_devices),
+        "ports": [asdict(item) for item in snapshot.ports],
+        "interfaces": [asdict(item) for item in snapshot.interfaces],
+        "networks": [asdict(item) for item in snapshot.networks],
+        "vlan_groups": [asdict(item) for item in snapshot.vlan_groups],
+        "vlans": [asdict(item) for item in snapshot.vlans],
+        "prefixes": [asdict(item) for item in snapshot.prefixes],
+        "ipam_error": snapshot.ipam_error,
+        "port_configs": [asdict(item) for item in snapshot.port_configs],
+        "port_config_error": snapshot.port_config_error,
+        "links": [asdict(item) for item in snapshot.links],
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -166,6 +184,28 @@ def _decode(raw: str) -> InventorySnapshot:
         isinstance(item, dict) for item in unifi_raw_devices
     ):
         raise ValueError
+    ports = payload.get("ports", [])
+    interfaces = payload.get("interfaces", [])
+    networks = payload.get("networks", [])
+    vlan_groups = payload.get("vlan_groups", [])
+    vlans = payload.get("vlans", [])
+    prefixes = payload.get("prefixes", [])
+    port_configs = payload.get("port_configs", [])
+    links = payload.get("links", [])
+    for items in (
+        ports,
+        interfaces,
+        networks,
+        vlan_groups,
+        vlans,
+        prefixes,
+        port_configs,
+        links,
+    ):
+        if not isinstance(items, list) or not all(
+            isinstance(item, dict) for item in items
+        ):
+            raise ValueError
     return InventorySnapshot(
         source=InventorySource(payload["source"]),
         captured_at=str(payload["captured_at"]),
@@ -180,4 +220,32 @@ def _decode(raw: str) -> InventorySnapshot:
         ),
         unifi_api_feedback=tuple(unifi_api_feedback),
         unifi_raw_devices=tuple(unifi_raw_devices),
+        ports=tuple(InventoryPort(**item) for item in ports),
+        interfaces=tuple(
+            InventoryInterface(
+                **item
+                | {
+                    "tagged_vlan_ids": tuple(item.get("tagged_vlan_ids", ())),
+                    "link_peer_ids": tuple(item.get("link_peer_ids", ())),
+                }
+            )
+            for item in interfaces
+        ),
+        networks=tuple(InventoryNetwork(**item) for item in networks),
+        vlan_groups=tuple(InventoryVlanGroup(**item) for item in vlan_groups),
+        vlans=tuple(InventoryVlan(**item) for item in vlans),
+        prefixes=tuple(InventoryPrefix(**item) for item in prefixes),
+        ipam_error=str(payload.get("ipam_error", "")),
+        port_configs=tuple(
+            InventoryPortConfig(
+                **item
+                | {
+                    "tagged_vids": tuple(item.get("tagged_vids", ())),
+                    "notes": tuple(item.get("notes", ())),
+                }
+            )
+            for item in port_configs
+        ),
+        port_config_error=str(payload.get("port_config_error", "")),
+        links=tuple(InventoryLink(**item) for item in links),
     )

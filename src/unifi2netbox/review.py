@@ -11,7 +11,14 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 
+from unifi2netbox.cables import CablePlan, CablePlanRow, select_cable
 from unifi2netbox.config import BehaviorConfig
+from unifi2netbox.interface_plan import (
+    InterfacePlan,
+    InterfacePlanRow,
+    select_interface,
+)
+from unifi2netbox.networks import NetworkPlan, NetworkPlanRow, select_network
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
     InventoryPreviewRow,
@@ -19,6 +26,8 @@ from unifi2netbox.pipeline import (
     WriteOutcome,
     preview_rows,
 )
+from unifi2netbox.port_config import InventoryPortConfig
+from unifi2netbox.ports import PortMatch, match_ports
 from unifi2netbox.preview import (
     ChangePreview,
     DeviceAction,
@@ -41,6 +50,9 @@ UPDATE = "update"
 IN_SYNC = "in_sync"
 NETBOX_ONLY = "netbox_only"
 ATTENTION = "attention"
+NETWORKS = "networks"
+INTERFACES = "interfaces"
+CABLES = "cables"
 ALL = "all"
 
 CATEGORY_LABELS = {
@@ -50,6 +62,9 @@ CATEGORY_LABELS = {
     IN_SYNC: "In sync",
     ATTENTION: "Needs attention",
     NETBOX_ONLY: "NetBox only",
+    NETWORKS: "Networks",
+    INTERFACES: "Interfaces",
+    CABLES: "Cables",
 }
 
 FIELD_LABELS = {
@@ -116,6 +131,16 @@ class ReviewState:
         self.role_by_key: dict[str, str] = {}
         self.site_by_key: dict[str, str] = {}
         self.status_by_key: dict[str, str] = {}
+        self.unifi_ports = result.unifi_ports if result else ()
+        self.netbox_interfaces = result.netbox_interfaces if result else ()
+        self.unifi_port_configs = result.unifi_port_configs if result else ()
+        self.port_config_error = result.port_config_error if result else ""
+        self.network_plan: NetworkPlan | None = result.network_plan if result else None
+        self.network_outcomes: dict[str, list[WriteOutcome]] = {}
+        self.interface_plan: InterfacePlan | None = (
+            result.interface_plan if result else None
+        )
+        self.cable_plan: CablePlan | None = result.cable_plan if result else None
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -251,7 +276,90 @@ class ReviewState:
         for item in items:
             counts[item.category] += 1
             counts[ATTENTION] += int(item.attention)
+        counts[NETWORKS] = len(self.network_rows())
+        counts[INTERFACES] = len(self.interface_rows())
+        counts[CABLES] = len(self.cable_rows())
         return counts
+
+    # -- networks -----------------------------------------------------------
+
+    def network_rows(self, text: str = "") -> tuple[NetworkPlanRow, ...]:
+        if self.network_plan is None:
+            return ()
+        needle = text.strip().lower()
+        return tuple(
+            row
+            for row in self.network_plan.rows
+            if not needle or needle in f"{row.name} {row.vid} {row.subnet}".lower()
+        )
+
+    def network_row(self, key: str) -> NetworkPlanRow | None:
+        return next((row for row in self.network_rows() if row.key == key), None)
+
+    def network_changes(self) -> int:
+        return sum(
+            1
+            for row in self.network_rows()
+            if row.enabled and row.category != "in_sync"
+        )
+
+    def network_operation_count(self) -> int:
+        return self.network_plan.operation_count if self.network_plan else 0
+
+    def set_network_selected(self, key: str, part: str, selected: bool) -> None:
+        if self.network_plan is not None:
+            self.network_plan = select_network(self.network_plan, key, part, selected)
+
+    # -- interfaces ---------------------------------------------------------
+
+    def interface_rows(self, text: str = "") -> tuple[InterfacePlanRow, ...]:
+        if self.interface_plan is None:
+            return ()
+        needle = text.strip().lower()
+        return tuple(
+            row
+            for row in self.interface_plan.rows
+            if not needle
+            or needle
+            in f"{row.device_name} {row.interface_name} {row.port_name} "
+            f"{row.config.summary()}".lower()
+        )
+
+    def interface_row(self, key: str) -> InterfacePlanRow | None:
+        return next((row for row in self.interface_rows() if row.key == key), None)
+
+    def interface_changes(self) -> int:
+        return sum(1 for row in self.interface_rows() if not row.in_sync)
+
+    def interface_operation_count(self) -> int:
+        return self.interface_plan.operation_count if self.interface_plan else 0
+
+    def set_interface_selected(self, key: str, field: str, selected: bool) -> None:
+        if self.interface_plan is not None:
+            self.interface_plan = select_interface(
+                self.interface_plan, key, field, selected
+            )
+
+    # -- cables -------------------------------------------------------------
+
+    def cable_rows(self, text: str = "") -> tuple[CablePlanRow, ...]:
+        if self.cable_plan is None:
+            return ()
+        needle = text.strip().lower()
+        return tuple(row for row in self.cable_plan.rows if needle in row.label.lower())
+
+    def cable_row(self, key: str) -> CablePlanRow | None:
+        return next((row for row in self.cable_rows() if row.key == key), None)
+
+    def cable_changes(self) -> int:
+        return sum(1 for row in self.cable_rows() if row.selectable)
+
+    def cable_operation_count(self) -> int:
+        return self.cable_plan.operation_count if self.cable_plan else 0
+
+    def set_cable_selected(self, key: str, selected: bool) -> None:
+        if self.cable_plan is not None:
+            self.cable_plan = select_cable(self.cable_plan, key, selected)
 
     def selected_count(self) -> int:
         return sum(
@@ -262,6 +370,35 @@ class ReviewState:
 
     def selectable_count(self) -> int:
         return sum(1 for item in self.rows() if item.category in (CREATE, UPDATE))
+
+    def ports_for(self, key: str) -> tuple[PortMatch, ...]:
+        """UniFi ports and NetBox interfaces of one device, paired.
+
+        New devices only show their UniFi ports: NetBox creates interfaces from
+        the device-type template when the device is written.
+        """
+        unifi_id, netbox_id = _device_ids(key)
+        ports = [p for p in self.unifi_ports if unifi_id and p.device_id == unifi_id]
+        interfaces = [
+            i for i in self.netbox_interfaces if netbox_id and i.device_id == netbox_id
+        ]
+        if not ports:
+            # Access points and similar devices expose no ports officially.
+            return ()
+        if key.startswith("create:"):
+            return tuple(
+                PortMatch(port, None) for port in sorted(ports, key=lambda p: p.idx)
+            )
+        return match_ports(ports, interfaces)
+
+    def port_configs_for(self, key: str) -> dict[int, InventoryPortConfig]:
+        """Effective UniFi port configuration of one device, by port index."""
+        unifi_id, _ = _device_ids(key)
+        return {
+            config.idx: config
+            for config in self.unifi_port_configs
+            if unifi_id and config.device_id == unifi_id
+        }
 
     # -- user actions --------------------------------------------------------
 
@@ -298,8 +435,18 @@ class ReviewState:
 
     def record_report(self, report: WriteExecutionReport) -> None:
         self.last_report = report
+        network_keys = {
+            outcome.device_key
+            for outcome in report.outcomes
+            if outcome.device_key.startswith("network")
+        }
+        for key in network_keys:
+            self.network_outcomes[key] = []
         for outcome in report.outcomes:
-            self.outcomes[outcome.device_key] = outcome
+            if outcome.device_key in network_keys:
+                self.network_outcomes[outcome.device_key].append(outcome)
+            else:
+                self.outcomes[outcome.device_key] = outcome
 
     # -- write plans ---------------------------------------------------------
 
@@ -419,6 +566,19 @@ def humanize_timestamp(value: str, now: datetime | None = None) -> str:
     if moment.date() == reference.date():
         return f"today {moment:%H:%M}"
     return f"{moment:%d %b %H:%M}"
+
+
+def _device_ids(key: str) -> tuple[str, str]:
+    """(UniFi device ID, NetBox device ID) from a preview device key."""
+    value = key.strip()
+    if value.startswith("create:"):
+        value = value.split(":", 1)[1]
+    unifi_part, _, netbox_part = value.partition("->")
+    if value.startswith("target-only:"):
+        unifi_part, netbox_part = "", value.split(":", 1)[1]
+    unifi_id = unifi_part.split(":", 1)[1] if ":" in unifi_part else ""
+    netbox_id = netbox_part.split(":", 1)[1] if ":" in netbox_part else ""
+    return unifi_id, netbox_id
 
 
 def _category(device: DevicePreview) -> str:

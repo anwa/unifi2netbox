@@ -212,3 +212,153 @@ def test_empty_state_has_no_rows():
 
     assert state.rows() == ()
     assert state.ready is False
+
+
+def test_device_ids_are_parsed_from_preview_keys():
+    from unifi2netbox.review import _device_ids
+
+    assert _device_ids("unifi_network:a->netbox:1") == ("a", "1")
+    assert _device_ids("create:unifi_network:c") == ("c", "")
+    assert _device_ids("target-only:netbox:3") == ("", "3")
+
+
+def test_ports_for_pairs_matched_devices_and_lists_new_device_ports():
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+
+    result = replace(
+        make_result(),
+        unifi_ports=(
+            InventoryPort("a", 1, "RJ45", 1000, "UP", 1000),
+            InventoryPort("a", 2, "RJ45", 1000, "DOWN", 0),
+            InventoryPort("c", 1, "RJ45", 1000, "UP", 100),
+        ),
+        netbox_interfaces=(
+            InventoryInterface("10", "1", "Port 1", "1000base-t"),
+            InventoryInterface("11", "1", "Port 2", "1000base-t"),
+            InventoryInterface("12", "2", "Port 1", "1000base-t"),
+        ),
+    )
+    state = ReviewState(result, BehaviorConfig())
+
+    sw_a = state.ports_for(by_name(state, "sw-a").key)
+    assert [(m.port.idx, m.interface.name) for m in sw_a] == [
+        (1, "Port 1"),
+        (2, "Port 2"),
+    ]
+    ap1 = state.ports_for(by_name(state, "ap-1").key)
+    assert [(m.port.idx, m.interface) for m in ap1] == [(1, None)]
+    assert state.ports_for(by_name(state, "legacy").key) == ()
+
+
+def test_devices_without_unifi_ports_show_no_port_comparison():
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryInterface
+
+    result = replace(
+        make_result(),
+        netbox_interfaces=(InventoryInterface("10", "1", "eth0", "1000base-t"),),
+    )
+    state = ReviewState(result, BehaviorConfig())
+
+    assert state.ports_for(by_name(state, "sw-a").key) == ()
+
+
+def _network_state():
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryNetwork, InventorySite
+    from unifi2netbox.networks import build_network_plan
+
+    plan = build_network_plan(
+        (
+            InventoryNetwork("n1", "IoT", 20, True, "10.0.20.0/24"),
+            InventoryNetwork("n2", "Guest", 60, False, "10.0.60.0/24"),
+        ),
+        (InventorySite("7", "Home"),),
+        (),
+        (),
+        (),
+        site_name="Home",
+    )
+    return ReviewState(replace(make_result(), network_plan=plan), BehaviorConfig())
+
+
+def test_network_rows_counts_and_selection():
+    from unifi2netbox.review import NETWORKS
+
+    state = _network_state()
+
+    assert [row.name for row in state.network_rows()] == ["IoT", "Guest"]
+    assert [row.name for row in state.network_rows("10.0.60")] == ["Guest"]
+    assert state.counts()[NETWORKS] == 2
+    assert state.network_changes() == 1
+    assert state.network_operation_count() == 3
+    state.set_network_selected("network:n1", "prefix", False)
+    assert state.network_operation_count() == 2
+
+
+def test_network_outcomes_are_grouped_per_network():
+    state = _network_state()
+
+    state.record_report(
+        WriteExecutionReport(
+            status="Applied",
+            details="done",
+            outcomes=(
+                WriteOutcome("network-group", "success", "Created."),
+                WriteOutcome("network:n1", "success", "Created.", "9", "verified"),
+                WriteOutcome("network:n1", "success", "Created.", "10", "verified"),
+            ),
+        )
+    )
+
+    assert len(state.network_outcomes["network:n1"]) == 2
+    assert "network:n1" not in state.outcomes
+
+
+def test_port_configs_for_returns_the_device_ports_by_index():
+    from dataclasses import replace
+
+    from unifi2netbox.port_config import InventoryPortConfig
+
+    result = replace(
+        make_result(),
+        unifi_port_configs=(
+            InventoryPortConfig("a", 2, "Two"),
+            InventoryPortConfig("other", 1, "Elsewhere"),
+        ),
+    )
+    state = ReviewState(result, BehaviorConfig())
+    key = next(row.key for row in state.rows() if "unifi_network:a" in row.key)
+
+    assert {idx: c.name for idx, c in state.port_configs_for(key).items()} == {2: "Two"}
+
+
+def test_interface_rows_search_counts_and_selection():
+    from dataclasses import replace
+
+    from unifi2netbox.interface_plan import DevicePair, build_interface_plan
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort, InventoryVlan
+    from unifi2netbox.port_config import InventoryPortConfig
+    from unifi2netbox.review import INTERFACES
+
+    plan = build_interface_plan(
+        (DevicePair("u->n", "sw-a", "a", "1"),),
+        (InventoryPort("a", 1, "RJ45", 1000),),
+        (InventoryInterface("10", "1", "Port 1", "1000base-t"),),
+        (InventoryPortConfig("a", 1, "Uplink", True, "access", 20),),
+        (InventoryVlan("120", 20, "IoT", "9"),),
+        vlan_group_id="9",
+        vlan_group_name="UniFi Home",
+    )
+    state = ReviewState(replace(make_result(), interface_plan=plan), BehaviorConfig())
+
+    assert state.counts()[INTERFACES] == 1
+    assert state.interface_rows("uplink") and not state.interface_rows("nothing")
+    assert state.interface_changes() == 1
+    assert state.interface_operation_count() == 1
+    state.set_interface_selected("interface:10", "all", False)
+    assert state.interface_operation_count() == 0

@@ -136,3 +136,121 @@ def test_invalid_snapshot_payload_raises_store_error(tmp_path):
 
     with pytest.raises(SnapshotStoreError, match="invalid"):
         store.load_current(InventorySource.NETBOX)
+
+
+def test_ports_and_interfaces_roundtrip(tmp_path):
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    snapshot = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-14T10:00:00+00:00",
+        ports=(
+            InventoryPort("sw", 1, "RJ45", 1000, "UP", 100, "802.3at", 2, True, "UP"),
+        ),
+        interfaces=(InventoryInterface("501", "7", "Port 1", "1000base-t"),),
+    )
+
+    store.save_current(snapshot)
+
+    assert store.load_current(InventorySource.UNIFI_NETWORK) == snapshot
+
+
+def test_networks_and_ipam_roundtrip(tmp_path):
+    from unifi2netbox.inventory import (
+        InventoryNetwork,
+        InventoryPrefix,
+        InventoryVlan,
+        InventoryVlanGroup,
+    )
+
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    snapshot = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-14T10:00:00+00:00",
+        networks=(
+            InventoryNetwork("n1", "IoT", 20, True, "10.0.20.0/24", "10.0.20.1"),
+        ),
+        vlan_groups=(InventoryVlanGroup("3", "UniFi Home", "unifi-home"),),
+        vlans=(InventoryVlan("9", 20, "IoT", "3", "active"),),
+        prefixes=(InventoryPrefix("5", "10.0.20.0/24", "9"),),
+        ipam_error="",
+    )
+
+    store.save_current(snapshot)
+
+    assert store.load_current(InventorySource.NETBOX) == snapshot
+
+
+def test_port_configs_round_trip(tmp_path):
+    from unifi2netbox.inventory import InventorySnapshot, InventorySource
+    from unifi2netbox.port_config import InventoryPortConfig
+
+    config = InventoryPortConfig(
+        "sw", 3, "Cam", True, "tagged", 1, (20, 30), "Trunk", 7, ("note",)
+    )
+    snapshot = InventorySnapshot(
+        InventorySource.UNIFI_NETWORK,
+        "2026-11-14T00:00:00+00:00",
+        port_configs=(config,),
+        port_config_error="limited",
+    )
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    store.save_current(snapshot)
+
+    loaded = store.load_current(InventorySource.UNIFI_NETWORK)
+    assert loaded.port_configs == (config,)
+    assert loaded.port_config_error == "limited"
+
+
+def test_interface_vlans_round_trip(tmp_path):
+    from unifi2netbox.inventory import (
+        InventoryInterface,
+        InventorySnapshot,
+        InventorySource,
+    )
+
+    interface = InventoryInterface(
+        "10",
+        "1",
+        "Port 1",
+        "1000base-t",
+        mode="tagged",
+        untagged_vlan_id="5",
+        tagged_vlan_ids=("6", "7"),
+        lag_id="12",
+    )
+    snapshot = InventorySnapshot(
+        InventorySource.NETBOX,
+        "2026-11-14T00:00:00+00:00",
+        interfaces=(interface,),
+    )
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    store.save_current(snapshot)
+
+    assert store.load_current(InventorySource.NETBOX).interfaces == (interface,)
+
+
+def test_links_and_interface_cables_round_trip(tmp_path):
+    from unifi2netbox.inventory import (
+        InventoryInterface,
+        InventorySnapshot,
+        InventorySource,
+    )
+    from unifi2netbox.links import InventoryLink
+
+    link = InventoryLink("a", 5, "b", None, "lldp")
+    interface = InventoryInterface(
+        "10", "1", "Port 1", "1000base-t", cable_id="4", link_peer_ids=("22",)
+    )
+    snapshot = InventorySnapshot(
+        InventorySource.UNIFI_NETWORK,
+        "2026-11-14T00:00:00+00:00",
+        interfaces=(interface,),
+        links=(link,),
+    )
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    store.save_current(snapshot)
+
+    loaded = store.load_current(InventorySource.UNIFI_NETWORK)
+    assert loaded.links == (link,) and loaded.interfaces == (interface,)
