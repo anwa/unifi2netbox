@@ -479,3 +479,12 @@ to a scratch directory instead of the real snapshot database.
   match), so the full write plan is not executable. No default device role is
   configured, so creates need a per-row role.
 
+After 0.3.37 (update selection limited to writable fields) the same live
+preview became executable: 15 creates and 4 updates without blockers. All 4
+updates only change `site`, and the UniFi site name does not exist in NetBox,
+so executing them (and the creates) would fail at site lookup until a NetBox
+site is chosen per row or a site mapping exists. No write was attempted.
+After 0.3.38 the UniFi connection check reports Online for Network 11.0.99
+(0.47 s first run, 0.02 s second run); the earlier 9.3 s first check did not
+recur.
+

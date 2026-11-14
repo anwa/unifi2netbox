@@ -108,7 +108,7 @@ file content and personal access records are excluded. All UI/code/docs are Engl
 | Client | pynetbox 7.9.0 |
 | Windows | Windows 11 25H2/26H2 acceptance targets |
 | Linux | Ubuntu/Kubuntu 26.04 LTS/26.10; not yet tested |
-| Network | UDM Pro Max OS 5.1.33 / Network 10.6.100 target; preceding M2 online tests reported passed by the user |
+| Network | Network 11.0.99 live-verified read-only on the developer workstation (2026-11-14); 10.6 series accepted per M2 user-reported tests |
 | Protect | UNVR 6.0.11 / Protect 7.3.70; later milestone |
 | Access | 4.3.22; later milestone |
 | Drive | UNAS Pro 6.0.11 / Drive 4.4.20; later capability gate |

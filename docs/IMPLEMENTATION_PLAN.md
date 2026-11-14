@@ -9,6 +9,8 @@ passed on 2026-10-25. Linux/exact-platform verification remains open.
 ## Requirements and Environment
 
 - Python >=3.15.1; PySide6 Qt Widgets; English GUI, code and documentation.
+- The installed UDM Pro Max reported Network 11.0.99 on 2026-11-14 (planned:
+  10.6.100). Both the 10.6 and 11.0 stable series are accepted by the gate.
 - Windows 11 25H2/26H2; Ubuntu and Kubuntu 26.04 LTS/26.10.
 - One local UniFi site/controller initially. UDM Pro Max: OS 5.1.33,
   Network 10.6.100. UNVR: 6.0.11, Protect 7.3.70. Access: 4.3.22.

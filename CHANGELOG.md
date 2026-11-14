@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.38
+
+### Changed
+
+- The UniFi connection gate now accepts the stable Network 11.0 series in
+	addition to 10.6. Other versions and pre-releases still report Unsupported.
+
+### Validation
+
+- Added connection tests for 11.0.99 (Online) and for 10.5, 12.0, 11.1 and
+	pre-release versions (Unsupported).
+- Live read-only check on the developer workstation: Network 11.0.99 now
+	reports Online with one automatically selected site.
+
 ## v0.3.37
 
 ### Fixed

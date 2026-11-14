@@ -7,6 +7,11 @@ from packaging.version import Version
 from unifi2netbox.config import UniFiConfig
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
 
+# Stable Network release series validated for the local Integration API.
+# 10.6: published 10.6.106 schema plus user-reported target tests (2026-10-25).
+# 11.0: assistant-executed live read against 11.0.99 (2026-11-14).
+SUPPORTED_SERIES: frozenset[tuple[int, int]] = frozenset({(10, 6), (11, 0)})
+
 
 class CheckFailure(Exception):
     def __init__(self, state: ConnectionState, message: str) -> None:
@@ -122,10 +127,11 @@ def check_connection(
                 raise ValueError
             parsed = Version(text)
             version = str(parsed)
-            if parsed.release[:2] != (10, 6) or parsed.is_prerelease:
+            if parsed.release[:2] not in SUPPORTED_SERIES or parsed.is_prerelease:
                 return ConnectionResult(
                     ConnectionState.UNSUPPORTED,
-                    "This build targets the Network 10.6 local Integration API.",
+                    "This build supports the Network 10.6 and 11.0 local "
+                    "Integration API.",
                     version,
                 )
             sites = _sites(client)

@@ -158,12 +158,27 @@ def test_invalid_info_is_sanitized(api, data):
 
 
 def test_unvalidated_version_is_explicitly_unsupported(api):
-    api[1][0] = httpx.Response(200, json={"applicationVersion": "11.0.0"})
+    api[1][0] = httpx.Response(200, json={"applicationVersion": "11.1.0"})
     assert (
         check_connection(configured(), transport=api[2]).state
         == ConnectionState.UNSUPPORTED
     )
     assert len(api[0]) == 1
+
+
+@pytest.mark.parametrize("text", ["10.5.9", "12.0.0", "11.0.0rc1"])
+def test_versions_outside_validated_series_are_unsupported(api, text):
+    api[1][0] = httpx.Response(200, json={"applicationVersion": text})
+    result = check_connection(configured(), transport=api[2])
+    assert result.state == ConnectionState.UNSUPPORTED
+    assert "10.6 and 11.0" in result.message
+
+
+def test_network_11_0_is_supported(api):
+    api[1][0] = httpx.Response(200, json={"applicationVersion": "11.0.99"})
+    result = check_connection(configured(), transport=api[2])
+    assert result.state == ConnectionState.ONLINE
+    assert result.version == "11.0.99"
 
 
 @pytest.mark.parametrize(
