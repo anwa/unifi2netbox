@@ -23,6 +23,18 @@ class WriteExecutionError(ValueError):
     pass
 
 
+class AmbiguousWriteError(WriteExecutionError):
+    """NetBox may have applied the write although no clear answer arrived."""
+
+
+# Errors after which a create may or may not exist in NetBox.
+AMBIGUOUS_CREATE_ERRORS = (
+    AmbiguousWriteError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectionError,
+)
+
+
 class StalePreviewError(WriteExecutionError):
     """NetBox changed after the preview was built; the operation needs review."""
 
@@ -147,7 +159,15 @@ def execute_write_plan(
 
         try:
             if operation.operation_type == OperationType.CREATE_DEVICE:
-                created_id = resolved_backend.create_device(payload)
+                try:
+                    created_id = resolved_backend.create_device(payload)
+                except AMBIGUOUS_CREATE_ERRORS as error:
+                    journal, found = _reconcile_create(
+                        journal, operation, payload, resolved_backend, error
+                    )
+                    if found:
+                        written_payloads[operation.sequence] = payload
+                    continue
                 written_payloads[operation.sequence] = payload
                 journal = record_operation_result(
                     journal,
@@ -189,6 +209,53 @@ def execute_write_plan(
 
     return WriteExecutionResult(
         journal=finalize_journal(journal, finished_at, cancelled=False)
+    )
+
+
+def _reconcile_create(
+    journal: WriteJournal,
+    operation: WriteOperation,
+    payload: dict[str, object],
+    backend: NetBoxWriteBackend,
+    error: Exception,
+) -> tuple[WriteJournal, bool]:
+    """Look up an interrupted create instead of retrying it.
+
+    The pre-write check guaranteed that no device with this name existed, so
+    exactly one match now means the create went through.
+    """
+    name = str(payload.get("name", "")).strip()
+    reason = f"Create was interrupted ({error})"
+    try:
+        found = backend.find_device_ids(name=name) if name else ()
+    except (WriteExecutionError, requests.exceptions.RequestException) as lookup:
+        message = (
+            f"{reason} and the NetBox lookup failed ({lookup}). Check NetBox for "
+            f"'{name}' before retrying."
+        )
+        return _fail(journal, operation, message), False
+    if len(found) == 1:
+        journal = record_operation_result(
+            journal,
+            operation.sequence,
+            OperationOutcomeStatus.SUCCESS,
+            f"{reason}, but NetBox now has '{name}' (ID {found[0]}).",
+            netbox_object_id=found[0],
+        )
+        return journal, True
+    if not found:
+        message = f"{reason} and NetBox has no device '{name}'. Refresh, then retry."
+    else:
+        message = (
+            f"{reason}; NetBox has several devices named '{name}' "
+            f"(IDs {', '.join(found)}). Review them in NetBox."
+        )
+    return _fail(journal, operation, message), False
+
+
+def _fail(journal: WriteJournal, operation: WriteOperation, message: str):
+    return record_operation_result(
+        journal, operation.sequence, OperationOutcomeStatus.FAILED, message
     )
 
 
@@ -438,14 +505,21 @@ class RequestsNetBoxWriteBackend:
 
     def create_device(self, payload: dict[str, object]) -> str:
         response = self._request("POST", "/api/dcim/devices/", json=payload)
+        if response.status_code in {502, 503, 504}:
+            raise AmbiguousWriteError(
+                f"NetBox or its proxy answered HTTP {response.status_code}"
+            )
         if response.status_code not in {200, 201}:
             detail = _response_error_detail(response)
             raise WriteExecutionError(
                 f"NetBox create failed with HTTP {response.status_code}: {detail}"
             )
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError:
+            data = None
         if not isinstance(data, dict) or not str(data.get("id", "")).strip():
-            raise WriteExecutionError("NetBox create response did not include an ID.")
+            raise AmbiguousWriteError("NetBox create response did not include an ID")
         return str(data["id"])
 
     def update_device(self, device_id: str, payload: dict[str, object]) -> None:

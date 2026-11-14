@@ -318,6 +318,8 @@ The focused tests validate that:
 - create execution succeeds with resolvable site/role/device-type references,
 - dry-run execution records skipped outcomes without backend writes,
 - mixed create/update runs continue and record partial failures per operation,
+- interrupted creates are looked up by name instead of retried: one match is
+	created, none is safe to retry, several or a failed lookup need review,
 - successful writes are read back and marked verified, mismatch or unverified;
 	read-back problems never cause another write and dry runs are not read back.
 - every operation re-reads NetBox first: updates are skipped when the target

@@ -1,8 +1,16 @@
+import pytest
+import requests
+
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig
 from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
 from unifi2netbox.matching import deduplicate_inventory
 from unifi2netbox.preview import build_change_preview, build_difference_preview
-from unifi2netbox.write_execute import WriteExecutionError, execute_write_plan
+from unifi2netbox.write_execute import (
+    AmbiguousWriteError,
+    RequestsNetBoxWriteBackend,
+    WriteExecutionError,
+    execute_write_plan,
+)
 from unifi2netbox.write_journal import OperationOutcomeStatus, Verification
 from unifi2netbox.write_plan import build_write_plan
 
@@ -679,3 +687,109 @@ def test_dry_run_and_skipped_operations_are_not_verified():
 
     assert dry.status == OperationOutcomeStatus.SKIPPED
     assert dry.verification == ""
+
+
+class InterruptedCreateBackend(FakeBackend):
+    """create_device fails ambiguously; ``copies`` devices exist afterwards."""
+
+    def __init__(self, netbox=None, *, copies=1, error=None, lookup_fails=False):
+        super().__init__(netbox)
+        self.copies = copies
+        self.error = error or requests.exceptions.ReadTimeout("read timed out")
+        self.lookup_fails = lookup_fails
+        self.create_calls = 0
+        self.raising = False
+
+    def create_device(self, payload):
+        self.create_calls += 1
+        for _ in range(self.copies):
+            super().create_device(payload)
+        self.raising = True
+        raise self.error
+
+    def find_device_ids(self, **filters):
+        if self.lookup_fails and self.raising:
+            raise WriteExecutionError("NetBox device lookup failed with HTTP 500.")
+        return super().find_device_ids(**filters)
+
+
+def test_interrupted_create_found_in_netbox_counts_as_created():
+    netbox, diff, plan = _create_plan_fixture()
+    backend = InterruptedCreateBackend(netbox)
+
+    outcome = _run(plan, diff, backend, behavior=ROLE).journal.outcomes[0]
+
+    assert backend.create_calls == 1
+    assert outcome.status == OperationOutcomeStatus.SUCCESS
+    assert outcome.netbox_object_id == "9001"
+    assert "interrupted" in outcome.message
+    assert "(ID 9001)" in outcome.message
+    assert outcome.verification == Verification.VERIFIED
+
+
+def test_interrupted_create_missing_in_netbox_fails_without_retry():
+    netbox, diff, plan = _create_plan_fixture()
+    backend = InterruptedCreateBackend(
+        netbox, copies=0, error=requests.exceptions.ConnectionError("reset")
+    )
+
+    outcome = _run(plan, diff, backend, behavior=ROLE).journal.outcomes[0]
+
+    assert backend.create_calls == 1
+    assert outcome.status == OperationOutcomeStatus.FAILED
+    assert "has no device 'switch-a'. Refresh, then retry." in outcome.message
+
+
+def test_interrupted_create_with_several_matches_needs_review():
+    netbox, diff, plan = _create_plan_fixture()
+    backend = InterruptedCreateBackend(
+        netbox, copies=2, error=AmbiguousWriteError("HTTP 504")
+    )
+
+    outcome = _run(plan, diff, backend, behavior=ROLE).journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.FAILED
+    assert "several devices named 'switch-a' (IDs 9001, 9002)" in outcome.message
+
+
+def test_interrupted_create_with_failed_lookup_asks_for_manual_check():
+    netbox, diff, plan = _create_plan_fixture()
+    backend = InterruptedCreateBackend(netbox, lookup_fails=True)
+
+    outcome = _run(plan, diff, backend, behavior=ROLE).journal.outcomes[0]
+
+    assert backend.create_calls == 1
+    assert outcome.status == OperationOutcomeStatus.FAILED
+    assert "Check NetBox for 'switch-a' before retrying." in outcome.message
+
+
+class _Response:
+    def __init__(self, status_code, payload=None):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = ""
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no json")
+        return self._payload
+
+
+@pytest.mark.parametrize(
+    ("response", "ambiguous"),
+    [
+        (_Response(504), True),
+        (_Response(502), True),
+        (_Response(201, {"name": "x"}), True),
+        (_Response(201, None), True),
+        (_Response(400, {"name": ["required"]}), False),
+    ],
+)
+def test_requests_backend_flags_ambiguous_create_answers(response, ambiguous):
+    backend = RequestsNetBoxWriteBackend(NetBoxConfig("https://netbox.invalid", "t"))
+    backend._request = lambda *args, **kwargs: response
+
+    with pytest.raises(WriteExecutionError) as caught:
+        backend.create_device({"name": "x"})
+
+    assert isinstance(caught.value, AmbiguousWriteError) is ambiguous

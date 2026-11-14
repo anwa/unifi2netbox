@@ -6,6 +6,22 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.5.2
+
+### Added
+
+- Interrupted creates are reconciled instead of retried. After a timeout, a
+	dropped connection, HTTP 502/503/504 or a create response without an ID,
+	the app looks the device up by name: exactly one match counts as created
+	(with its ID, then read back), no match fails with "Refresh, then retry",
+	and several matches or a failed lookup ask for a manual check in NetBox.
+
+### Validation
+
+- Added executor tests for found, missing, duplicated and unverifiable
+	interrupted creates (each with a single create call) and backend tests for
+	which NetBox answers count as ambiguous.
+
 ## v0.5.1
 
 ### Added

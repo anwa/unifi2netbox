@@ -246,7 +246,8 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
 
 - [x] Read back successful writes and mark them verified, mismatch or
   unverified, without automatic rewrites (offline tests, 0.5.1, 2026-11-14).
-- [ ] Reconcile timed-out creates against NetBox before reporting failure.
+- [x] Reconcile timed-out creates against NetBox before reporting failure
+  (offline tests, 0.5.2, 2026-11-14).
 - [ ] Re-read affected UniFi source devices before writes.
 - [ ] Persist write journals in SQLite and show recent runs.
 

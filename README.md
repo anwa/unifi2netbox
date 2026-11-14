@@ -94,6 +94,10 @@ system**. The choice is saved as `[ui] theme` (`system`, `light` or `dark`).
   device was deleted or a selected field changed since the preview, and a
   create is skipped if a device with the same name or serial appeared
   meanwhile. Refresh the preview and review the row before retrying.
+- If a create is interrupted (timeout, dropped connection, HTTP 502/503/504),
+  the app never retries it blindly: it looks the device up in NetBox and
+  reports it as created (with ID), safe to retry after a refresh, or in need of
+  a manual check.
 - After writing, each successful device is read back from NetBox and marked
   **Verified**, **Mismatch** (NetBox holds other values) or **Not verified**
   (read-back failed). The app never writes again on its own.
