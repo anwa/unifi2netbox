@@ -84,6 +84,12 @@ def type_model(state: ReviewState, type_id: str) -> str:
 
 def status_text(item: ReviewRow) -> tuple[str, str]:
     """(text, tone) for the status column."""
+    if item.outcome is not None and item.outcome.status == "success":
+        return {
+            "verified": ("Verified", "success"),
+            "mismatch": ("Mismatch", "danger"),
+            "unverified": ("Not verified", "warning"),
+        }.get(item.outcome.verification, ("Written", "success"))
     if item.outcome is not None:
         status = item.outcome.status
         text = {
@@ -326,7 +332,13 @@ class DetailPanel(QScrollArea):
             tone = {"success": "success", "skipped": "warning"}.get(
                 item.outcome.status, "danger"
             )
-            self.layout_.addWidget(banner(item.outcome.message, tone))
+            text = item.outcome.message
+            if item.outcome.verification:
+                tone = {"mismatch": "danger", "unverified": "warning"}.get(
+                    item.outcome.verification, tone
+                )
+                text += f"\nRead-back: {item.outcome.verification_detail}"
+            self.layout_.addWidget(banner(text, tone))
         elif item.attention and item.note:
             self.layout_.addWidget(banner(item.note, "danger"))
 
@@ -598,6 +610,11 @@ def device_summary(item: ReviewRow) -> str:
         lines.append(f"Note: {item.note}")
     if item.outcome is not None:
         lines.append(f"Result: {item.outcome.status} - {item.outcome.message}")
+        if item.outcome.verification:
+            lines.append(
+                f"Read-back: {item.outcome.verification} - "
+                f"{item.outcome.verification_detail}"
+            )
     for field in item.device.fields:
         if field.supported and (field.source_value or field.target_value):
             lines.append(

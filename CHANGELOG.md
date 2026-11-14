@@ -6,6 +6,23 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.5.1
+
+### Added
+
+- Successful writes are read back from NetBox and compared with the written
+	values (plain fields directly, site/role/device type by ID, status by value).
+	Each result is marked verified, mismatch or unverified; mismatches and read
+	errors never trigger another write. The table shows Verified, Mismatch or
+	Not verified, the detail panel and copied details include the read-back
+	detail, and the run summary counts verified writes. Dry runs are not
+	read back.
+
+### Validation
+
+- Added executor tests for verified creates and updates, mismatches, read-back
+	failures and dry runs, a read-back value test and a GUI status test.
+
 ## v0.5.0
 
 ### Summary

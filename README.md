@@ -94,6 +94,9 @@ system**. The choice is saved as `[ui] theme` (`system`, `light` or `dark`).
   device was deleted or a selected field changed since the preview, and a
   create is skipped if a device with the same name or serial appeared
   meanwhile. Refresh the preview and review the row before retrying.
+- After writing, each successful device is read back from NetBox and marked
+  **Verified**, **Mismatch** (NetBox holds other values) or **Not verified**
+  (read-back failed). The app never writes again on its own.
 - Every operation is journaled as success, failed or skipped. NetBox rejections
   include parsed field-level details. Ambiguous creates are flagged for manual
   reconciliation and read-back requests are planned for successful writes.

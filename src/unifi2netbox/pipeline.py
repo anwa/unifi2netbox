@@ -81,6 +81,8 @@ class WriteOutcome:
     status: str
     message: str
     netbox_object_id: str = ""
+    verification: str = ""
+    verification_detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -227,11 +229,21 @@ def run_write_execution(
         device_type_overrides=device_type_overrides,
     )
     summary = summarize_journal(result.journal)
+    verified = sum(
+        outcome.verification == "verified" for outcome in result.journal.outcomes
+    )
+    mismatched = sum(
+        outcome.verification == "mismatch" for outcome in result.journal.outcomes
+    )
     details = (
         "Write execution finished: "
         f"{summary.successful} success, {summary.failed} failed, "
         f"{summary.skipped} skipped."
     )
+    if summary.successful:
+        details += f" Read-back: {verified} verified"
+        details += f", {mismatched} mismatch." if mismatched else "."
+
     lines = tuple(
         f"Write #{outcome.sequence} {outcome.operation_type}: "
         f"{outcome.status} {outcome.message}".strip()
@@ -247,6 +259,8 @@ def run_write_execution(
                 status=str(outcome.status),
                 message=outcome.message,
                 netbox_object_id=outcome.netbox_object_id,
+                verification=outcome.verification,
+                verification_detail=outcome.verification_detail,
             )
             for outcome in result.journal.outcomes
         ),

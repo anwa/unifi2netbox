@@ -215,3 +215,20 @@ def test_readback_plan_skips_success_with_missing_plan_operation_sequence():
 
     assert readback.requests == ()
     assert readback.skipped_sequences == (1,)
+
+
+def test_row_value_compares_related_objects_by_id_and_status_by_value():
+    from unifi2netbox.write_readback import _row_value
+
+    row = {
+        "name": "sw",
+        "site": {"id": 7, "name": "Home"},
+        "status": {"value": "active", "label": "Active"},
+        "serial": None,
+    }
+
+    assert _row_value(row, "name") == "sw"
+    assert _row_value(row, "site") == "7"
+    assert _row_value(row, "status") == "active"
+    assert _row_value(row, "serial") == ""
+    assert _row_value(row, "missing") == ""

@@ -244,6 +244,12 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
   test against the NetBox developer instance on 2026-11-14). Source-side
   UniFi re-read before writes remains open.
 
+- [x] Read back successful writes and mark them verified, mismatch or
+  unverified, without automatic rewrites (offline tests, 0.5.1, 2026-11-14).
+- [ ] Reconcile timed-out creates against NetBox before reporting failure.
+- [ ] Re-read affected UniFi source devices before writes.
+- [ ] Persist write journals in SQLite and show recent runs.
+
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
 visible; live write tests require explicit narrow test scope and separate opt-in.
 For delete proposals, default scope remains safety-first (site-scoped NetBox-only

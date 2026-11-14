@@ -3,7 +3,7 @@ from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, Inventory
 from unifi2netbox.matching import deduplicate_inventory
 from unifi2netbox.preview import build_change_preview, build_difference_preview
 from unifi2netbox.write_execute import WriteExecutionError, execute_write_plan
-from unifi2netbox.write_journal import OperationOutcomeStatus
+from unifi2netbox.write_journal import OperationOutcomeStatus, Verification
 from unifi2netbox.write_plan import build_write_plan
 
 
@@ -59,12 +59,32 @@ class FakeBackend:
             raise WriteExecutionError("Unknown device type.")
         return values[key]
 
+    SITE_NAMES = {"11": "HQ", "12": "Branch"}
+
     def create_device(self, payload: dict[str, object]) -> str:
         self.created_payloads.append(payload)
-        return "9001"
+        device_id = str(9001 + len(self.created_payloads) - 1)
+        self.rows[device_id] = {
+            "id": device_id,
+            "name": payload.get("name", ""),
+            "serial": payload.get("serial", ""),
+            "site": self._site(payload.get("site")),
+            "role": {"id": payload.get("role")},
+            "device_type": {"id": payload.get("device_type")},
+            "status": {"value": payload.get("status", "active")},
+        }
+        return device_id
 
     def update_device(self, device_id: str, payload: dict[str, object]) -> None:
         self.updated_payloads.append((device_id, payload))
+        row = self.rows.setdefault(device_id, {"id": device_id})
+        for key, value in payload.items():
+            row[key] = self._site(value) if key == "site" else value
+
+    def _site(self, site_id: object) -> dict[str, object] | None:
+        if site_id is None:
+            return None
+        return {"id": site_id, "name": self.SITE_NAMES.get(str(site_id), "")}
 
 
 def snapshot(
@@ -580,3 +600,82 @@ def test_update_fails_when_pre_write_read_fails():
     assert outcome.status == OperationOutcomeStatus.FAILED
     assert outcome.message.startswith("Pre-write NetBox re-read failed")
     assert backend.updated_payloads == []
+
+
+class NormalizingBackend(FakeBackend):
+    """NetBox stores something other than what was sent."""
+
+    def update_device(self, device_id: str, payload: dict[str, object]) -> None:
+        super().update_device(device_id, payload)
+        self.rows[device_id]["serial"] = "SOMETHING-ELSE"
+
+
+class UnreadableAfterWriteBackend(FakeBackend):
+    def __init__(self, netbox=None):
+        super().__init__(netbox)
+        self.wrote = False
+
+    def update_device(self, device_id: str, payload: dict[str, object]) -> None:
+        super().update_device(device_id, payload)
+        self.wrote = True
+
+    def read_device(self, device_id: str) -> dict[str, object] | None:
+        if self.wrote:
+            raise WriteExecutionError("NetBox device read failed with HTTP 500.")
+        return super().read_device(device_id)
+
+
+def test_successful_update_is_verified_by_read_back():
+    netbox, diff, plan = _update_plan_fixture()
+    backend = FakeBackend(netbox)
+
+    outcome = _run(plan, diff, backend).journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.SUCCESS
+    assert outcome.verification == Verification.VERIFIED
+    assert "matches" in outcome.verification_detail
+
+
+def test_successful_create_is_verified_by_read_back():
+    netbox, diff, plan = _create_plan_fixture()
+    backend = FakeBackend(netbox)
+
+    outcome = _run(plan, diff, backend, behavior=ROLE).journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.SUCCESS
+    assert outcome.netbox_object_id == "9001"
+    assert outcome.verification == Verification.VERIFIED
+
+
+def test_read_back_reports_mismatch_without_rewriting():
+    netbox, diff, plan = _update_plan_fixture()
+    backend = NormalizingBackend(netbox)
+
+    outcome = _run(plan, diff, backend).journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.SUCCESS
+    assert outcome.verification == Verification.MISMATCH
+    assert "serial: expected NEW, NetBox has SOMETHING-ELSE" in (
+        outcome.verification_detail
+    )
+    assert len(backend.updated_payloads) == 1
+
+
+def test_read_back_failure_leaves_write_successful_but_unverified():
+    netbox, diff, plan = _update_plan_fixture()
+    backend = UnreadableAfterWriteBackend(netbox)
+
+    outcome = _run(plan, diff, backend).journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.SUCCESS
+    assert outcome.verification == Verification.UNVERIFIED
+    assert outcome.verification_detail.startswith("Read-back failed")
+
+
+def test_dry_run_and_skipped_operations_are_not_verified():
+    netbox, diff, plan = _update_plan_fixture()
+
+    dry = _run(plan, diff, FakeBackend(netbox), dry_run=True).journal.outcomes[0]
+
+    assert dry.status == OperationOutcomeStatus.SKIPPED
+    assert dry.verification == ""

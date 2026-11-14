@@ -1119,3 +1119,27 @@ def test_theme_button_toggles_and_saves_choice(qtbot, qapp, tmp_path, pool):
         assert window.theme_actions["system"].isChecked()
     finally:
         theme.apply_theme(qapp, dark=False)
+
+
+def test_read_back_result_is_shown_in_status_column(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool)
+    key_a = select_row(window, "ap-1")
+    key_b = select_row(window, "ap-2")
+
+    window.write_execution_finished(
+        WriteExecutionReport(
+            status="Applied",
+            details="Write execution finished: 2 success, 0 failed, 0 skipped.",
+            outcomes=(
+                WriteOutcome(key_a, "success", "Created.", "1", "verified", "ok"),
+                WriteOutcome(
+                    key_b, "success", "Created.", "2", "mismatch", "site: expected 7"
+                ),
+            ),
+        )
+    )
+
+    model = window.table_model
+    names = table_names(window)
+    assert model.data(model.index(names.index("ap-1"), 5)) == "Verified"
+    assert model.data(model.index(names.index("ap-2"), 5)) == "Mismatch"

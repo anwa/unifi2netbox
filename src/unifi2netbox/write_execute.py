@@ -16,6 +16,7 @@ from unifi2netbox.write_journal import (
     record_operation_result,
 )
 from unifi2netbox.write_plan import OperationType, WriteOperation, WritePlan
+from unifi2netbox.write_readback import verify_readback
 
 
 class WriteExecutionError(ValueError):
@@ -75,6 +76,7 @@ def execute_write_plan(
     resolved_site_overrides = site_overrides or {}
     resolved_status_overrides = status_overrides or {}
     resolved_device_type_overrides = device_type_overrides or {}
+    written_payloads: dict[int, dict[str, object]] = {}
 
     for operation in write_plan.operations:
         device = device_by_key.get(operation.device_key)
@@ -146,6 +148,7 @@ def execute_write_plan(
         try:
             if operation.operation_type == OperationType.CREATE_DEVICE:
                 created_id = resolved_backend.create_device(payload)
+                written_payloads[operation.sequence] = payload
                 journal = record_operation_result(
                     journal,
                     operation.sequence,
@@ -156,6 +159,7 @@ def execute_write_plan(
             elif operation.operation_type == OperationType.UPDATE_DEVICE:
                 device_id = _update_target_id(operation)
                 resolved_backend.update_device(device_id, payload)
+                written_payloads[operation.sequence] = payload
                 journal = record_operation_result(
                     journal,
                     operation.sequence,
@@ -177,6 +181,11 @@ def execute_write_plan(
                 OperationOutcomeStatus.FAILED,
                 str(error),
             )
+
+    if written_payloads:
+        journal = verify_readback(
+            write_plan, journal, written_payloads, resolved_backend.read_device
+        )
 
     return WriteExecutionResult(
         journal=finalize_journal(journal, finished_at, cancelled=False)
