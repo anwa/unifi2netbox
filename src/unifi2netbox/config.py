@@ -119,6 +119,16 @@ class AccessConfig(NetBoxConfig):
 
 
 @dataclass(frozen=True)
+class DriveConfig(NetBoxConfig):
+    """UniFi Drive console (UNAS) with its local API key; optional."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.url and urlsplit(self.url).path.strip("/"):
+            raise ConfigError("Enter the UNAS console base URL, without a path.")
+
+
+@dataclass(frozen=True)
 class BehaviorConfig:
     include_all_netbox_delete_candidates: bool = False
     default_device_role_name: str = ""
@@ -173,6 +183,10 @@ def save_protect_config(path: Path, config: ProtectConfig) -> None:
 
 def load_access_config(path: Path) -> AccessConfig:
     return _load_section(path, "unifi_access", AccessConfig)
+
+
+def load_drive_config(path: Path) -> DriveConfig:
+    return _load_section(path, "unifi_drive", DriveConfig)
 
 
 def load_behavior_config(path: Path) -> BehaviorConfig:
@@ -235,6 +249,7 @@ def save_connections(
     behavior: BehaviorConfig | None = None,
     protect: ProtectConfig | None = None,
     access: AccessConfig | None = None,
+    drive: DriveConfig | None = None,
 ) -> None:
     sections: dict[str, object] = {"netbox": netbox, "unifi_network": unifi}
     if behavior is not None:
@@ -243,6 +258,8 @@ def save_connections(
         sections["unifi_protect"] = protect
     if access is not None:
         sections["unifi_access"] = access
+    if drive is not None:
+        sections["unifi_drive"] = drive
     _save_sections(path, sections)
 
 

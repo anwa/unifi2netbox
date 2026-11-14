@@ -6,6 +6,28 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.9.1
+
+### Added
+
+- M9 slice 1: optional UniFi Drive connection. A new `[unifi_drive]` section
+  stores the UNAS console URL (management address), its local API key and
+  TLS options, edited on a new **UniFi Drive** settings page with a header
+  chip that appears once configured. Ubiquiti documents no Drive device API
+  yet, so the check reads only the public UniFi OS system information
+  (`/api/system`, GET, no key sent) and confirms a UNAS model; the key is
+  stored for future Drive APIs. File contents are never accessed.
+
+### Validation
+
+- Added Drive check tests (online without sending the key, unconfigured
+  without requests, non-UNAS consoles, HTML, HTTP errors, timeout, URL rule),
+  a config round trip and GUI tests for the settings page and chip; five
+  chips fit the 1180 px header (offscreen render). Live read-only probe
+  without credentials: the UNAS Pro answers `/api/system` with model
+  `UNASPRO` and its system MAC; every `/proxy/drive/...` path, even a
+  nonexistent one, answers 401, so no Drive API can be confirmed.
+
 ## v0.9.0
 
 ### Summary

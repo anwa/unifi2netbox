@@ -70,9 +70,10 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   atomic writes). Sections `[netbox]`, `[unifi_network]`, plus behavior settings.
   Default path from `platformdirs.user_config_path`, outside the repo.
   Optional `[unifi_protect]` (own console URL and key) for UniFi Protect and
-  `[unifi_access]` (Access API URL with port 12445 and Access token).
+  `[unifi_access]` (Access API URL with port 12445 and Access token) and
+  `[unifi_drive]` (UNAS console URL and local key; key not sent yet).
 - **Connection checks** (`netbox.py`, `unifi.py`, `protect.py`, `access.py`,
-  `connections.py`): NetBox via pynetbox over a `ReadOnlySession` that only
+  `drive.py`, `connections.py`): NetBox via pynetbox over a `ReadOnlySession` that only
   permits GET; UniFi Network and Protect via httpx against the official local
   integration APIs (read-only, no proxy env, no redirect or login fallback).
   "Online" means authenticated inventory reads succeed.

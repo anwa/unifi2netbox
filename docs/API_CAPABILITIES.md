@@ -137,6 +137,21 @@ numbers, firmware and IP addresses are not reported and stay unsupported.
 | `is_online` | state online/offline (operational, display only) |
 | `is_adopted` = false | device skipped |
 
+## UniFi Drive Connection Gate (M9)
+
+Read-only probe on 2026-11-14 (assistant-executed, application 0.9.0, no
+credentials sent): the developer portal index (`developer.ui.com/llms.txt`)
+lists Network, Protect, Site Manager and others, but no Drive or UNAS API.
+The UNAS Pro answers `/api/system` with JSON including `hardware.shortname`
+(`UNASPRO`), `mac` and `name`, but no serial or firmware. Every
+`/proxy/drive/...` path answers 401 JSON, including a nonexistent one, so the
+gateway authenticates before routing and no Drive endpoint is confirmed. The
+Network and Protect integration paths return the UniFi OS HTML page.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `https://<unas>/api/system` | Public UniFi OS system information (model, system MAC); used by the Drive check |
+
 ## Installed-Version Field Capability Matrix
 
 M3 now provides a service-level matrix builder for installed-version capability

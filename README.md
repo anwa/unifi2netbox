@@ -269,7 +269,10 @@ explicit selection. UniFi Protect is optional and uses `[unifi_protect]` with th
 and `timeout` of the console running Protect, which may differ from the Network
 console. UniFi Access is optional too and uses `[unifi_access]` with the Access
 API URL (port 12445 of the console running Access) and an Access API token
-with device-read permission. Optional services show a header chip once set.
+with device-read permission. UniFi Drive is optional as well and uses
+`[unifi_drive]` with the UNAS console URL and a local API key; until Ubiquiti
+documents a Drive API only the public system information is read.
+Optional services show a header chip once set.
 
 - Windows: `%LOCALAPPDATA%\unifi2netbox\config.toml`.
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/unifi2netbox/config.toml`.

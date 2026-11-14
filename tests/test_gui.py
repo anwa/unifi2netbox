@@ -1712,3 +1712,61 @@ def test_optional_chip_appears_once_configured(qtbot, tmp_path, pool):
 
     assert not window.access_chip.isHidden()
     assert window.access_chip.text().endswith("Access")
+
+
+def test_drive_settings_page_saves_its_own_section(qtbot, tmp_path, pool):
+    from unifi2netbox.config import DriveConfig, load_drive_config
+
+    seen = []
+
+    def drive_online(config):
+        seen.append(config)
+        return ConnectionResult(ConnectionState.ONLINE, "Synthetic UNAS read.")
+
+    path = tmp_path / "config.toml"
+    widget = SettingsDialog(
+        path,
+        NetBoxConfig(),
+        pool,
+        online,
+        unifi_config=UniFiConfig(),
+        unifi_checker=unifi_online,
+        drive_checker=drive_online,
+    )
+    qtbot.addWidget(widget)
+    widget.show_page("UniFi Drive")
+    assert widget.pages.currentWidget() is widget.drive
+    widget.drive.url.setText("https://unas.invalid/")
+    widget.drive.token.setText("drive-synthetic")
+    widget.test_connections()
+    qtbot.waitUntil(lambda: not widget.busy)
+    assert isinstance(seen[0], DriveConfig)
+    assert "UniFi Drive: Online" in widget.outcome.text()
+    widget.save()
+
+    assert load_drive_config(path) == DriveConfig(
+        "https://unas.invalid", "drive-synthetic"
+    )
+
+
+def test_drive_chip_is_hidden_until_configured(qtbot, tmp_path, pool):
+    from unifi2netbox.config import DriveConfig
+
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+        drive_checker=lambda config: ConnectionResult(
+            ConnectionState.ONLINE, "Synthetic."
+        ),
+    )
+    qtbot.addWidget(window)
+    assert window.drive_chip.isHidden()
+    assert window.drive_chip.text().endswith("Drive · Off")
+
+    window.drive.apply_config(DriveConfig("https://unas.invalid", "k"))
+    qtbot.waitUntil(lambda: not window.drive.runner.busy)
+
+    assert not window.drive_chip.isHidden()
+    assert window.drive_chip.text().endswith("Drive")

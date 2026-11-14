@@ -403,6 +403,21 @@ read-only even when the API token itself has broader permissions.
 
 Branch: `feature/drive-inventory`; follows M8.
 
+Gate finding (2026-11-14, read-only): Ubiquiti's developer portal lists no
+Drive or UNAS API. The UNAS Pro (one device: management 1G and data 10G SFP+
+interfaces, both visible as UniFi Network clients) answers the public UniFi OS
+`/api/system` with model and system MAC; `/proxy/drive/...` answers 401 for
+any path; the Network and Protect integration paths return HTML only.
+
+Decision (2026-11-14, user): add a UniFi Drive settings page with URL and
+local API key like Access, so a future Drive API can be used; until then
+only the public system information is read.
+
+Slices:
+
+- [x] 1. Optional Drive connection: config section, settings page, chip and
+  read-only system-information check; key stored, not sent (0.9.1).
+
 - [ ] Verify Drive 4.4.20 / UNAS Pro 6.0.11 inventory APIs and authentication.
 - [ ] Add verified chassis/interface/hardware inventory with cross-source matching.
 - [ ] Keep unsupported storage metrics display-only; never access file contents.

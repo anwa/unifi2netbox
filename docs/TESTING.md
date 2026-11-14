@@ -184,6 +184,9 @@ The focused tests validate that:
 	skips unadopted devices, rejects duplicates and malformed answers, is
 	refreshed only when configured, keeps a stale snapshot on failure, and a
 	rejected URL without a port points to 12445,
+- the optional Drive connection reads only the public `/api/system` with GET
+	and without sending the key, accepts UNAS models only, never contacts a
+	console while unconfigured and keeps its own config section,
 - optional devices merge with precedence Network, Access, Protect; only
 	fresh Access reads join the preview, the pre-write re-read includes
 	Access and tolerates its failure, Access rows never get the default role
