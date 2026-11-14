@@ -380,8 +380,8 @@ Slices:
 
 - [x] 1. Optional Access connection: config section, settings page, chip and
   read-only device check (0.8.1).
-- [ ] 2. Verify the Access device fields live and read hubs, readers and other
-  hardware into an Access snapshot; never users, logs or door control.
+- [x] 2. Verify the Access device fields live and read hubs, readers and other
+  hardware into an Access snapshot; never users, logs or door control (0.8.2).
 - [ ] 3. Match and preview Access devices (precedence Network, Access,
   Protect) and record unsupported hardware fields.
 - [ ] 4. Approved NetBox writes for Access devices and live acceptance.

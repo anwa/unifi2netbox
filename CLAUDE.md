@@ -74,6 +74,9 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   permits GET; UniFi Network and Protect via httpx against the official local
   integration APIs (read-only, no proxy env, no redirect or login fallback).
   "Online" means authenticated inventory reads succeed.
+- **Access inventory** (`access.py`): optional; hubs, readers and intercoms
+  (name, MAC from the device ID, model, kind, state) into a `unifi_access`
+  snapshot; users, logs and doors are never read.
 - **Protect inventory** (`protect.py`): optional; NVR and cameras (name, MAC,
   model, kind, state) into a separate `unifi_protect` snapshot; failures never
   block NetBox or Network.

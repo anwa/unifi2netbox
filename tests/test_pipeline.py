@@ -603,3 +603,46 @@ def test_protect_creates_need_a_fitting_role_not_the_default(monkeypatch, tmp_pa
 
     with_camera = preview(("Access Point", "Camera"))
     assert with_camera.role_by_key[camera_key] == "Camera"
+
+
+def test_preview_reports_the_access_snapshot(monkeypatch, tmp_path):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import AccessConfig
+    from unifi2netbox.refresh import RefreshResult, RefreshStatus
+
+    netbox = _snapshot(InventorySource.NETBOX, [])
+    unifi = _snapshot(
+        InventorySource.UNIFI_NETWORK, [InventoryDevice("sw", "switch", site="Home")]
+    )
+    access = InventorySnapshot(
+        InventorySource.UNIFI_ACCESS,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("a1b2c3d4e5f6", "Hub", kind="hub"),),
+    )
+    calls = []
+
+    def refresh(*args):
+        calls.append(args)
+        return RefreshResult(
+            RefreshStatus(snapshot=netbox),
+            RefreshStatus(snapshot=unifi),
+            None,
+            RefreshStatus(snapshot=access),
+        )
+
+    monkeypatch.setattr(pipeline, "refresh_snapshots", refresh)
+    config = AccessConfig("https://udm.invalid:12445", "ac")
+    result = pipeline.build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UniFiConfig("https://udm.invalid", "uf"),
+        include_all_netbox_delete_candidates=False,
+        access_config=config,
+    )
+
+    assert calls[0][-1] == config
+    assert result.access_devices == access.devices
+    assert result.access_status == "Access: 1 device read."
+    assert "Access: 1 device read." in result.detail_lines
+    # Access devices join matching only in a later slice.
+    assert not any("a1b2c3d4e5f6" in row.device_key for row in result.rows)

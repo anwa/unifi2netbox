@@ -6,6 +6,31 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.8.2
+
+### Added
+
+- M8 slice 2: Access inventory. A configured Access connection is read on
+  every refresh into its own `unifi_access` snapshot (GET `devices` only):
+  name (alias first), model (`type`), manufacturer Ubiquiti, the MAC taken
+  from the device ID, kind (hub, reader, intercom or other Access hardware)
+  and online state. Unadopted devices are skipped. Failures keep the last
+  snapshot as stale and never block NetBox or Network; the preview reports
+  the Access device count. Access devices join matching in slice 3.
+
+### Changed
+
+- A rejected Access token on a URL without a port now points to port 12445,
+  because such requests reach UniFi OS on port 443 instead of Access.
+
+### Validation
+
+- Added Access reader, refresh, preview and port-hint tests. Live read-only
+  on 2026-11-14: the saved URL lacked `:12445` (check now explains this);
+  with the port the reader returned a UAH hub and a UA-Intercom, both
+  online, MACs derived from the IDs; the intercom MAC equals its Protect
+  MAC, the hub is new to both other sources.
+
 ## v0.8.1
 
 ### Added

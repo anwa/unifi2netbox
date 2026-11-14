@@ -25,6 +25,7 @@ class InventorySource(StrEnum):
     NETBOX = "netbox"
     UNIFI_NETWORK = "unifi_network"
     UNIFI_PROTECT = "unifi_protect"
+    UNIFI_ACCESS = "unifi_access"
 
 
 class InventoryError(ValueError):

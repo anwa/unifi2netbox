@@ -7,15 +7,33 @@ and ignore proxy environment variables. The app only reads devices, even when
 the token itself would allow more (users, logs, door control).
 """
 
+import re
 import ssl
+from datetime import datetime
 
 import httpx
 
 from unifi2netbox.config import AccessConfig
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryError,
+    InventorySnapshot,
+    InventorySource,
+    _normalize_mac,
+    _text,
+    _timestamp,
+)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
 from unifi2netbox.unifi import _tls_failure
 
 API_PATH = "/api/v1/developer/"
+ACCESS_PORT = 12445
+PORT_HINT = f" The URL has no port; the Access API listens on port {ACCESS_PORT}."
+
+HUB = "hub"
+READER = "reader"
+INTERCOM = "intercom"
+OTHER = "access"
 
 
 class _Failure(Exception):
@@ -115,7 +133,7 @@ def check_access_connection(
                 f"({count} device{'s' if count != 1 else ''}).",
             )
     except _Failure as error:
-        return ConnectionResult(error.state, error.message)
+        return ConnectionResult(error.state, _with_port_hint(config, error))
     except httpx.TimeoutException:
         return ConnectionResult(ConnectionState.OFFLINE, "The API request timed out.")
     except (httpx.ConnectError, ssl.SSLError) as error:
@@ -136,3 +154,81 @@ def check_access_connection(
             ConnectionState.ERROR,
             "The server did not return a supported UniFi Access API response.",
         )
+
+
+def _with_port_hint(config: AccessConfig, error: _Failure) -> str:
+    """A rejected request without an explicit port usually hit UniFi OS on 443."""
+    if error.state != ConnectionState.UNAUTHORIZED:
+        return error.message
+    try:
+        port = httpx.URL(config.url).port
+    except httpx.InvalidURL:
+        return error.message
+    return error.message + (PORT_HINT if port is None else "")
+
+
+def access_kind(row: dict) -> str:
+    """Hub, reader or intercom from the reported capabilities and type."""
+    capabilities = row.get("capabilities")
+    flags = set(capabilities) if isinstance(capabilities, list) else set()
+    model = _text(row.get("type")).upper()
+    if "INTERCOM" in model:
+        return INTERCOM
+    if "is_hub" in flags or model.startswith("UAH"):
+        return HUB
+    if "is_reader" in flags:
+        return READER
+    return OTHER
+
+
+def read_access_inventory(
+    config: AccessConfig,
+    *,
+    captured_at: datetime | None = None,
+    transport: httpx.BaseTransport | None = None,
+) -> InventorySnapshot:
+    """Adopted Access hardware from the developer API (GET ``devices`` only).
+
+    Kept fields: name (alias first), model (``type``), MAC (the device ID is
+    the MAC address), kind and online state. Users, logs and doors are never
+    requested.
+    """
+    if not config.configured:
+        raise InventoryError("Set the Access API URL (port 12445) and token.")
+    try:
+        with access_client(config, transport=transport) as client:
+            rows = flatten_devices(access_data(client, "devices"))
+    except _Failure as error:
+        raise InventoryError(_with_port_hint(config, error)) from None
+    except (httpx.HTTPError, OSError, ValueError, TypeError) as error:
+        raise InventoryError(
+            "UniFi Access inventory read failed due to transport errors."
+        ) from error
+    devices = [_normalize(row) for row in rows if row.get("is_adopted") is not False]
+    ids = [device.source_id for device in devices]
+    if len(set(ids)) != len(ids):
+        raise InventoryError("UniFi Access returned duplicate device IDs.")
+    return InventorySnapshot(
+        source=InventorySource.UNIFI_ACCESS,
+        captured_at=_timestamp(captured_at),
+        devices=tuple(devices),
+    )
+
+
+def _normalize(row: dict) -> InventoryDevice:
+    source_id = _text(row.get("id"))
+    if not source_id:
+        raise InventoryError("UniFi Access returned a malformed device entry.")
+    mac = (
+        _normalize_mac(source_id) if re.fullmatch(r"[0-9a-fA-F]{12}", source_id) else ""
+    )
+    online = row.get("is_online")
+    return InventoryDevice(
+        source_id=source_id,
+        name=_text(row.get("alias")) or _text(row.get("name")),
+        model=_text(row.get("type")),
+        manufacturer="Ubiquiti",
+        mac_address=mac,
+        kind=access_kind(row),
+        state="" if online is None else ("online" if online else "offline"),
+    )

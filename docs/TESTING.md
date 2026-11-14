@@ -180,6 +180,10 @@ The focused tests validate that:
 	only, never contacts a console while unconfigured, reports rejected tokens,
 	missing APIs and error envelopes, and keeps its own config section;
 	optional chips stay hidden until configured,
+- the Access reader keeps name, model, MAC from the ID, kind and state,
+	skips unadopted devices, rejects duplicates and malformed answers, is
+	refreshed only when configured, keeps a stale snapshot on failure, and a
+	rejected URL without a port points to 12445,
 - fresh Protect devices join matching with prefixed IDs and MAC dedup
 	against Network, stale ones never do, the pre-write re-read merges Protect
 	and tolerates its failure, Protect creates never inherit the default role,

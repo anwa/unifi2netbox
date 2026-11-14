@@ -146,8 +146,10 @@ class InventoryPreviewJob(QRunnable):
         include_all_netbox_delete_candidates: bool,
         netbox_site_name: str = "",
         protect_config: ProtectConfig | None = None,
+        access_config: AccessConfig | None = None,
     ) -> None:
         super().__init__()
+        self.access_config = access_config
         self.config_path = config_path
         self.netbox_config = netbox_config
         self.unifi_config = unifi_config
@@ -168,6 +170,7 @@ class InventoryPreviewJob(QRunnable):
                 ),
                 netbox_site_name=self.netbox_site_name,
                 protect_config=self.protect_config,
+                access_config=self.access_config,
             )
         except Exception:
             result = InventoryPreviewResult(
@@ -332,6 +335,7 @@ class InventoryPreviewRunner(QObject):
         include_all_netbox_delete_candidates: bool,
         netbox_site_name: str = "",
         protect_config: ProtectConfig | None = None,
+        access_config: AccessConfig | None = None,
     ) -> bool:
         if self.busy:
             return False
@@ -342,6 +346,7 @@ class InventoryPreviewRunner(QObject):
             include_all_netbox_delete_candidates,
             netbox_site_name,
             protect_config,
+            access_config,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1929,6 +1934,7 @@ class MainWindow(QMainWindow):
             ),
             netbox_site_name=self.behavior.netbox_site_name,
             protect_config=self.protect.config,
+            access_config=self.access.config,
         )
         self.update_check_action()
 
