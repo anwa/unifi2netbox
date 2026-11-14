@@ -50,6 +50,11 @@
   Version-only release preparation is release metadata, not another patch change.
   Tag the resulting approved main release; do not tag every development commit.
 - Only the user may authorize a major version increment.
+- Every approved minor or major release also gets a Windows standalone build:
+  after tagging, build `dist/unifi2netbox` from the tagged commit with the
+  pinned recipe in `docs/DEPLOYMENT.md`, run the native smoke test
+  (`tests/test_package.py`) and record version, commit and result there.
+  Build output stays out of Git.
 
 ## Documentation and Validation
 

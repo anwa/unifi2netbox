@@ -14,6 +14,8 @@ starting work. Key points that are easy to miss:
 - Every ordinary code-changing commit bumps the patch version in `pyproject.toml`
   (`version = "x.y.z"`, the only version source; read at runtime via
   `importlib.metadata`). Doc-only commits do not bump. Never `git add .`.
+- Every approved minor/major release also gets a Windows exe build from the
+  tagged commit plus the native smoke test (`docs/DEPLOYMENT.md`); record it there.
 - Keep README.md, CHANGELOG.md, `docs/TESTING.md` and the milestone checkboxes in
   `docs/IMPLEMENTATION_PLAN.md` current with every behavior change.
 - Two machines use this repo: the **developer workstation** (direct access to
