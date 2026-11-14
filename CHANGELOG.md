@@ -6,6 +6,48 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.7.0
+
+### Summary
+
+- Switch ports and VLANs milestone (M6): ports, port configuration, networks,
+	interfaces and cables are compared with NetBox and can be written with the
+	same safeguards as devices.
+
+### Added
+
+- Ports of matched devices are paired with NetBox interfaces; link state and
+	speed are shown as live values and never written.
+- UniFi networks become a site-scoped VLAN group "UniFi <site>", VLANs and
+	prefixes linked to their VLAN (Networks view).
+- Effective port configuration (name, enable state, profile, mode, native and
+	tagged VLANs, LAG) is read from internal UniFi Network 11.0 endpoints, GET
+	only, with an allow-list that keeps network secrets out of all models.
+- Interface configuration (enabled, 802.1Q mode, untagged and tagged VLANs) is
+	planned and written field by field (Interfaces view); LAG stays display-only.
+- Cables are suggested only from agreeing LLDP and uplink evidence between
+	interfaces without a cable, and are only created (Cables view).
+- Write order in one run: networks, interfaces, cables, devices; every write
+	is re-checked against UniFi and NetBox, read back and recorded.
+
+### Validation
+
+- Milestone-wide offline gate: 415 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): read-only checks of ports
+	(195), networks (16), port configuration (195 of 195 resolved) and link
+	evidence (53 observations); dry runs of 31 network, 19 interface and 1 cable
+	operations; approved NetBox developer-instance write tests for networks
+	(10/10), interfaces (8/8) and cables (7/7), each with a no-op second apply
+	and all test objects restored or removed. LAG, tagged VLAN lists and
+	interrupted creates are covered by offline tests only.
+
+### Compatibility
+
+- Requires no configuration changes. Snapshots gain ports, interfaces,
+	networks, IPAM objects, port configuration and links; older snapshots load
+	without migration. Internal endpoints are only read for UniFi Network 11.0.
+
 ## v0.6.13
 
 ### Added

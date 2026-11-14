@@ -1,18 +1,20 @@
 # unifi2netbox
 
-Latest main release: **v0.6.0**, the approved NetBox writes milestone (M5).
+Latest main release: **v0.7.0**, the switch ports and VLANs milestone (M6).
 
-Release **v0.6.0** compares UniFi Network inventory with NetBox in a modern
+Release **v0.7.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
-history. UniFi stays read-only.
+history. Beyond devices it covers VLANs and prefixes, switch port
+configuration on NetBox interfaces and cable suggestions from LLDP. UniFi
+stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v0.6.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v0.7.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities

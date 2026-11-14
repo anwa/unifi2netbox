@@ -270,6 +270,9 @@ devices), with an explicit user setting to include all NetBox devices when neede
 
 Branch: `feature/ports-and-vlans`; depends on M5 and M3 capabilities.
 
+Status: completed for release v0.7.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.7.0 tag.
+
 Decision (2026-11-14, user-approved): the official Network 11.0 Integration
 API exposes per port only index, link state, connector, speeds and PoE, so it
 cannot provide port names, configured enable state, port profiles, native or
@@ -312,6 +315,9 @@ Slices, in this order:
   (Offline: `test_port_config.py`, `test_networks.py`, `test_ports.py`; live
   read-only checks and approved write tests for networks, interfaces and
   cables are recorded in `TESTING.md`.)
+
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.7.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.7.0.
 
 Acceptance: correct effective configuration, no lifecycle/operational confusion,
 no unsupported writes and no redundant changes on a second apply.
