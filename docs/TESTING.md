@@ -585,3 +585,21 @@ in the write history, and the prefix, VLAN and group were removed afterwards
 (NetBox IPAM empty again). VLAN name alignment, prefix conflicts and
 interrupted creates remain covered by offline tests.
 
+On 2026-11-14 the assistant checked M6 slices 3 and 4 live on the developer
+workstation. Read-only first (application 0.6.6): the internal port
+configuration resolved 195 of 195 UniFi ports on 17 devices without notes
+(90 `tagged-all`, 46 `access`, 57 `disabled`, 2 `tagged`; no LAG configured).
+With commit 67d5a3e (application 0.6.10) the interface plan held 19 paired
+interfaces on the UDM Pro Max and one USW (13 mode, 6 enabled changes; VLAN
+fields waited for the missing VLAN group), and a real dry run of all 19 passed
+the UniFi and NetBox re-read checks in 5.1 s without writing. Then, with the
+user's explicit approval, a write test against the NetBox developer instance
+passed 8/8 checks: the VLAN group "UniFi Wiesenthau" and VLAN 1 were created
+and verified through the network plan; after a refresh, UDM `port.1` was set
+to `tagged-all` with untagged VLAN 1 and USW `SFP+ 1` was disabled, both read
+back as verified; a fresh plan showed both interfaces in sync, a second apply
+wrote nothing, all three runs were in the write history, and afterwards both
+interfaces were restored and the VLAN and group removed (all NetBox interfaces
+equal to before, IPAM empty). Tagged VLAN lists, drift skips and LAG remain
+covered by offline tests.
+

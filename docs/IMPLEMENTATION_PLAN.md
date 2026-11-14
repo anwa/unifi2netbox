@@ -296,8 +296,13 @@ Slices, in this order:
   trunks stay explicit `tagged-all`, never expanded), LAG membership.
   (0.6.7, 2026-11-14: offline tests and live read-only check, 195 of 195 ports
   resolved without notes; no LAG configured live, so LAG is offline-tested.)
-- [ ] 4. Write interface configuration (enabled, mode, untagged/tagged VLANs,
+- [x] 4. Write interface configuration (enabled, mode, untagged/tagged VLANs,
   LAG) with field-level preview and approval; a second apply is a no-op.
+  (0.6.10, 2026-11-14: offline tests, live dry run of 19 interfaces and an
+  approved live write of two interfaces, verified, second apply a no-op, all
+  restored. Decision: LAG membership stays display-only because NetBox needs
+  separate LAG interfaces that are not created automatically; no LAG exists
+  live.)
 - [ ] 5. Suggest cables only from unambiguous LLDP/uplink evidence, with
   explicit approval.
 - [ ] Test disabled versus down, unknown profiles, VLAN collisions and
