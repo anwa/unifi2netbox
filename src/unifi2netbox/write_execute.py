@@ -522,6 +522,61 @@ class RequestsNetBoxWriteBackend:
         ids = (str(row.get("id", "")).strip() for row in rows if isinstance(row, dict))
         return tuple(item for item in ids if item)
 
+    # -- IPAM (VLAN groups, VLANs, prefixes) ----------------------------------
+
+    def find_ids(self, path: str, **filters: object) -> tuple[str, ...]:
+        response = self._request("GET", path, params=filters)
+        if response.status_code != 200:
+            raise WriteExecutionError(
+                f"NetBox lookup {path} failed with HTTP {response.status_code}."
+            )
+        payload = response.json()
+        rows = payload.get("results") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            raise WriteExecutionError(f"NetBox lookup {path} payload is invalid.")
+        ids = (str(row.get("id", "")).strip() for row in rows if isinstance(row, dict))
+        return tuple(item for item in ids if item)
+
+    def read_object(self, path: str) -> dict[str, object] | None:
+        response = self._request("GET", path)
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise WriteExecutionError(
+                f"NetBox read {path} failed with HTTP {response.status_code}."
+            )
+        data = response.json()
+        if not isinstance(data, dict):
+            raise WriteExecutionError(f"NetBox read {path} payload is invalid.")
+        return data
+
+    def create_object(self, path: str, payload: dict[str, object]) -> str:
+        response = self._request("POST", path, json=payload)
+        if response.status_code in {502, 503, 504}:
+            raise AmbiguousWriteError(
+                f"NetBox or its proxy answered HTTP {response.status_code}"
+            )
+        if response.status_code not in {200, 201}:
+            detail = _response_error_detail(response)
+            raise WriteExecutionError(
+                f"NetBox create failed with HTTP {response.status_code}: {detail}"
+            )
+        try:
+            data = response.json()
+        except ValueError:
+            data = None
+        if not isinstance(data, dict) or not str(data.get("id", "")).strip():
+            raise AmbiguousWriteError("NetBox create response did not include an ID")
+        return str(data["id"])
+
+    def update_object(self, path: str, payload: dict[str, object]) -> None:
+        response = self._request("PATCH", path, json=payload)
+        if response.status_code not in {200, 204}:
+            detail = _response_error_detail(response)
+            raise WriteExecutionError(
+                f"NetBox update failed with HTTP {response.status_code}: {detail}"
+            )
+
     def resolve_site_id(self, name: str) -> str:
         response = self._request("GET", "/api/dcim/sites/", params={"name": name})
         site_id = _single_result_id(response, "site", name)

@@ -34,6 +34,7 @@ from unifi2netbox.matching import (
     deduplicate_inventory,
     suggest_device_types_for_unmatched,
 )
+from unifi2netbox.network_execute import execute_network_plan
 from unifi2netbox.networks import NetworkPlan, build_network_plan
 from unifi2netbox.preview import (
     ChangePreview,
@@ -43,8 +44,11 @@ from unifi2netbox.preview import (
 )
 from unifi2netbox.refresh import refresh_snapshots
 from unifi2netbox.snapshots import SnapshotStore
-from unifi2netbox.write_execute import execute_write_plan
-from unifi2netbox.write_journal import finalize_journal, summarize_journal
+from unifi2netbox.write_execute import (
+    RequestsNetBoxWriteBackend,
+    execute_write_plan,
+)
+from unifi2netbox.write_journal import finalize_journal
 from unifi2netbox.write_plan import WritePlan, build_write_plan
 
 SNAPSHOT_FILENAME = "snapshots.sqlite3"
@@ -245,17 +249,37 @@ def run_write_execution(
     dry_run: bool,
     unifi_config: UniFiConfig | None = None,
     journal_path: Path | None = None,
+    network_plan: NetworkPlan | None = None,
 ) -> WriteExecutionReport:
-    """Execute an approved write plan and summarize the journal for display.
+    """Execute approved network and device writes and summarize them.
 
-    With ``unifi_config`` the UniFi inventory is re-read first, and operations
-    whose UniFi values changed since the preview are skipped.
+    With ``unifi_config`` the UniFi inventory is re-read once first; devices and
+    networks whose UniFi values changed since the preview are skipped. Network
+    writes (VLAN group, VLANs, prefixes) run before device writes.
     """
     started = _now()
-    source_devices, source_error = (
-        reread_unifi_sources(unifi_config, behavior.netbox_site_name)
+    snapshot, source_error = (
+        reread_unifi_snapshot(unifi_config, behavior.netbox_site_name)
         if unifi_config is not None
         else (None, "")
+    )
+    source_devices = (
+        {_snapshot_observation_id(snapshot.source, d): d for d in snapshot.devices}
+        if snapshot is not None
+        else None
+    )
+    source_networks = (
+        {f"network:{n.source_id}": n for n in snapshot.networks}
+        if snapshot is not None
+        else None
+    )
+
+    network_outcomes = execute_network_plan(
+        network_plan,
+        RequestsNetBoxWriteBackend(netbox_config),
+        dry_run=dry_run,
+        source_networks=source_networks,
+        source_error=source_error,
     )
     result = execute_write_plan(
         write_plan,
@@ -274,28 +298,51 @@ def run_write_execution(
         source_error=source_error,
     )
     journal = finalize_journal(result.journal, _now())
-    result = replace(result, journal=journal)
-    summary = summarize_journal(result.journal)
-    verified = sum(
-        outcome.verification == "verified" for outcome in result.journal.outcomes
-    )
-    mismatched = sum(
-        outcome.verification == "mismatch" for outcome in result.journal.outcomes
-    )
+    labels = {
+        op.sequence: op.source_label or op.target_label or op.device_key
+        for op in write_plan.operations
+    }
+    stored = [
+        StoredOutcome(
+            device_key=item.key,
+            label=item.label,
+            operation_type=item.operation,
+            status=item.status,
+            message=item.message,
+            netbox_object_id=item.object_id,
+            verification=item.verification,
+            verification_detail=item.verification_detail,
+        )
+        for item in network_outcomes
+    ] + [
+        StoredOutcome(
+            device_key=item.device_key,
+            label=labels.get(item.sequence, item.device_key),
+            operation_type=str(item.operation_type),
+            status=str(item.status),
+            message=item.message,
+            netbox_object_id=item.netbox_object_id,
+            verification=item.verification,
+            verification_detail=item.verification_detail,
+        )
+        for item in journal.outcomes
+    ]
+
+    def count(status: str) -> int:
+        return sum(item.status == status for item in stored)
+
+    verified = sum(item.verification == "verified" for item in stored)
+    mismatched = sum(item.verification == "mismatch" for item in stored)
     details = (
         "Write execution finished: "
-        f"{summary.successful} success, {summary.failed} failed, "
-        f"{summary.skipped} skipped."
+        f"{count('success')} success, {count('failed')} failed, "
+        f"{count('skipped')} skipped."
     )
-    if summary.successful:
+    if count("success"):
         details += f" Read-back: {verified} verified"
         details += f", {mismatched} mismatch." if mismatched else "."
 
     if journal_path is not None:
-        labels = {
-            op.sequence: op.source_label or op.target_label or op.device_key
-            for op in write_plan.operations
-        }
         try:
             JournalStore(journal_path).save(
                 StoredRun(
@@ -303,28 +350,15 @@ def run_write_execution(
                     started_at=journal.started_at,
                     finished_at=journal.finished_at,
                     dry_run=dry_run,
-                    outcomes=tuple(
-                        StoredOutcome(
-                            device_key=item.device_key,
-                            label=labels.get(item.sequence, item.device_key),
-                            operation_type=str(item.operation_type),
-                            status=str(item.status),
-                            message=item.message,
-                            netbox_object_id=item.netbox_object_id,
-                            verification=item.verification,
-                            verification_detail=item.verification_detail,
-                        )
-                        for item in journal.outcomes
-                    ),
+                    outcomes=tuple(stored),
                 )
             )
         except (JournalStoreError, sqlite3.Error, OSError) as error:
             details += f" Write history not saved: {error}"
 
     lines = tuple(
-        f"Write #{outcome.sequence} {outcome.operation_type}: "
-        f"{outcome.status} {outcome.message}".strip()
-        for outcome in result.journal.outcomes[:8]
+        f"{item.operation_type}: {item.label} {item.status} {item.message}".strip()
+        for item in stored[:8]
     )
     return WriteExecutionReport(
         status="Dry run" if dry_run else "Applied",
@@ -332,14 +366,14 @@ def run_write_execution(
         detail_lines=lines or (details,),
         outcomes=tuple(
             WriteOutcome(
-                device_key=outcome.device_key,
-                status=str(outcome.status),
-                message=outcome.message,
-                netbox_object_id=outcome.netbox_object_id,
-                verification=outcome.verification,
-                verification_detail=outcome.verification_detail,
+                device_key=item.device_key,
+                status=item.status,
+                message=item.message,
+                netbox_object_id=item.netbox_object_id,
+                verification=item.verification,
+                verification_detail=item.verification_detail,
             )
-            for outcome in result.journal.outcomes
+            for item in stored
         ),
         dry_run=dry_run,
         run_id=journal.run_id,
@@ -347,14 +381,23 @@ def run_write_execution(
     )
 
 
+def reread_unifi_snapshot(
+    unifi_config: UniFiConfig, netbox_site_name: str
+) -> tuple[InventorySnapshot | None, str]:
+    """Fresh UniFi snapshot with the site mapping, or (None, error text)."""
+    try:
+        return map_unifi_site(read_unifi_inventory(unifi_config), netbox_site_name), ""
+    except InventoryError as error:
+        return None, str(error) or "UniFi read failed"
+
+
 def reread_unifi_sources(
     unifi_config: UniFiConfig, netbox_site_name: str
 ) -> tuple[dict[str, InventoryDevice] | None, str]:
     """Fresh UniFi devices by observation ID, or (None, error text)."""
-    try:
-        snapshot = map_unifi_site(read_unifi_inventory(unifi_config), netbox_site_name)
-    except InventoryError as error:
-        return None, str(error) or "UniFi read failed"
+    snapshot, error = reread_unifi_snapshot(unifi_config, netbox_site_name)
+    if snapshot is None:
+        return None, error
     return {
         _snapshot_observation_id(snapshot.source, device): device
         for device in snapshot.devices

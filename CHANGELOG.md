@@ -6,6 +6,26 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.4
+
+### Added
+
+- M6 slice 2, execution: the new `network_execute` module writes the selected
+	parts of the network plan in the order VLAN group, VLANs, prefixes (a new
+	prefix links the VLAN created in the same run). It applies the device-write
+	safeguards: UniFi networks are re-read and changed ones skipped, NetBox is
+	checked before each write (objects that appeared are not duplicated, an
+	existing VLAN group is reused, changed baselines are skipped), interrupted
+	creates are looked up instead of retried, and every write is read back.
+	Dry runs perform all checks without writing.
+- Network writes run before device writes in one run; their outcomes share
+	the run summary and the write history. UniFi is re-read once per run.
+
+### Validation
+
+- Added executor tests (order and linking, dry run, appeared objects, update
+	baselines, interrupted create, UniFi changes) and pipeline tests.
+
 ## v0.6.3
 
 ### Added

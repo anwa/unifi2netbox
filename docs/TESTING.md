@@ -171,6 +171,9 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- network writes run group -> VLANs -> prefixes with UniFi/NetBox re-reads,
+	no duplicates for objects that appeared, lookup of interrupted creates,
+	read-back and dry runs without writes,
 - the network plan creates a site-scoped VLAN group, VLANs and prefixes,
 	completes existing ones and never selects conflicts or disabled networks,
 - UniFi networks carry VLAN ID and IPv4 subnet; NetBox VLAN groups, VLANs and
