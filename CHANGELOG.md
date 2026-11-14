@@ -6,6 +6,50 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.8.0
+
+### Summary
+
+- UniFi Protect inventory milestone (M7): the NVR and cameras of an optional
+	Protect console join the same review and approved NetBox write flow.
+
+### Added
+
+- Optional `[unifi_protect]` connection with its own console URL and local API
+	key, a settings page and a header chip; GET-only reads of `meta/info`,
+	`nvrs` and `cameras`, gated to the Protect 7.3 series. Consoles without
+	Protect are reported as unsupported.
+- NVR and cameras are stored in their own snapshot with name, MAC, model, kind
+	and live state only; recordings, snapshots and streams are never requested.
+- Fresh Protect devices are matched, previewed and written like Network
+	devices; devices also seen in Network are taken from Network (MAC); stale
+	Protect data never authorizes writes; Protect is re-read before writing.
+- Protect model codes map to NetBox part numbers; unknown vendors (third-party
+	cameras) only get exact type matches; cameras and NVRs never inherit the
+	default network role.
+
+### Fixed
+
+- Create choices show a "Choose a ..." placeholder instead of an unchosen first
+	value.
+
+### Validation
+
+- Milestone-wide offline gate: 454 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): Protect 7.3.74 on the UNVR
+	Online with its own key, 11 devices read (1 NVR, 10 cameras), preview with
+	6 preselected device types; approved NetBox developer-instance write test of
+	one camera with a test role (7/7, verified, matched after refresh, test
+	objects removed). A failing Protect re-read and stale Protect snapshots are
+	covered by offline tests only.
+
+### Compatibility
+
+- No configuration change is required; Protect stays off until
+	`[unifi_protect]` is set. Snapshots gain a `unifi_protect` source and device
+	`kind`/`state` fields; older snapshots load without migration.
+
 ## v0.7.4
 
 ### Added

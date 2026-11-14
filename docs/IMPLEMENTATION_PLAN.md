@@ -326,6 +326,9 @@ no unsupported writes and no redundant changes on a second apply.
 
 Branch: `feature/protect-inventory`; follows M6.
 
+Status: completed for release v0.8.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.8.0 tag.
+
 Decision (2026-11-14, user-approved): Protect gets its own optional connection
 (`[unifi_protect]`, URL and local API key of the console running Protect,
 edited in Settings); the Network key is not reused. Scope: cameras and the NVR;
@@ -357,6 +360,9 @@ Slices:
 - [x] Deduplicate devices also visible in Network; never collect recordings/streams.
   (MAC dedup in favor of Network; only `meta/info`, `nvrs` and `cameras` are
   requested, no snapshot, recording or stream endpoints.)
+
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.8.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.8.0.
 
 Acceptance: camera/NVR fixtures and target-PC read verification; existing common
 approval and conflict handling remains effective.
