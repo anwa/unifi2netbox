@@ -303,10 +303,15 @@ Slices, in this order:
   restored. Decision: LAG membership stays display-only because NetBox needs
   separate LAG interfaces that are not created automatically; no LAG exists
   live.)
-- [ ] 5. Suggest cables only from unambiguous LLDP/uplink evidence, with
+- [x] 5. Suggest cables only from unambiguous LLDP/uplink evidence, with
   explicit approval.
-- [ ] Test disabled versus down, unknown profiles, VLAN collisions and
+  (0.6.13, 2026-11-14: offline tests, live dry run and an approved live write
+  of one cable, verified, second apply a no-op, cable removed.)
+- [x] Test disabled versus down, unknown profiles, VLAN collisions and
   numbering; live read-only checks and an approved dev-instance write test.
+  (Offline: `test_port_config.py`, `test_networks.py`, `test_ports.py`; live
+  read-only checks and approved write tests for networks, interfaces and
+  cables are recorded in `TESTING.md`.)
 
 Acceptance: correct effective configuration, no lifecycle/operational confusion,
 no unsupported writes and no redundant changes on a second apply.

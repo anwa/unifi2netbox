@@ -612,3 +612,21 @@ interfaces were restored and the VLAN and group removed (all NetBox interfaces
 equal to before, IPAM empty). Tagged VLAN lists, drift skips and LAG remain
 covered by offline tests.
 
+On 2026-11-14 the assistant checked M6 slice 5 (cable suggestions) live on the
+developer workstation (commit e43a5c0, application 0.6.13). Read-only first:
+UniFi reported 53 link observations (35 LLDP, 18 uplink) on 18 device pairs
+without disagreement; the plan suggested one cable, UDM `port.5` to RPS
+`Port 1` (LLDP from the UDM and uplink from the RPS, preselected), and kept 17
+pairs reference-only because one device is not in NetBox. A real dry run passed
+the UniFi and NetBox re-read checks in 3.8 s without writing. Then, with the
+user's explicit approval, a write test against the NetBox developer instance
+passed 7/7 checks: the cable was created with status connected between both
+interfaces and read back as verified, a fresh plan showed it in sync, a second
+apply wrote nothing, both runs were in the write history, and the cable was
+deleted afterwards (NetBox again had 0 cables). A first attempt of this test
+created the same cable but the test script read the wrong outcome field and
+skipped its cleanup; the assistant confirmed that the leftover cable joined
+exactly the two test interfaces, deleted it, and repeated the test. Disagreeing
+evidence, occupied interfaces and interrupted creates remain covered by
+offline tests.
+
