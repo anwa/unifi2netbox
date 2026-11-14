@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     from unifi2netbox.config import ConfigError, load_ui_config
     from unifi2netbox.gui import MainWindow
     from unifi2netbox.theme import apply_theme, dark_for
+    from unifi2netbox.window_frame import install as install_window_frame
 
     QLocale.setDefault(QLocale("en_GB"))
     app = QApplication([sys.argv[0]])
@@ -25,8 +26,9 @@ def main(argv: list[str] | None = None) -> int:
         theme_choice = load_ui_config(arguments.config).theme
     except ConfigError:
         theme_choice = "system"
-    apply_theme(app, dark_for(theme_choice))
     app.setApplicationName("unifi2netbox")
+    install_window_frame(app)
+    apply_theme(app, dark_for(theme_choice))
     app.setApplicationVersion(version("unifi2netbox"))
     pool = QThreadPool(app)
     pool.setMaxThreadCount(2)

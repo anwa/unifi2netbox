@@ -77,6 +77,13 @@ TONES = ("neutral", "accent", "success", "warning", "danger")
 
 
 _forced_dark: bool | None = None
+_listeners: list = []
+
+
+def add_listener(callback) -> None:
+    """Call ``callback()`` after every theme change (for example title bars)."""
+    if callback not in _listeners:
+        _listeners.append(callback)
 
 
 def is_dark(app: QGuiApplication | None = None) -> bool:
@@ -148,6 +155,8 @@ def _apply(app: QApplication) -> None:
         palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(c.text_secondary))
     app.setPalette(palette)
     app.setStyleSheet(style_sheet(c))
+    for callback in tuple(_listeners):
+        callback()
 
 
 def style_sheet(c: Colors) -> str:

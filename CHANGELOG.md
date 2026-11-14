@@ -6,6 +6,29 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.10.1
+
+### Added
+
+- Application icon (SVG source plus PNG sizes 16-256 px and a multi-size
+  Windows `.ico`; a simplified variant keeps 16-24 px legible), used for all
+  windows, the header logo, the Windows taskbar (own AppUserModelID) and the
+  packaged executable. `tools/build_icons.py` regenerates the files with Qt.
+
+### Changed
+
+- Native title bars follow the app theme on Windows: dark mode for all
+  windows and dialogs when the app is dark, and on Windows 11 the app's own
+  caption, text and border colors, so the main window title bar blends into
+  the header. Theme switches restyle open windows; the native frame
+  (snapping, resizing) is kept.
+
+### Validation
+
+- Added icon, `.ico` structure, caption color and theme-listener tests.
+  Checked on the real Windows 11 desktop (light and dark) and in a test
+  PyInstaller build with the icon embedded (native smoke test passed).
+
 ## v0.10.0
 
 ### Summary

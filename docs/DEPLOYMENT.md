@@ -39,8 +39,11 @@ test passed (1 passed). No live API was exercised by the packaged app.
 
 ```powershell
 python -m pip install -r requirements-build.txt
-python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." src/unifi2netbox/__main__.py
+python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
 ```
+
+Since 0.10.1 the recipe embeds the application icon (`--icon`) and bundles
+the icon resources the windows use (`--add-data .../resources`).
 
 The executable is `dist/unifi2netbox/unifi2netbox.exe`. Distribute the entire
 `dist/unifi2netbox` directory, not just the executable. The standalone directory
