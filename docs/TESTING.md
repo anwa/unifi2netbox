@@ -553,3 +553,19 @@ history, and the test device and test site were removed afterwards (NetBox
 again held 4 devices and 1 site). Interrupted creates and changed UniFi values
 cannot be produced safely on live systems and remain covered by offline tests.
 
+On 2026-11-14 the assistant checked M6 slice 2 (UniFi networks to NetBox VLANs
+and prefixes) live on the developer workstation (commit c71d1ad, application
+0.6.5). Read-only first: UniFi Network 11.0.99 returned 16 networks (15
+enabled, VLANs 1-300, all with subnets); NetBox IPAM was empty, and the plan
+for site "Wiesenthau" held 1 VLAN group, 15 VLANs and 15 prefixes (31
+operations). A real dry run of all 31 operations passed the UniFi and NetBox
+re-read checks in 0.68 s without writing. Then, with the user's explicit
+approval, a write test against the NetBox developer instance passed 10/10
+checks: with one network selected (VLAN 2, 10.10.1.0/24) the real pipeline
+created the site-scoped VLAN group "UniFi Wiesenthau", the VLAN and the prefix
+linked to it, all three read back as verified; a fresh plan showed the network
+in sync with nothing selected, a second apply wrote nothing, both runs appeared
+in the write history, and the prefix, VLAN and group were removed afterwards
+(NetBox IPAM empty again). VLAN name alignment, prefix conflicts and
+interrupted creates remain covered by offline tests.
+

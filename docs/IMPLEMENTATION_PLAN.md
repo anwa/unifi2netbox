@@ -286,8 +286,11 @@ Slices, in this order:
   Operational state (link, speed) is display-only and never written.
   (0.6.1, 2026-11-14: offline tests and live read-only check; the UDM Pro Max
   pairs 11/11 ports, a USW Aggregation shows 24 surplus NetBox interfaces.)
-- [ ] 2. Create NetBox VLANs (in a site-scoped VLAN group) and prefixes from
+- [x] 2. Create NetBox VLANs (in a site-scoped VLAN group) and prefixes from
   UniFi networks, with preview and approval.
+  (0.6.5, 2026-11-14: offline tests, live dry run of 31 operations and an
+  approved live write of one network: group, VLAN and prefix verified, second
+  apply a no-op, test objects removed.)
 - [ ] 3. Read internal port configuration: names, configured enable state,
   profiles plus overrides resolved to effective native/tagged VLANs (all-VLAN
   trunks stay explicit `tagged-all`, never expanded), LAG membership.
