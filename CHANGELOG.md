@@ -6,6 +6,27 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.10.5
+
+### Fixed
+
+- Header chips are no longer squeezed or overlapping at the default window
+  width with five connections: the bold chip text comes from the style
+  sheet and each chip reserves its full width; the UniFi site moved from the
+  chip text into its tooltip (it stays in the detail card).
+
+### Validation
+
+- M10 acceptance on the developer workstation (Windows 11, 2026-11-14): the
+  0.10.3 installer was installed per user with a Start menu entry, the 0.10.4
+  installer upgraded it in place (one Apps entry, new version, smoke test of
+  the installed exe passed) and the configuration folder stayed unchanged.
+  The installed 0.10.4 app started with the real configuration, connected to
+  NetBox 4.7.3, UniFi 11.0.99, Protect 7.3.74, Access and Drive, refreshed the
+  preview read-only (32 UniFi devices: 4 in sync, 28 new, 19 interface
+  changes, 1 cable suggestion) and closed with exit code 0. The overlapping
+  UniFi chip seen there is fixed in this version (checked on screen).
+
 ## v0.10.4
 
 ### Added

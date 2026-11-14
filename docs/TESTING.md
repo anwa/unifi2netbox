@@ -726,3 +726,20 @@ read back as verified; a further refresh showed all five in sync; the three
 runs were in the write history. Items, device and role were removed
 afterwards (NetBox again had 4 devices, 5 roles and 0 inventory items).
 Serial numbers were not printed in the test log.
+
+On 2026-11-14 the assistant ran the M10 acceptance on the developer
+workstation (Windows 11). The per-user installer for 0.10.3 was installed to
+`%LOCALAPPDATA%\Programs\unifi2netbox` (Start menu entry, Apps entry); the
+0.10.4 installer, built by `tools/build_windows.ps1` from commit 45eb26d,
+upgraded it in place (one Apps entry "unifi2netbox 0.10.4", bundled package
+metadata 0.10.4, native smoke test of the installed exe passed); the per-user
+configuration folder kept its files, sizes and timestamps. The installed app
+then started with the real configuration: all five connections (NetBox
+4.7.3, UniFi Network 11.0.99, Protect 7.3.74, Access, Drive) were online with
+the expected TLS warning tone, a read-only refresh showed 32 UniFi devices
+(4 in sync, 28 new, 19 interface changes, 1 cable suggestion), and the app
+closed with exit code 0. All 28 new devices reported "Site 'Default' does not
+exist" because the real configuration has no NetBox site mapping (Sync
+defaults); this is configuration, not a defect. On the real screen the UniFi
+chip overlapped the Protect chip; fixed in 0.10.5 and rechecked on screen.
+Linux was verified only by the GitHub Actions Packages workflow (offscreen).

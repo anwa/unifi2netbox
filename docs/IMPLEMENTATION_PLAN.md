@@ -473,14 +473,17 @@ Slices:
   tokens in any package); uninstall and upgrade data policy documented
   (both build scripts check the bundle; Qt platform, image-format, style and
   TLS plugins are bundled; notices list PyInstaller and Inno Setup).
-- [ ] 4. Acceptance on the workstation: install, start, settings, read and
-  preview from the installed Windows app; upgrade over a previous install.
+- [x] 4. Acceptance on the workstation: install, start, settings, read and
+  preview from the installed Windows app; upgrade over a previous install
+  (0.10.3 -> 0.10.4 on Windows 11; chip overlap found and fixed in 0.10.5).
 
-- [ ] Finalize native Windows executable and Ubuntu-compatible package (proposed
+- [x] Finalize native Windows executable and Ubuntu-compatible package (proposed
   `.deb` plus standalone build). Packaging feasibility is checked already in M1.
 - [x] Include Qt plugins/license notices; never bundle real settings/cache/tokens.
 - [x] Preserve per-user settings on upgrades and document uninstall data policy.
-- [ ] Run source and packaged GUI checks on available requested OS versions.
+- [x] Run source and packaged GUI checks on available requested OS versions
+  (Windows 11 on the workstation; Ubuntu only offscreen in CI, real Linux
+  desktops and Ubuntu/Kubuntu 26.04 stay unverified).
 
 Acceptance: verified install/start/settings/read/preview workflows. Unavailable
 platforms stay explicitly unverified rather than being marked supported by CI.
