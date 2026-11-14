@@ -190,6 +190,10 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
   (service-level journal/read-back/write-plan contract tests on 2026-11-01).
 - [x] Add service-level device write executor for create/update with dry-run and
   deterministic outcome journaling (offline contract tests on 2026-11-01).
+- [x] Re-read NetBox targets before each write and skip operations whose preview
+  baseline changed (deleted/changed update targets, newly appeared create
+  duplicates by name/serial; offline contract tests on 2026-11-14). Source-side
+  UniFi re-read before writes remains open.
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
 visible; live write tests require explicit narrow test scope and separate opt-in.

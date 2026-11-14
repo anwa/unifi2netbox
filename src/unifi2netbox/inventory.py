@@ -109,7 +109,7 @@ def _netbox_json(
     return payload
 
 
-def _normalize_netbox_device(row: dict[str, object]) -> InventoryDevice:
+def normalize_netbox_device(row: dict[str, object]) -> InventoryDevice:
     device_type = row.get("device_type")
     manufacturer = ""
     model = ""
@@ -291,7 +291,7 @@ def read_netbox_inventory(
                     "NetBox pagination exceeded the configured page safety limit."
                 ),
             )
-            devices.extend(_normalize_netbox_device(row) for row in device_rows)
+            devices.extend(normalize_netbox_device(row) for row in device_rows)
             device_statuses.extend(_netbox_device_statuses_from_devices(device_rows))
 
             type_rows = _netbox_paginated_rows(

@@ -103,6 +103,10 @@ which helps when global plan blockers prevent full-batch execution; selecting a
 blocked row reports its specific reason in the status bar.
 The preview also supports exporting full UniFi API feedback as JSON as well as
 exporting the raw UniFi payload for one selected preview row.
+Before each write, NetBox is re-read: an update is skipped if the target device
+was deleted or a selected field changed since the preview, and a create is
+skipped if a device with the same name or serial appeared meanwhile. Refresh the
+preview and review the row before retrying.
 
 ## Goals
 

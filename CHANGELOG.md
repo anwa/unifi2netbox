@@ -6,6 +6,22 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.34
+
+### Added
+
+- Write execution now re-reads NetBox before every operation. Updates are
+	skipped when the target device was deleted or any selected field changed in
+	NetBox since the preview; creates are skipped when a device with the same
+	name or serial now exists. Skipped operations name the reason and ask for a
+	preview refresh. Dry runs perform the same read-only check.
+
+### Validation
+
+- Added write-execution tests for changed/deleted update targets, unselected
+	field changes, newly appeared create duplicates, dry-run staleness and
+	failing pre-write reads.
+
 ## v0.3.33
 
 ### Added

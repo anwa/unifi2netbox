@@ -6,6 +6,7 @@ from typing import Protocol
 import requests
 
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig
+from unifi2netbox.inventory import normalize_netbox_device
 from unifi2netbox.preview import DevicePreview, DifferencePreview
 from unifi2netbox.write_journal import (
     OperationOutcomeStatus,
@@ -21,7 +22,15 @@ class WriteExecutionError(ValueError):
     pass
 
 
+class StalePreviewError(WriteExecutionError):
+    """NetBox changed after the preview was built; the operation needs review."""
+
+
 class NetBoxWriteBackend(Protocol):
+    def read_device(self, device_id: str) -> dict[str, object] | None: ...
+
+    def find_device_ids(self, **filters: str) -> tuple[str, ...]: ...
+
     def resolve_site_id(self, name: str) -> str: ...
 
     def resolve_role_id(self, name: str) -> str: ...
@@ -75,6 +84,25 @@ def execute_write_plan(
                 operation.sequence,
                 OperationOutcomeStatus.FAILED,
                 "Missing preview device for write operation.",
+            )
+            continue
+
+        try:
+            _verify_target_unchanged(operation, device, resolved_backend)
+        except StalePreviewError as error:
+            journal = record_operation_result(
+                journal,
+                operation.sequence,
+                OperationOutcomeStatus.SKIPPED,
+                str(error),
+            )
+            continue
+        except (WriteExecutionError, requests.exceptions.RequestException) as error:
+            journal = record_operation_result(
+                journal,
+                operation.sequence,
+                OperationOutcomeStatus.FAILED,
+                f"Pre-write NetBox re-read failed: {error}",
             )
             continue
 
@@ -153,6 +181,57 @@ def execute_write_plan(
     return WriteExecutionResult(
         journal=finalize_journal(journal, finished_at, cancelled=False)
     )
+
+
+def _verify_target_unchanged(
+    operation: WriteOperation,
+    device: DevicePreview,
+    backend: NetBoxWriteBackend,
+) -> None:
+    """Re-read NetBox and refuse operations whose preview baseline is outdated."""
+    selected = {
+        field.name: field
+        for field in device.fields
+        if field.name in operation.selected_fields
+    }
+
+    if operation.operation_type == OperationType.UPDATE_DEVICE:
+        device_id = _update_target_id(operation)
+        row = backend.read_device(device_id)
+        if row is None:
+            raise StalePreviewError(
+                f"NetBox device {device_id} no longer exists; "
+                "refresh the preview before writing."
+            )
+        current = normalize_netbox_device(row)
+        changed = sorted(
+            name
+            for name, field in selected.items()
+            if field.supported
+            and str(getattr(current, name, "")).strip() != field.target_value
+        )
+        if changed:
+            raise StalePreviewError(
+                "NetBox values changed since the preview ("
+                + ", ".join(changed)
+                + "); refresh and review before writing."
+            )
+        return
+
+    if operation.operation_type == OperationType.CREATE_DEVICE:
+        checks = (("name", "name"), ("serial", "serial"))
+        for field_name, filter_name in checks:
+            field = selected.get(field_name)
+            value = field.source_value.strip() if field else ""
+            if not value:
+                continue
+            existing = backend.find_device_ids(**{filter_name: value})
+            if existing:
+                raise StalePreviewError(
+                    f"A NetBox device with {field_name} '{value}' now exists "
+                    f"(ID {', '.join(existing)}); refresh the preview before "
+                    "creating it."
+                )
 
 
 def _build_payload(
@@ -274,6 +353,32 @@ class RequestsNetBoxWriteBackend:
         if response.status_code in {401, 403}:
             raise WriteExecutionError("NetBox write permission denied.")
         return response
+
+    def read_device(self, device_id: str) -> dict[str, object] | None:
+        response = self._request("GET", f"/api/dcim/devices/{device_id}/")
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise WriteExecutionError(
+                f"NetBox device read failed with HTTP {response.status_code}."
+            )
+        data = response.json()
+        if not isinstance(data, dict):
+            raise WriteExecutionError("NetBox device read payload is invalid.")
+        return data
+
+    def find_device_ids(self, **filters: str) -> tuple[str, ...]:
+        response = self._request("GET", "/api/dcim/devices/", params=filters)
+        if response.status_code != 200:
+            raise WriteExecutionError(
+                f"NetBox device lookup failed with HTTP {response.status_code}."
+            )
+        payload = response.json()
+        rows = payload.get("results") if isinstance(payload, dict) else None
+        if not isinstance(rows, list):
+            raise WriteExecutionError("NetBox device lookup payload is invalid.")
+        ids = (str(row.get("id", "")).strip() for row in rows if isinstance(row, dict))
+        return tuple(item for item in ids if item)
 
     def resolve_site_id(self, name: str) -> str:
         response = self._request("GET", "/api/dcim/sites/", params={"name": name})
