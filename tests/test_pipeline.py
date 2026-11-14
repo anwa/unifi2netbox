@@ -423,3 +423,20 @@ def test_run_write_execution_runs_networks_first_and_records_them(
     assert report.outcomes[0].device_key == "network:n1"
     stored = JournalStore(path).recent()[0].outcomes[0]
     assert (stored.label, stored.operation_type) == ("VLAN 20 IoT", "create_vlan")
+
+
+def test_protect_note_reports_counts_failures_and_cache():
+    from unifi2netbox.pipeline import _protect_note
+    from unifi2netbox.refresh import RefreshStatus
+
+    two = InventorySnapshot(
+        InventorySource.UNIFI_PROTECT,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("a", "x"), InventoryDevice("b", "y")),
+    )
+
+    assert _protect_note(None) == ""
+    assert _protect_note(RefreshStatus(snapshot=two)) == "Protect: 2 devices read."
+    assert _protect_note(
+        RefreshStatus(snapshot=two, error="timeout", cached=True, stale=True)
+    ) == ("Protect refresh failed: timeout Showing the last cached Protect snapshot.")

@@ -336,8 +336,12 @@ Slices:
 
 - [x] 1. Optional Protect connection: config section, settings page, header
   chip and read-only check of info, NVRs and cameras (0.7.1).
-- [ ] 2. Read NVR and cameras into a Protect snapshot after verifying the
-  7.3.70 fields live.
+- [x] 2. Read NVR and cameras into a Protect snapshot after verifying the
+  7.3.70 fields live. (0.7.2, 2026-11-14: live 7.3.74, 11 devices.)
+  Decision (user-approved): third-party cameras are read and shown, but only
+  proposed for creation when NetBox already has a device type with exactly
+  that model; the manufacturer is never assumed. The Access intercom listed by
+  Protect is treated as a camera and noted for M8.
 - [ ] 3. Match and preview Protect devices with the existing flow,
   deduplicated by MAC against Network devices.
 - [ ] 4. Approved NetBox writes for Protect devices and live acceptance.

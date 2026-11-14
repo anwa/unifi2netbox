@@ -6,6 +6,27 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.7.2
+
+### Added
+
+- M7 slice 2: when Protect is configured, a refresh also reads the NVR and
+  cameras from the Protect Integration API (GET only) into their own snapshot
+  (`unifi_protect`, current and previous, stale on failure). Devices keep only
+  name, MAC, model, kind (`nvr`/`camera`) and the operational connection state.
+  The manufacturer is Ubiquiti only for known Ubiquiti model prefixes; other
+  models such as third-party cameras keep it empty. A Protect failure keeps the
+  last good snapshot and never blocks NetBox or Network; the preview result
+  carries the Protect devices and a one-line Protect status.
+
+### Validation
+
+- Added reader tests (identity fields, vendor rule, settings not copied,
+  malformed entries, failures), refresh tests (optional, soft failure with
+  cache), a pipeline status test and a snapshot round trip. Live read-only:
+  Protect 7.3.74 returned 11 devices (1 NVR, 10 cameras, 3 third-party without
+  manufacturer) in 0.36 s; a full preview stored them as a Protect snapshot.
+
 ## v0.7.1
 
 ### Added

@@ -7,11 +7,21 @@ follow redirects and ignore proxy environment variables.
 """
 
 import ssl
+from datetime import datetime
 
 import httpx
 from packaging.version import Version
 
 from unifi2netbox.config import ProtectConfig
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryError,
+    InventorySnapshot,
+    InventorySource,
+    _normalize_mac,
+    _text,
+    _timestamp,
+)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
 from unifi2netbox.unifi import _tls_failure
 
@@ -134,3 +144,79 @@ def check_protect_connection(
             "The server did not return a supported Protect Integration API response.",
             version,
         )
+
+
+# Model prefixes of Ubiquiti hardware seen in Protect. Other models (for
+# example third-party ONVIF cameras) keep an empty manufacturer.
+UBIQUITI_MODEL_PREFIXES = ("UVC", "UA ", "UA-", "UP ", "UP-", "UNVR", "UDM", "UCK")
+CAMERA = "camera"
+NVR = "nvr"
+
+
+def protect_manufacturer(model: str) -> str:
+    return "Ubiquiti" if model.upper().startswith(UBIQUITI_MODEL_PREFIXES) else ""
+
+
+def read_protect_inventory(
+    config: ProtectConfig,
+    *,
+    captured_at: datetime | None = None,
+    transport: httpx.BaseTransport | None = None,
+) -> InventorySnapshot:
+    """NVR and cameras from the Protect Integration API (GET only).
+
+    Only identity and model fields are kept: name, MAC, model (``type``) and
+    the operational connection state. Recordings, snapshots and streams are
+    never requested.
+    """
+    if not config.configured:
+        raise InventoryError("Set the Protect console URL and local API key.")
+    try:
+        with protect_client(config, transport=transport) as client:
+            info = protect_json(client, "meta/info")
+            version = (
+                _text(info.get("applicationVersion")) if isinstance(info, dict) else ""
+            )
+            nvrs = protect_json(client, "nvrs")
+            cameras = protect_json(client, "cameras")
+    except _Failure as error:
+        raise InventoryError(error.message) from None
+    except (httpx.HTTPError, OSError, ValueError, TypeError) as error:
+        raise InventoryError(
+            "UniFi Protect inventory read failed due to transport errors."
+        ) from error
+    nvr_rows = nvrs if isinstance(nvrs, list) else [nvrs]
+    if not isinstance(cameras, list):
+        raise InventoryError("UniFi Protect returned an unsupported camera list.")
+    devices = [_normalize(row, NVR) for row in nvr_rows] + [
+        _normalize(row, CAMERA) for row in cameras
+    ]
+    ids = [device.source_id for device in devices]
+    if len(set(ids)) != len(ids):
+        raise InventoryError("UniFi Protect returned duplicate device IDs.")
+    nvr_names = [device.name for device in devices if device.kind == NVR]
+    return InventorySnapshot(
+        source=InventorySource.UNIFI_PROTECT,
+        captured_at=_timestamp(captured_at),
+        source_version=version,
+        scope=", ".join(name for name in nvr_names if name),
+        devices=tuple(devices),
+    )
+
+
+def _normalize(row: object, kind: str) -> InventoryDevice:
+    if not isinstance(row, dict):
+        raise InventoryError("UniFi Protect returned a malformed device entry.")
+    source_id = _text(row.get("id"))
+    if not source_id or row.get("modelKey") not in (kind, None):
+        raise InventoryError("UniFi Protect returned a malformed device entry.")
+    model = _text(row.get("type"))
+    return InventoryDevice(
+        source_id=source_id,
+        name=_text(row.get("name")),
+        model=model,
+        manufacturer=protect_manufacturer(model),
+        mac_address=_normalize_mac(row.get("mac")),
+        kind=kind,
+        state=_text(row.get("state")),
+    )

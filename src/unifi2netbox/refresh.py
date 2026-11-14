@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from unifi2netbox.config import NetBoxConfig, UniFiConfig
+from unifi2netbox.config import NetBoxConfig, ProtectConfig, UniFiConfig
 from unifi2netbox.inventory import (
     InventoryError,
     InventorySnapshot,
@@ -27,6 +27,7 @@ class RefreshStatus:
 class RefreshResult:
     netbox: RefreshStatus
     unifi: RefreshStatus
+    protect: RefreshStatus | None = None
 
 
 @dataclass(frozen=True)
@@ -48,10 +49,41 @@ def refresh_snapshots(
     netbox: NetBoxConfig,
     unifi: UniFiConfig,
     store: SnapshotStore,
+    protect: ProtectConfig | None = None,
 ) -> RefreshResult:
+    """Refresh NetBox and Network, plus Protect when it is configured."""
     netbox_status = _refresh_netbox(netbox, store)
     unifi_status = _refresh_unifi(unifi, store)
-    return RefreshResult(netbox=netbox_status, unifi=unifi_status)
+    protect_status = (
+        _refresh_protect(protect, store)
+        if protect is not None and protect.configured
+        else None
+    )
+    return RefreshResult(
+        netbox=netbox_status, unifi=unifi_status, protect=protect_status
+    )
+
+
+def _refresh_protect(config: ProtectConfig, store: SnapshotStore) -> RefreshStatus:
+    # Imported here: protect.py builds on inventory.py helpers.
+    from unifi2netbox.protect import read_protect_inventory
+
+    try:
+        snapshot = read_protect_inventory(config)
+    except InventoryError as error:
+        return _failed_status(
+            store.load_state(InventorySource.UNIFI_PROTECT),
+            str(error),
+            "Protect",
+        )
+    store.save_current(snapshot)
+    state = store.load_state(InventorySource.UNIFI_PROTECT)
+    return RefreshStatus(
+        snapshot=snapshot,
+        previous_snapshot=state.previous,
+        last_updated=state.updated_at,
+        diagnostics=("Protect refresh succeeded.",),
+    )
 
 
 def _refresh_netbox(config: NetBoxConfig, store: SnapshotStore) -> RefreshStatus:

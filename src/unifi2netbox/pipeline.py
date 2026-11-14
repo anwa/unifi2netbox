@@ -13,7 +13,12 @@ from uuid import uuid4
 
 from unifi2netbox.cable_execute import execute_cable_plan
 from unifi2netbox.cables import CablePlan, build_cable_plan
-from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
+from unifi2netbox.config import (
+    BehaviorConfig,
+    NetBoxConfig,
+    ProtectConfig,
+    UniFiConfig,
+)
 from unifi2netbox.interface_execute import execute_interface_plan
 from unifi2netbox.interface_plan import (
     DevicePair,
@@ -102,6 +107,9 @@ class InventoryPreviewResult:
     port_config_error: str = ""
     interface_plan: InterfacePlan | None = None
     cable_plan: CablePlan | None = None
+    protect_devices: tuple[InventoryDevice, ...] = ()
+    protect_version: str = ""
+    protect_status: str = ""
     network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
@@ -139,6 +147,7 @@ def build_inventory_preview(
     *,
     include_all_netbox_delete_candidates: bool,
     netbox_site_name: str = "",
+    protect_config: ProtectConfig | None = None,
 ) -> InventoryPreviewResult:
     """Refresh snapshots, match, build the difference preview and write plan.
 
@@ -146,8 +155,10 @@ def build_inventory_preview(
     device before matching, so previews and writes use the NetBox site.
     """
     store = SnapshotStore(config_path.with_name(SNAPSHOT_FILENAME))
-    refresh = refresh_snapshots(netbox_config, unifi_config, store)
+    refresh = refresh_snapshots(netbox_config, unifi_config, store, protect_config)
     diagnostics = (*refresh.netbox.diagnostics, *refresh.unifi.diagnostics)
+    protect_snapshot = refresh.protect.snapshot if refresh.protect else None
+    protect_note = _protect_note(refresh.protect)
     message = " ".join(item for item in diagnostics if item)
     last_updated = refresh.netbox.last_updated or refresh.unifi.last_updated
 
@@ -243,6 +254,9 @@ def build_inventory_preview(
             dedup.pairs, netbox_snapshot, mapped_unifi, network_plan, netbox_site_name
         ),
         cable_plan=_cable_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
+        protect_devices=protect_snapshot.devices if protect_snapshot else (),
+        protect_version=protect_snapshot.source_version if protect_snapshot else "",
+        protect_status=protect_note,
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),
@@ -290,6 +304,17 @@ def _interface_plan(
         vlan_group_name=group_name,
         port_config_error=unifi_snapshot.port_config_error,
     )
+
+
+def _protect_note(status) -> str:
+    """One line about Protect: off, read, stale cache or failure."""
+    if status is None:
+        return ""
+    if status.error:
+        cached = " Showing the last cached Protect snapshot." if status.cached else ""
+        return f"Protect refresh failed: {status.error}{cached}"
+    count = _device_count(status.snapshot)
+    return f"Protect: {count} device{'s' if count != 1 else ''} read."
 
 
 def _cable_plan(

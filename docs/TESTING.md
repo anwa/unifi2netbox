@@ -176,6 +176,10 @@ The focused tests validate that:
 - cable creates re-check UniFi evidence and both interfaces, treat an
 	existing joining cable as done, never replace other cables, look up
 	interrupted creates, read back every cable and write nothing in dry runs,
+- the Protect reader keeps name, MAC, model, kind and state only, sets the
+	Ubiquiti manufacturer only for known model prefixes, rejects malformed or
+	duplicate entries and is refreshed only when configured; failures keep the
+	last Protect snapshot without blocking NetBox or Network,
 - the optional Protect connection reads info, NVRs and cameras with GET
 	only, never contacts a console while unconfigured, reports HTML answers as
 	unsupported, gates the 7.3 series and keeps its own config section,

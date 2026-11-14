@@ -115,3 +115,88 @@ def test_timeout_is_offline():
 def test_protect_config_rejects_api_endpoints():
     with pytest.raises(ConfigError):
         ProtectConfig("https://unvr.invalid/proxy/protect/integration/v1", "k")
+
+
+INVENTORY = {
+    "meta/info": {"applicationVersion": "7.3.74"},
+    "nvrs": {
+        "id": "nvr1",
+        "modelKey": "nvr",
+        "name": "Rack NVR",
+        "type": "UNVR4",
+        "mac": "AABBCC000001",
+        "doorbellSettings": {"customMessages": ["synthetic"]},
+    },
+    "cameras": [
+        {
+            "id": "c1",
+            "modelKey": "camera",
+            "name": "Garden",
+            "type": "UVC G6 Bullet",
+            "mac": "aabbcc000002",
+            "state": "CONNECTED",
+            "osdSettings": {"isNameEnabled": True},
+        },
+        {
+            "id": "c2",
+            "modelKey": "camera",
+            "name": "Pan tilt",
+            "type": "CAM-PT2",
+            "mac": "aabbcc000003",
+            "state": "DISCONNECTED",
+        },
+    ],
+}
+
+
+def test_inventory_keeps_identity_fields_and_never_assumes_a_vendor():
+    from unifi2netbox.inventory import InventorySource
+    from unifi2netbox.protect import read_protect_inventory
+
+    seen = []
+    snapshot = read_protect_inventory(CONFIG, transport=transport(INVENTORY, seen))
+
+    assert snapshot.source == InventorySource.UNIFI_PROTECT
+    assert (snapshot.source_version, snapshot.scope) == ("7.3.74", "Rack NVR")
+    nvr, garden, third_party = snapshot.devices
+    assert (nvr.kind, nvr.model, nvr.manufacturer) == ("nvr", "UNVR4", "Ubiquiti")
+    assert nvr.mac_address == "AA:BB:CC:00:00:01"
+    assert (garden.kind, garden.state, garden.manufacturer) == (
+        "camera",
+        "CONNECTED",
+        "Ubiquiti",
+    )
+    assert (third_party.model, third_party.manufacturer) == ("CAM-PT2", "")
+    assert "synthetic" not in repr(snapshot)
+    assert [path for path, _ in seen] == ["meta/info", "nvrs", "cameras"]
+
+
+@pytest.mark.parametrize(
+    "cameras",
+    [
+        "not-a-list",
+        [{"modelKey": "camera", "name": "no id"}],
+        [{"id": "c1", "modelKey": "light"}],
+        [{"id": "nvr1", "modelKey": "camera"}],
+    ],
+)
+def test_malformed_protect_inventory_is_rejected(cameras):
+    from unifi2netbox.inventory import InventoryError
+    from unifi2netbox.protect import read_protect_inventory
+
+    with pytest.raises(InventoryError):
+        read_protect_inventory(
+            CONFIG, transport=transport(dict(INVENTORY, cameras=cameras))
+        )
+
+
+def test_protect_read_failures_become_inventory_errors():
+    from unifi2netbox.inventory import InventoryError
+    from unifi2netbox.protect import read_protect_inventory
+
+    denied = dict(INVENTORY, nvrs=httpx.Response(403, json={}))
+
+    with pytest.raises(InventoryError, match="denied"):
+        read_protect_inventory(CONFIG, transport=transport(denied))
+    with pytest.raises(InventoryError):
+        read_protect_inventory(ProtectConfig())
