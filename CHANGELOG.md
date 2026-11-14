@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.36
+
+### Changed
+
+- Move the inventory preview and write-execution orchestration out of the GUI
+	into the new Qt-free `pipeline` module. GUI worker jobs now only call
+	`build_inventory_preview` / `run_write_execution`. No behavior change; the
+	UniFi API dump fields are carried through the pipeline result.
+- Rename the write-execution display result to `WriteExecutionReport`.
+
+### Validation
+
+- Added Qt-free pipeline tests for ready and partial refresh results; GUI tests
+	now import preview helpers from the pipeline module.
+
 ## v0.3.35
 
 ### Changed

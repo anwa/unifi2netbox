@@ -322,6 +322,16 @@ python -m pytest -q tests/test_write_execute.py
 
 This slice remains fully offline and uses synthetic fixtures only.
 
+## Preview Pipeline Contracts
+
+The Qt-free `pipeline` module orchestrates refresh, matching, delete scoping,
+difference preview and write planning. Its tests patch the inventory readers
+and validate ready and partial results without a GUI:
+
+```powershell
+python -m pytest -q tests/test_pipeline.py
+```
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.

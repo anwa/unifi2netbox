@@ -79,10 +79,13 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   immutable journal, then read-back requests planned for successful operations.
   GUI-side per-row overrides (role, site, status, device-type ID) are passed into
   execution for create rows.
-- **GUI** (`gui.py`, large): settings dialog with NetBox/UniFi tabs, connection
-  panels, Inventory Preview section, the `Show all rows` dialog and write execution.
-  `InventoryPreviewJob.run` is the end-to-end pipeline: refresh → match → preview →
-  plan.
+- **Pipeline** (`pipeline.py`): Qt-free orchestration. `build_inventory_preview`
+  runs refresh → match → delete scoping → preview → plan and returns an
+  `InventoryPreviewResult`; `run_write_execution` executes a plan and returns a
+  `WriteExecutionReport`. Test end-to-end behavior here, not through the GUI.
+- **GUI** (`gui.py`): settings dialog with NetBox/UniFi tabs, connection panels,
+  Inventory Preview section, the `Show all rows` dialog with per-row overrides.
+  Its worker jobs only call the pipeline functions and catch unexpected errors.
 - **Diagnostics** (`capabilities.py`, `reporting.py`): installed-version field
   capability matrix and opt-in sanitized (pseudonymized) fixture/report export.
 

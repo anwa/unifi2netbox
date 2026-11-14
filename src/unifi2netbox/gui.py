@@ -1,9 +1,8 @@
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
-from uuid import uuid4
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent
@@ -45,75 +44,20 @@ from unifi2netbox.config import (
     save_connections,
 )
 from unifi2netbox.connections import Checker, ConnectionRunner, check_unifi_connection
-from unifi2netbox.inventory import InventoryDevice, InventorySource
-from unifi2netbox.matching import (
-    DeduplicationResult,
-    deduplicate_inventory,
-    suggest_device_types_for_unmatched,
-)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
-from unifi2netbox.preview import (
-    DifferencePreview,
-    build_change_preview,
-    build_difference_preview,
+from unifi2netbox.pipeline import (
+    InventoryPreviewResult,
+    InventoryPreviewRow,
+    WriteExecutionReport,
+    build_inventory_preview,
+    run_write_execution,
 )
-from unifi2netbox.refresh import refresh_snapshots
-from unifi2netbox.snapshots import SnapshotStore
-from unifi2netbox.write_execute import execute_write_plan
-from unifi2netbox.write_journal import summarize_journal
+from unifi2netbox.preview import DifferencePreview
 from unifi2netbox.write_plan import (
     OperationType,
     WritePlan,
     WritePlanSummary,
-    build_write_plan,
 )
-
-
-@dataclass(frozen=True)
-class InventoryPreviewRow:
-    device_key: str
-    action: str
-    source_label: str
-    target_label: str
-    selected_fields: str
-    executable: str
-    blocked_reason: str = ""
-    suggested_device_types: str = ""
-
-
-@dataclass(frozen=True)
-class InventoryPreviewResult:
-    status: str
-    details: str
-    netbox_devices: int = 0
-    unifi_devices: int = 0
-    matched_devices: int = 0
-    unmatched_unifi: int = 0
-    unmatched_netbox: int = 0
-    conflicts: int = 0
-    preview_rows: int = 0
-    executable_operations: int = 0
-    last_updated: str = ""
-    detail_lines: tuple[str, ...] = ()
-    rows: tuple[InventoryPreviewRow, ...] = ()
-    unifi_captured_at: str = ""
-    unifi_scope: str = ""
-    unifi_version: str = ""
-    unifi_api_feedback: tuple[dict[str, object], ...] = ()
-    unifi_raw_devices: tuple[dict[str, object], ...] = ()
-    netbox_device_types: tuple[tuple[str, str, str], ...] = ()
-    netbox_device_roles: tuple[str, ...] = ()
-    netbox_sites: tuple[str, ...] = ()
-    netbox_device_statuses: tuple[str, ...] = ()
-    difference_preview: DifferencePreview | None = None
-    write_plan: WritePlan | None = None
-
-
-@dataclass(frozen=True)
-class WriteExecutionGuiResult:
-    status: str
-    details: str
-    detail_lines: tuple[str, ...] = ()
 
 
 class InventoryJobSignals(QObject):
@@ -138,170 +82,23 @@ class InventoryPreviewJob(QRunnable):
     @Slot()
     def run(self) -> None:
         try:
-            store = SnapshotStore(self.config_path.with_name("snapshots.sqlite3"))
-            refresh = refresh_snapshots(self.netbox_config, self.unifi_config, store)
-            diagnostics = (*refresh.netbox.diagnostics, *refresh.unifi.diagnostics)
-            message = " ".join(item for item in diagnostics if item)
-            if refresh.netbox.error or refresh.unifi.error:
-                partial_detail = (
-                    message or "Inventory refresh is partial; check source diagnostics."
-                )
-                self.signals.finished.emit(
-                    InventoryPreviewResult(
-                        status="Partial",
-                        details=(
-                            message
-                            or "Inventory refresh completed with cached/failed sources."
-                        ),
-                        netbox_devices=(
-                            len(refresh.netbox.snapshot.devices)
-                            if refresh.netbox.snapshot
-                            else 0
-                        ),
-                        unifi_devices=(
-                            len(refresh.unifi.snapshot.devices)
-                            if refresh.unifi.snapshot
-                            else 0
-                        ),
-                        last_updated=refresh.netbox.last_updated
-                        or refresh.unifi.last_updated,
-                        detail_lines=(partial_detail,),
-                        difference_preview=None,
-                        write_plan=None,
-                    )
-                )
-                return
-
-            netbox_snapshot = refresh.netbox.snapshot
-            unifi_snapshot = refresh.unifi.snapshot
-            if netbox_snapshot is None or unifi_snapshot is None:
-                unavailable_detail = (
-                    message or "Inventory snapshots are not available for both sources."
-                )
-                self.signals.finished.emit(
-                    InventoryPreviewResult(
-                        status="Unavailable",
-                        details=(
-                            message
-                            or "Inventory snapshots are not available for both sources."
-                        ),
-                        last_updated=refresh.netbox.last_updated
-                        or refresh.unifi.last_updated,
-                        detail_lines=(unavailable_detail,),
-                        difference_preview=None,
-                        write_plan=None,
-                    )
-                )
-                return
-
-            dedup = deduplicate_inventory(netbox_snapshot, unifi_snapshot)
-            dedup, hidden_unmatched_netbox = _scope_unmatched_netbox_for_delete(
-                dedup,
-                netbox_snapshot,
-                unifi_snapshot,
+            result = build_inventory_preview(
+                self.config_path,
+                self.netbox_config,
+                self.unifi_config,
                 include_all_netbox_delete_candidates=(
                     self.include_all_netbox_delete_candidates
                 ),
             )
-            suggestions = suggest_device_types_for_unmatched(
-                dedup, netbox_snapshot, unifi_snapshot
-            )
-            diff = build_difference_preview(netbox_snapshot, unifi_snapshot, dedup)
-            change = build_change_preview(diff)
-            plan = build_write_plan(diff, change)
-
-            self.signals.finished.emit(
-                InventoryPreviewResult(
-                    status="Ready",
-                    details=(
-                        message or "Inventory preview and write-plan summary updated."
-                    ),
-                    netbox_devices=len(netbox_snapshot.devices),
-                    unifi_devices=len(unifi_snapshot.devices),
-                    matched_devices=len(dedup.pairs),
-                    unmatched_unifi=len(dedup.unmatched_unifi),
-                    unmatched_netbox=len(dedup.unmatched_netbox),
-                    conflicts=len(dedup.conflicts),
-                    preview_rows=len(diff.devices),
-                    executable_operations=(
-                        len(plan.operations) if plan.executable else 0
-                    ),
-                    last_updated=refresh.netbox.last_updated
-                    or refresh.unifi.last_updated,
-                    detail_lines=_preview_detail_lines(
-                        dedup,
-                        plan,
-                        suggestions=suggestions,
-                        hidden_unmatched_netbox=hidden_unmatched_netbox,
-                        netbox_device_count=len(netbox_snapshot.devices),
-                        unifi_device_count=len(unifi_snapshot.devices),
-                    ),
-                    rows=_preview_rows(diff, change, plan, suggestions=suggestions),
-                    unifi_captured_at=unifi_snapshot.captured_at,
-                    unifi_scope=unifi_snapshot.scope,
-                    unifi_version=unifi_snapshot.source_version,
-                    unifi_api_feedback=unifi_snapshot.unifi_api_feedback,
-                    unifi_raw_devices=unifi_snapshot.unifi_raw_devices,
-                    netbox_device_types=tuple(
-                        sorted(
-                            {
-                                (
-                                    item.source_id.strip(),
-                                    item.manufacturer.strip(),
-                                    item.model.strip(),
-                                )
-                                for item in netbox_snapshot.device_types
-                                if item.source_id.strip()
-                                and item.manufacturer.strip()
-                                and item.model.strip()
-                            },
-                            key=lambda value: (
-                                value[1].lower(),
-                                value[2].lower(),
-                                value[0],
-                            ),
-                        )
-                    ),
-                    netbox_device_roles=tuple(
-                        sorted(
-                            {
-                                item.name.strip()
-                                for item in netbox_snapshot.device_roles
-                                if item.name.strip()
-                            }
-                        )
-                    ),
-                    netbox_sites=tuple(
-                        sorted(
-                            {
-                                item.name.strip()
-                                for item in netbox_snapshot.sites
-                                if item.name.strip()
-                            }
-                        )
-                    ),
-                    netbox_device_statuses=tuple(
-                        item.value.strip()
-                        for item in netbox_snapshot.device_statuses
-                        if item.value.strip()
-                    ),
-                    difference_preview=diff,
-                    write_plan=plan,
-                )
-            )
         except Exception:
-            self.signals.finished.emit(
-                InventoryPreviewResult(
-                    status="Error",
-                    details="Inventory preview refresh failed unexpectedly.",
-                    detail_lines=(
-                        "Inventory preview refresh failed before details were "
-                        "available.",
-                    ),
-                    difference_preview=None,
-                    write_plan=None,
-                )
+            result = InventoryPreviewResult(
+                status="Error",
+                details="Inventory preview refresh failed unexpectedly.",
+                detail_lines=(
+                    "Inventory preview refresh failed before details were available.",
+                ),
             )
+        self.signals.finished.emit(result)
 
 
 class WriteExecutionSignals(QObject):
@@ -336,49 +133,25 @@ class WriteExecutionJob(QRunnable):
 
     @Slot()
     def run(self) -> None:
-        started = datetime.now().astimezone().isoformat(timespec="seconds")
         try:
-            result = execute_write_plan(
-                self.write_plan,
-                self.difference_preview,
+            result = run_write_execution(
                 self.netbox_config,
                 self.behavior,
-                run_id=str(uuid4()),
-                started_at=started,
-                finished_at=datetime.now().astimezone().isoformat(timespec="seconds"),
-                dry_run=self.dry_run,
+                self.difference_preview,
+                self.write_plan,
                 role_overrides=self.role_overrides,
                 site_overrides=self.site_overrides,
                 status_overrides=self.status_overrides,
                 device_type_overrides=self.device_type_overrides,
-            )
-            summary = summarize_journal(result.journal)
-            details = (
-                "Write execution finished: "
-                f"{summary.successful} success, {summary.failed} failed, "
-                f"{summary.skipped} skipped."
-            )
-            lines = []
-            for outcome in result.journal.outcomes[:8]:
-                lines.append(
-                    f"Write #{outcome.sequence} {outcome.operation_type}: "
-                    f"{outcome.status} {outcome.message}".strip()
-                )
-            self.signals.finished.emit(
-                WriteExecutionGuiResult(
-                    status="Dry run" if self.dry_run else "Applied",
-                    details=details,
-                    detail_lines=tuple(lines) if lines else (details,),
-                )
+                dry_run=self.dry_run,
             )
         except Exception as error:
-            self.signals.finished.emit(
-                WriteExecutionGuiResult(
-                    status="Error",
-                    details="Write execution failed unexpectedly.",
-                    detail_lines=(f"Write execution error: {error}",),
-                )
+            result = WriteExecutionReport(
+                status="Error",
+                details="Write execution failed unexpectedly.",
+                detail_lines=(f"Write execution error: {error}",),
             )
+        self.signals.finished.emit(result)
 
 
 class WriteExecutionRunner(QObject):
@@ -424,185 +197,9 @@ class WriteExecutionRunner(QObject):
         return True
 
     @Slot(object)
-    def _finished(self, result: WriteExecutionGuiResult) -> None:
+    def _finished(self, result: WriteExecutionReport) -> None:
         self.job = None
         self.finished.emit(result)
-
-
-def _preview_detail_lines(
-    dedup,
-    plan,
-    suggestions,
-    hidden_unmatched_netbox,
-    *,
-    netbox_device_count: int,
-    unifi_device_count: int,
-) -> tuple[str, ...]:
-    lines: list[str] = []
-
-    if netbox_device_count == 0 and unifi_device_count > 0:
-        lines.append(
-            "NetBox inventory is empty; unmatched UniFi devices are expected "
-            "until target records exist or create flow is executed."
-        )
-
-    if dedup.unmatched_unifi:
-        lines.append(f"Unmatched UniFi observations: {len(dedup.unmatched_unifi)}")
-    if dedup.unmatched_netbox:
-        lines.append(f"Unmatched NetBox observations: {len(dedup.unmatched_netbox)}")
-    if hidden_unmatched_netbox:
-        lines.append(
-            "Delete scope hides "
-            f"{hidden_unmatched_netbox} NetBox-only observation(s). "
-            "Enable the settings option to include all NetBox devices."
-        )
-
-    for pair in dedup.pairs[:3]:
-        lines.append(
-            "Match "
-            f"{pair.unifi_observation_id} -> {pair.netbox_observation_id} "
-            f"({pair.reason})"
-        )
-    for conflict in dedup.conflicts[:3]:
-        lines.append(
-            f"Conflict {conflict.reason}: {', '.join(conflict.observation_ids[:3])}"
-        )
-    for operation in plan.operations[:3]:
-        lines.append(
-            "Plan "
-            f"#{operation.sequence} {operation.operation_type} "
-            f"{operation.device_key}"
-        )
-
-    for suggestion in suggestions[:3]:
-        if not suggestion.candidates:
-            continue
-        top = suggestion.candidates[0]
-        lines.append(
-            "Create template suggestion "
-            f"{suggestion.unifi_observation_id}: "
-            f"{top.manufacturer} {top.model} (score={top.score})"
-        )
-
-    if plan.issues:
-        first_issue = plan.issues[0]
-        lines.append(f"Plan issue ({first_issue.code}): {first_issue.message}")
-
-    if not lines:
-        lines.append("No preview detail entries are currently available.")
-    return tuple(lines)
-
-
-def _preview_rows(
-    diff, change, plan, *, suggestions=()
-) -> tuple[InventoryPreviewRow, ...]:
-    change_by_key = {item.device_key: item for item in change.devices}
-    executable_by_key = {item.device_key: item.executable for item in change.devices}
-    issue_by_key = {item.device_key: item.message for item in plan.issues}
-    suggestions_by_observation = {
-        item.unifi_observation_id: item.candidates for item in suggestions
-    }
-
-    rows: list[InventoryPreviewRow] = []
-    for device in diff.devices:
-        selected_fields = ""
-        blocked_reason = ""
-        suggested_device_types = ""
-        change_item = change_by_key.get(device.device_key)
-        if change_item is not None and change_item.selected_fields:
-            selected_fields = ", ".join(change_item.selected_fields)
-
-        if device.action == "create" and device.device_key.startswith("create:"):
-            observation_id = device.device_key.split(":", maxsplit=1)[1]
-            candidates = suggestions_by_observation.get(observation_id, ())
-            if candidates:
-                suggested_device_types = "; ".join(
-                    f"{candidate.manufacturer} {candidate.model} ({candidate.score})"
-                    for candidate in candidates[:3]
-                )
-
-        if not executable_by_key.get(device.device_key, False):
-            if change_item is None:
-                blocked_reason = "No change preview entry is available."
-            else:
-                unsatisfied = [
-                    dependency
-                    for dependency in change_item.dependencies
-                    if not dependency.satisfied
-                ]
-                if unsatisfied:
-                    top = unsatisfied[0]
-                    if top.missing_fields:
-                        blocked_reason = (
-                            f"{top.name}: missing {', '.join(top.missing_fields)}"
-                        )
-                    else:
-                        blocked_reason = top.description
-                elif device.device_key in issue_by_key:
-                    blocked_reason = issue_by_key[device.device_key]
-        elif device.device_key in issue_by_key:
-            blocked_reason = issue_by_key[device.device_key]
-
-        rows.append(
-            InventoryPreviewRow(
-                device_key=device.device_key,
-                action=str(device.action),
-                source_label=device.source_label,
-                target_label=device.target_label,
-                selected_fields=selected_fields,
-                executable=(
-                    "Yes" if executable_by_key.get(device.device_key, False) else "No"
-                ),
-                blocked_reason=blocked_reason,
-                suggested_device_types=suggested_device_types,
-            )
-        )
-    return tuple(rows)
-
-
-def _scope_unmatched_netbox_for_delete(
-    dedup: DeduplicationResult,
-    netbox_snapshot,
-    unifi_snapshot,
-    *,
-    include_all_netbox_delete_candidates: bool,
-) -> tuple[DeduplicationResult, int]:
-    if include_all_netbox_delete_candidates:
-        return dedup, 0
-    if netbox_snapshot is None or unifi_snapshot is None:
-        return dedup, 0
-
-    unifi_sites = {
-        device.site.strip().lower()
-        for device in unifi_snapshot.devices
-        if device.site.strip()
-    }
-    by_observation_id = {
-        _snapshot_observation_id(netbox_snapshot.source, device): device
-        for device in netbox_snapshot.devices
-    }
-
-    scoped_unmatched = tuple(
-        observation_id
-        for observation_id in dedup.unmatched_netbox
-        if observation_id in by_observation_id
-        and by_observation_id[observation_id].site.strip().lower() in unifi_sites
-    )
-    hidden = len(dedup.unmatched_netbox) - len(scoped_unmatched)
-    return (
-        DeduplicationResult(
-            pairs=dedup.pairs,
-            conflicts=dedup.conflicts,
-            unmatched_unifi=dedup.unmatched_unifi,
-            unmatched_netbox=scoped_unmatched,
-        ),
-        hidden,
-    )
-
-
-def _snapshot_observation_id(source: InventorySource, device: InventoryDevice) -> str:
-    key = device.source_id.strip() or device.name.strip() or "unnamed"
-    return f"{source}:{key}"
 
 
 class InventoryPreviewRunner(QObject):
@@ -1491,7 +1088,7 @@ class MainWindow(QMainWindow):
         )
         self.update_check_action()
 
-    def write_execution_finished(self, result: WriteExecutionGuiResult) -> None:
+    def write_execution_finished(self, result: WriteExecutionReport) -> None:
         self.preview_status.setText(result.status)
         self.preview_plan.setText(result.details)
         self.preview_detail_list.clear()

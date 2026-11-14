@@ -25,14 +25,9 @@ from unifi2netbox.config import (
 )
 from unifi2netbox.connections import ConnectionRunner
 from unifi2netbox.gui import (
-    InventoryPreviewResult,
-    InventoryPreviewRow,
     MainWindow,
     SettingsDialog,
-    WriteExecutionGuiResult,
     _find_unifi_raw_device,
-    _preview_rows,
-    _scope_unmatched_netbox_for_delete,
     _unifi_source_id_from_device_key,
 )
 from unifi2netbox.inventory import (
@@ -46,6 +41,13 @@ from unifi2netbox.matching import (
     suggest_device_types_for_unmatched,
 )
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
+from unifi2netbox.pipeline import (
+    InventoryPreviewResult,
+    InventoryPreviewRow,
+    WriteExecutionReport,
+    preview_rows,
+    scope_unmatched_netbox_for_delete,
+)
 from unifi2netbox.preview import build_change_preview, build_difference_preview
 from unifi2netbox.write_plan import build_write_plan
 
@@ -617,7 +619,7 @@ def test_write_execution_finished_updates_preview_details(qtbot, tmp_path, pool)
     window.show()
 
     window.write_execution_finished(
-        WriteExecutionGuiResult(
+        WriteExecutionReport(
             status="Applied",
             details="Write execution finished: 1 success, 0 failed, 0 skipped.",
             detail_lines=("Write #1 update_device: success Updated device in NetBox.",),
@@ -804,7 +806,7 @@ def test_inventory_preview_rows_dialog_shows_blocked_reason(qtbot, tmp_path, poo
         InventoryPreviewResult(
             status="Ready",
             details="Synthetic summary.",
-            rows=_preview_rows(diff, change, plan),
+            rows=preview_rows(diff, change, plan),
             difference_preview=diff,
             write_plan=plan,
         )
@@ -861,7 +863,7 @@ def test_inventory_preview_rows_dialog_shows_create_device_type_suggestions(
         InventoryPreviewResult(
             status="Ready",
             details="Synthetic summary.",
-            rows=_preview_rows(
+            rows=preview_rows(
                 diff,
                 change,
                 plan,
@@ -971,7 +973,7 @@ def test_inventory_preview_rows_dialog_execute_selected_row(
         InventoryPreviewResult(
             status="Ready",
             details="Synthetic summary.",
-            rows=_preview_rows(diff, change, plan),
+            rows=preview_rows(diff, change, plan),
             difference_preview=diff,
             write_plan=plan,
         )
@@ -1043,7 +1045,7 @@ def test_preview_rows_uses_change_executable_state_without_plan_devices():
     change = build_change_preview(diff)
     plan = build_write_plan(diff, change)
 
-    rows = _preview_rows(diff, change, plan)
+    rows = preview_rows(diff, change, plan)
 
     assert len(rows) == 1
     assert rows[0].action == "create"
@@ -1066,7 +1068,7 @@ def test_delete_scope_filters_unmatched_netbox_by_unifi_site_by_default():
     )
 
     dedup = deduplicate_inventory(netbox, unifi)
-    scoped, hidden = _scope_unmatched_netbox_for_delete(
+    scoped, hidden = scope_unmatched_netbox_for_delete(
         dedup,
         netbox,
         unifi,
@@ -1094,7 +1096,7 @@ def test_delete_scope_can_include_all_unmatched_netbox_devices():
     )
 
     dedup = deduplicate_inventory(netbox, unifi)
-    scoped, hidden = _scope_unmatched_netbox_for_delete(
+    scoped, hidden = scope_unmatched_netbox_for_delete(
         dedup,
         netbox,
         unifi,
