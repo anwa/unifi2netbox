@@ -149,6 +149,14 @@ class ReviewState:
             device.source_id: device.state
             for device in (result.protect_devices if result else ())
         }
+        self.access_kinds: dict[str, str] = {
+            device.source_id: device.kind
+            for device in (result.access_devices if result else ())
+        }
+        self.access_states: dict[str, str] = {
+            device.source_id: device.state
+            for device in (result.access_devices if result else ())
+        }
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -220,10 +228,10 @@ class ReviewState:
                 self.site_by_key[key] = source_site
             elif self.sites:
                 self.site_by_key[key] = self.sites[0]
-            kind = self.protect_kind(key)
+            kind = self.source_kind(key)
             if kind:
-                # Cameras and NVRs never inherit the default (network) role;
-                # without a fitting NetBox role the choice stays open.
+                # Cameras, NVRs and Access hardware never inherit the default
+                # (network) role; without a fitting role the choice stays open.
                 kind_role = role_for_kind(kind, self.roles)
                 if kind_role:
                     self.role_by_key[key] = kind_role
@@ -368,6 +376,32 @@ class ReviewState:
         if not unifi_id.startswith(PROTECT_PREFIX):
             return ""
         return self.protect_states.get(unifi_id[len(PROTECT_PREFIX) :], "")
+
+    def access_kind(self, key: str) -> str:
+        """'hub', 'reader', 'intercom' or 'access' for UniFi Access devices."""
+        unifi_id, _ = _device_ids(key)
+        if not unifi_id.startswith(ACCESS_PREFIX):
+            return ""
+        return self.access_kinds.get(unifi_id[len(ACCESS_PREFIX) :], "") or "access"
+
+    def access_state(self, key: str) -> str:
+        """Operational Access state ('online'/'offline'); display only."""
+        unifi_id, _ = _device_ids(key)
+        if not unifi_id.startswith(ACCESS_PREFIX):
+            return ""
+        return self.access_states.get(unifi_id[len(ACCESS_PREFIX) :], "")
+
+    def source_kind(self, key: str) -> str:
+        """Kind of a device from an optional UniFi application, else ''."""
+        return self.access_kind(key) or self.protect_kind(key)
+
+    def source_origin(self, key: str) -> tuple[str, str, str]:
+        """(application, kind, state) for optional-source devices, else empty."""
+        if kind := self.access_kind(key):
+            return "UniFi Access", kind, self.access_state(key)
+        if kind := self.protect_kind(key):
+            return "UniFi Protect", kind, self.protect_state(key)
+        return "", "", ""
 
     # -- cables -------------------------------------------------------------
 
@@ -598,14 +632,21 @@ def humanize_timestamp(value: str, now: datetime | None = None) -> str:
 
 
 PROTECT_PREFIX = "protect:"
+ACCESS_PREFIX = "access:"
+# Access hints avoid a bare "access", which would also match "Access Point".
+_ACCESS_HINTS = ("access control", "door", "zutritt")
 _ROLE_HINTS = {
     "camera": ("camera", "kamera", "cctv", "surveillance"),
     "nvr": ("nvr", "recorder", "video storage"),
+    "hub": _ACCESS_HINTS,
+    "reader": (*_ACCESS_HINTS, "reader"),
+    "intercom": ("intercom", "sprechanlage", *_ACCESS_HINTS),
+    "access": _ACCESS_HINTS,
 }
 
 
 def role_for_kind(kind: str, roles: tuple[str, ...]) -> str:
-    """The single NetBox role whose name fits a Protect kind, else ''."""
+    """The single NetBox role whose name fits a Protect/Access kind, else ''."""
     hints = _ROLE_HINTS.get(kind, ())
     matches = [role for role in roles if any(h in role.lower() for h in hints)]
     return matches[0] if len(matches) == 1 else ""

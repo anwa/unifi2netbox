@@ -70,6 +70,9 @@ history.
   are taken from Network. Cameras and NVRs never get the default network role:
   create a fitting NetBox role (for example "Camera", "NVR") or choose one per
   device. Third-party cameras get a device type only on an exact model match.
+- With UniFi Access configured, hubs, readers and intercoms appear the same
+  way (marked "from UniFi Access"). For the same MAC, Network wins over
+  Access and Access over Protect. Access reports no serial numbers.
 - The **Interfaces** filter compares the effective UniFi port configuration
   with the paired NetBox interfaces of matched devices and offers field-level
   writes for enabled state, 802.1Q mode, untagged and tagged VLANs. VLANs come

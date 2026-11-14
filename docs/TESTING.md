@@ -184,6 +184,10 @@ The focused tests validate that:
 	skips unadopted devices, rejects duplicates and malformed answers, is
 	refreshed only when configured, keeps a stale snapshot on failure, and a
 	rejected URL without a port points to 12445,
+- optional devices merge with precedence Network, Access, Protect; only
+	fresh Access reads join the preview, the pre-write re-read includes
+	Access and tolerates its failure, Access rows never get the default role
+	and never match an "Access Point" role,
 - fresh Protect devices join matching with prefixed IDs and MAC dedup
 	against Network, stale ones never do, the pre-write re-read merges Protect
 	and tolerates its failure, Protect creates never inherit the default role,

@@ -571,6 +571,7 @@ def fake_runner(monkeypatch, window):
         interface_plan=None,
         cable_plan=None,
         protect_config=None,
+        access_config=None,
     ):
         started.update(
             plan=write_plan,
@@ -585,6 +586,7 @@ def fake_runner(monkeypatch, window):
             interface_plan=interface_plan,
             cable_plan=cable_plan,
             protect_config=protect_config,
+            access_config=access_config,
         )
         return True
 

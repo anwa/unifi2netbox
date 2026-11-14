@@ -206,8 +206,10 @@ class WriteExecutionJob(QRunnable):
         interface_plan=None,
         cable_plan=None,
         protect_config=None,
+        access_config=None,
     ) -> None:
         super().__init__()
+        self.access_config = access_config
         self.unifi_config = unifi_config
         self.journal_path = journal_path
         self.network_plan = network_plan
@@ -244,6 +246,7 @@ class WriteExecutionJob(QRunnable):
                 interface_plan=self.interface_plan,
                 cable_plan=self.cable_plan,
                 protect_config=self.protect_config,
+                access_config=self.access_config,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -284,6 +287,7 @@ class WriteExecutionRunner(QObject):
         interface_plan=None,
         cable_plan=None,
         protect_config=None,
+        access_config=None,
     ) -> bool:
         if self.busy:
             return False
@@ -303,6 +307,7 @@ class WriteExecutionRunner(QObject):
             interface_plan=interface_plan,
             cable_plan=cable_plan,
             protect_config=protect_config,
+            access_config=access_config,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -2017,6 +2022,7 @@ class MainWindow(QMainWindow):
             interface_plan=interface_plan,
             cable_plan=cable_plan,
             protect_config=self.protect.config,
+            access_config=self.access.config,
         )
         self.update_check_action()
 

@@ -196,19 +196,31 @@ def build_inventory_preview(
             detail_lines=(detail,),
         )
 
-    # Only a fresh Protect read may join the preview; a cached snapshot after a
-    # failed refresh must not authorize writes.
+    # Only fresh Protect and Access reads may join the preview; a cached
+    # snapshot after a failed refresh must not authorize writes.
     fresh_protect = (
         protect_snapshot
         if refresh.protect is not None and not refresh.protect.error
         else None
     )
-    merged_unifi, protect_duplicates = merge_protect_devices(
-        unifi_snapshot, fresh_protect
+    fresh_access = (
+        access_snapshot
+        if refresh.access is not None and not refresh.access.error
+        else None
     )
-    if protect_duplicates:
+    merged_unifi, dropped = merge_optional_devices(
+        unifi_snapshot,
+        ((ACCESS_PREFIX, fresh_access), (PROTECT_PREFIX, fresh_protect)),
+    )
+    if dropped.get(ACCESS_PREFIX):
+        access_note += (
+            f" {dropped[ACCESS_PREFIX]} also seen in UniFi Network; "
+            "Network data is used."
+        )
+    if dropped.get(PROTECT_PREFIX):
         protect_note += (
-            f" {protect_duplicates} also seen in UniFi Network; Network data is used."
+            f" {dropped[PROTECT_PREFIX]} also seen in UniFi Network or Access; "
+            "that data is used."
         )
     mapped_unifi = map_unifi_site(merged_unifi, netbox_site_name)
     known_sites = frozenset(
@@ -383,6 +395,7 @@ def run_write_execution(
     interface_plan: InterfacePlan | None = None,
     cable_plan: CablePlan | None = None,
     protect_config: ProtectConfig | None = None,
+    access_config: AccessConfig | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
@@ -393,7 +406,9 @@ def run_write_execution(
     """
     started = _now()
     snapshot, source_error = (
-        reread_unifi_snapshot(unifi_config, behavior.netbox_site_name, protect_config)
+        reread_unifi_snapshot(
+            unifi_config, behavior.netbox_site_name, protect_config, access_config
+        )
         if unifi_config is not None
         else (None, "")
     )
@@ -541,12 +556,13 @@ def reread_unifi_snapshot(
     unifi_config: UniFiConfig,
     netbox_site_name: str,
     protect_config: ProtectConfig | None = None,
+    access_config: AccessConfig | None = None,
 ) -> tuple[InventorySnapshot | None, str]:
     """Fresh UniFi snapshot with the site mapping, or (None, error text).
 
-    With a configured ``protect_config`` the Protect devices are re-read and
-    merged as in the preview. If only Protect fails, its devices are missing
-    from the result, so their writes are skipped while Network writes proceed.
+    Configured Protect and Access devices are re-read and merged as in the
+    preview. If only Protect or Access fails, its devices are missing from the
+    result, so their writes are skipped while Network writes proceed.
     """
     try:
         network = read_unifi_inventory(unifi_config)
@@ -560,7 +576,17 @@ def reread_unifi_snapshot(
             protect = read_protect_inventory(protect_config)
         except InventoryError:
             protect = None
-    merged, _ = merge_protect_devices(network, protect)
+    access = None
+    if access_config is not None and access_config.configured:
+        from unifi2netbox.access import read_access_inventory
+
+        try:
+            access = read_access_inventory(access_config)
+        except InventoryError:
+            access = None
+    merged, _ = merge_optional_devices(
+        network, ((ACCESS_PREFIX, access), (PROTECT_PREFIX, protect))
+    )
     return map_unifi_site(merged, netbox_site_name), ""
 
 
@@ -757,33 +783,50 @@ def scope_unmatched_netbox_for_delete(
 
 
 PROTECT_PREFIX = "protect:"
+ACCESS_PREFIX = "access:"
+
+
+def merge_optional_devices(
+    network: InventorySnapshot,
+    sources: tuple[tuple[str, InventorySnapshot | None], ...],
+) -> tuple[InventorySnapshot, dict[str, int]]:
+    """Add devices of optional UniFi applications to the matching snapshot.
+
+    ``sources`` are ``(prefix, snapshot)`` pairs in precedence order after
+    Network (Access before Protect). IDs get the prefix so they never collide
+    with Network IDs. A device whose MAC was already contributed by Network or
+    an earlier source is dropped: the earlier record wins. Optional sources
+    have no site, so the most common Network site is used (the NetBox site
+    mapping still applies afterwards). Returns the merged snapshot and the
+    number of dropped duplicates per prefix.
+    """
+    known = {d.mac_address for d in network.devices if d.mac_address}
+    sites = Counter(d.site for d in network.devices if d.site)
+    site = sites.most_common(1)[0][0] if sites else ""
+    extra: list[InventoryDevice] = []
+    dropped: dict[str, int] = {}
+    for prefix, snapshot in sources:
+        if snapshot is None or not snapshot.devices:
+            continue
+        kept = [
+            replace(device, source_id=f"{prefix}{device.source_id}", site=site)
+            for device in snapshot.devices
+            if not (device.mac_address and device.mac_address in known)
+        ]
+        known |= {d.mac_address for d in kept if d.mac_address}
+        dropped[prefix] = len(snapshot.devices) - len(kept)
+        extra.extend(kept)
+    if not extra:
+        return network, dropped
+    return replace(network, devices=network.devices + tuple(extra)), dropped
 
 
 def merge_protect_devices(
     network: InventorySnapshot, protect: InventorySnapshot | None
 ) -> tuple[InventorySnapshot, int]:
-    """Add Protect devices to the UniFi snapshot used for matching.
-
-    Protect IDs get a ``protect:`` prefix so they never collide with Network
-    IDs. A Protect device whose MAC is also a Network device is dropped: the
-    Network record wins. Protect has no site, so the most common Network site
-    is used (the NetBox site mapping still applies afterwards).
-    Returns the merged snapshot and the number of dropped duplicates.
-    """
-    if protect is None or not protect.devices:
-        return network, 0
-    network_macs = {d.mac_address for d in network.devices if d.mac_address}
-    sites = Counter(d.site for d in network.devices if d.site)
-    site = sites.most_common(1)[0][0] if sites else ""
-    extra = tuple(
-        replace(device, source_id=f"{PROTECT_PREFIX}{device.source_id}", site=site)
-        for device in protect.devices
-        if not (device.mac_address and device.mac_address in network_macs)
-    )
-    return (
-        replace(network, devices=network.devices + extra),
-        len(protect.devices) - len(extra),
-    )
+    """Protect-only merge; see ``merge_optional_devices``."""
+    merged, dropped = merge_optional_devices(network, ((PROTECT_PREFIX, protect),))
+    return merged, dropped.get(PROTECT_PREFIX, 0)
 
 
 def map_unifi_site(

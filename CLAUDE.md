@@ -76,7 +76,9 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   "Online" means authenticated inventory reads succeed.
 - **Access inventory** (`access.py`): optional; hubs, readers and intercoms
   (name, MAC from the device ID, model, kind, state) into a `unifi_access`
-  snapshot; users, logs and doors are never read.
+  snapshot; users, logs and doors are never read. Optional devices join
+  matching via `merge_optional_devices` (prefixes `access:`, `protect:`;
+  precedence Network > Access > Protect by MAC).
 - **Protect inventory** (`protect.py`): optional; NVR and cameras (name, MAC,
   model, kind, state) into a separate `unifi_protect` snapshot; failures never
   block NetBox or Network.

@@ -6,6 +6,29 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.8.3
+
+### Added
+
+- M8 slice 3: Access devices join matching and the review with the ID prefix
+  `access:`. Source precedence for the same MAC is Network, then Access, then
+  Protect; the preview reports how many duplicates were dropped. Only a fresh
+  Access read joins the preview; a stale snapshot never authorizes writes.
+  The detail panel shows "from UniFi Access (hub, online)". Access devices
+  never inherit the default network role; a single role named like
+  "Access Control", "Door", "Reader" or "Intercom" is preselected (never
+  "Access Point").
+- The pre-write re-read includes Access (as for Protect); an Access failure
+  only skips Access device writes.
+
+### Validation
+
+- Added merge precedence, fresh/stale preview, re-read, write wiring, role
+  and origin tests. Live read-only preview on 2026-11-14: 31 UniFi devices
+  (19 Network, 2 Access, 10 Protect); the UA-Intercom comes from Access and
+  its Protect copy is dropped; hub and intercom are create rows without a
+  device type or role because NetBox has neither for Access hardware.
+
 ## v0.8.2
 
 ### Added

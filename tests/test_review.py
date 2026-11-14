@@ -392,3 +392,41 @@ def test_protect_kind_comes_from_the_key():
     assert state.protect_state("create:unifi_network:protect:c1") == "DISCONNECTED"
     assert state.protect_kind("create:unifi_network:sw") == ""
     assert state.protect_state("create:unifi_network:sw") == ""
+
+
+def test_access_rows_get_a_fitting_role_but_never_access_point():
+    from unifi2netbox.review import role_for_kind
+
+    roles = ("Access Point", "Access Control", "Switch")
+
+    assert role_for_kind("hub", roles) == "Access Control"
+    assert role_for_kind("reader", roles) == "Access Control"
+    assert role_for_kind("intercom", ("Access Point", "Intercom")) == "Intercom"
+    assert role_for_kind("hub", ("Access Point", "Switch")) == ""
+
+
+def test_access_origin_comes_from_the_key():
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryDevice
+
+    result = replace(
+        make_result(),
+        access_devices=(InventoryDevice("h1", "Hub", kind="hub", state="online"),),
+        protect_devices=(InventoryDevice("c1", "Garden", kind="camera"),),
+    )
+    state = ReviewState(result, BehaviorConfig())
+
+    assert state.source_origin("create:unifi_network:access:h1") == (
+        "UniFi Access",
+        "hub",
+        "online",
+    )
+    assert state.source_origin("create:unifi_network:protect:c1") == (
+        "UniFi Protect",
+        "camera",
+        "",
+    )
+    assert state.source_origin("create:unifi_network:sw") == ("", "", "")
+    assert state.source_kind("create:unifi_network:access:h1") == "hub"
+    assert state.access_kind("create:unifi_network:protect:c1") == ""
