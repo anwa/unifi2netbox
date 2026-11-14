@@ -458,3 +458,22 @@ single shared actions, tabbed unified settings, separate service outcomes, Cance
 preserving both tabs, atomic combined save behavior and safe close handling while
 checks were active. This is user feedback; the assistant did not execute live tests
 against the infrastructure.
+
+On 2026-11-14, the assistant ran a read-only live check on the developer
+workstation (commit b1b087f, application 0.3.36, CPython 3.15.1, Windows 11
+10.0.26200) with the saved configuration. No writes were made; snapshots went
+to a scratch directory instead of the real snapshot database.
+
+- NetBox 4.7.3: Online. Read 4 devices, 374 device types, 5 roles, 1 site and
+  1 device status. Plain HTTP with TLS verification not applicable.
+- UniFi Network 11.0.99 (not the planned 10.6.100): the connection check reports
+  `Unsupported` because of the 10.6 version gate, while the inventory reader
+  succeeded with 19 devices over 3 API pages. TLS verification is disabled.
+- Field coverage: UniFi provides name, model, manufacturer, MAC and site for all
+  devices but no serial numbers; NetBox devices have no serial or primary MAC.
+- Preview: 4 matched, 15 unmatched UniFi devices, no conflicts; 15 create and
+  4 update rows. 3 update rows are blocked by `model_requires_manufacturer`
+  (UniFi model names differ from NetBox device-type models while manufacturers
+  match), so the full write plan is not executable. No default device role is
+  configured, so creates need a per-row role.
+
