@@ -176,6 +176,9 @@ The focused tests validate that:
 - cable creates re-check UniFi evidence and both interfaces, treat an
 	existing joining cable as done, never replace other cables, look up
 	interrupted creates, read back every cable and write nothing in dry runs,
+- the optional Protect connection reads info, NVRs and cameras with GET
+	only, never contacts a console while unconfigured, reports HTML answers as
+	unsupported, gates the 7.3 series and keeps its own config section,
 - link evidence comes from wired uplinks and LLDP of known UniFi devices;
 	the cable plan suggests only agreeing, unclaimed, fully mapped links,
 	preselects two-source evidence, never replaces cables and keeps unmatched

@@ -97,6 +97,18 @@ class UniFiConfig(NetBoxConfig):
 
 
 @dataclass(frozen=True)
+class ProtectConfig(NetBoxConfig):
+    """Console running UniFi Protect (for example a UNVR); optional."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.url and "/integration/" in urlsplit(self.url).path:
+            raise ConfigError(
+                "Enter the Protect console base URL, not an API endpoint."
+            )
+
+
+@dataclass(frozen=True)
 class BehaviorConfig:
     include_all_netbox_delete_candidates: bool = False
     default_device_role_name: str = ""
@@ -139,6 +151,14 @@ def load_config(path: Path) -> NetBoxConfig:
 
 def load_unifi_config(path: Path) -> UniFiConfig:
     return _load_section(path, "unifi_network", UniFiConfig)
+
+
+def load_protect_config(path: Path) -> ProtectConfig:
+    return _load_section(path, "unifi_protect", ProtectConfig)
+
+
+def save_protect_config(path: Path, config: ProtectConfig) -> None:
+    _save_sections(path, {"unifi_protect": config})
 
 
 def load_behavior_config(path: Path) -> BehaviorConfig:
@@ -199,10 +219,13 @@ def save_connections(
     netbox: NetBoxConfig,
     unifi: UniFiConfig,
     behavior: BehaviorConfig | None = None,
+    protect: ProtectConfig | None = None,
 ) -> None:
     sections: dict[str, object] = {"netbox": netbox, "unifi_network": unifi}
     if behavior is not None:
         sections["behavior"] = behavior
+    if protect is not None:
+        sections["unifi_protect"] = protect
     _save_sections(path, sections)
 
 

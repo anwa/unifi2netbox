@@ -326,6 +326,22 @@ no unsupported writes and no redundant changes on a second apply.
 
 Branch: `feature/protect-inventory`; follows M6.
 
+Decision (2026-11-14, user-approved): Protect gets its own optional connection
+(`[unifi_protect]`, URL and local API key of the console running Protect,
+edited in Settings); the Network key is not reused. Scope: cameras and the NVR;
+other Protect hardware (lights, sensors, chimes, viewers) may follow later.
+Live probe: the UDM serves no Protect API (HTML answer).
+
+Slices:
+
+- [x] 1. Optional Protect connection: config section, settings page, header
+  chip and read-only check of info, NVRs and cameras (0.7.1).
+- [ ] 2. Read NVR and cameras into a Protect snapshot after verifying the
+  7.3.70 fields live.
+- [ ] 3. Match and preview Protect devices with the existing flow,
+  deduplicated by MAC against Network devices.
+- [ ] 4. Approved NetBox writes for Protect devices and live acceptance.
+
 - [ ] Verify Protect 7.3.70 inventory/NVR endpoints and credentials per console.
 - [ ] Add camera/NVR hardware inventory, status, matching and approved NetBox flow.
 - [ ] Deduplicate devices also visible in Network; never collect recordings/streams.

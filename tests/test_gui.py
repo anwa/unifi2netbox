@@ -1556,3 +1556,55 @@ def test_confirm_dialog_lists_cables(qtbot, tmp_path, pool):
     qtbot.addWidget(confirm)
 
     assert "1 cable" in confirm.findChild(QLabel, "confirmSummary").text()
+
+
+def test_protect_settings_page_saves_its_own_section(qtbot, tmp_path, pool):
+    from unifi2netbox.config import ProtectConfig, load_protect_config
+
+    seen = []
+
+    def protect_online(config):
+        seen.append(config)
+        return ConnectionResult(
+            ConnectionState.ONLINE, "Synthetic Protect read.", "7.3.70"
+        )
+
+    path = tmp_path / "config.toml"
+    widget = SettingsDialog(
+        path,
+        NetBoxConfig(),
+        pool,
+        online,
+        unifi_config=UniFiConfig(),
+        unifi_checker=unifi_online,
+        protect_checker=protect_online,
+    )
+    qtbot.addWidget(widget)
+    widget.show_page("UniFi Protect")
+    assert widget.pages.currentWidget() is widget.protect
+    assert not widget.protect.site.isVisible()
+    widget.protect.url.setText("https://unvr.invalid/")
+    widget.protect.token.setText("protect-synthetic")
+    widget.test_connections()
+    qtbot.waitUntil(lambda: not widget.busy)
+    assert isinstance(seen[0], ProtectConfig)
+    assert "UniFi Protect: Online" in widget.outcome.text()
+    widget.save()
+
+    assert widget.saved_protect_config == ProtectConfig(
+        "https://unvr.invalid", "protect-synthetic"
+    )
+    assert load_protect_config(path) == widget.saved_protect_config
+
+
+def test_protect_chip_is_off_until_configured(qtbot, tmp_path, pool):
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+    )
+    qtbot.addWidget(window)
+
+    assert window.protect_chip.text().endswith("Protect · Off")
+    assert "Optional." in window.protect_chip.toolTip()

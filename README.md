@@ -255,7 +255,10 @@ NetBox uses `[netbox]`; UniFi Network uses `[unifi_network]` with its own `url`,
 UniFi section is unconfigured and does not affect an existing NetBox connection.
 The dialog saves both sections together and preserves unrelated settings/comments.
 A blank site permits discovery of a single accessible site; multiple sites require
-explicit selection.
+explicit selection. UniFi Protect is optional and uses `[unifi_protect]` with the
+`url`, `token` (local API key of the Protect console), `verify_tls`, `ca_bundle`
+and `timeout` of the console running Protect, which may differ from the Network
+console.
 
 - Windows: `%LOCALAPPDATA%\unifi2netbox\config.toml`.
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/unifi2netbox/config.toml`.

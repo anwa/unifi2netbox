@@ -76,6 +76,22 @@ The official API therefore leaves a demonstrated coverage gap for M6. Internal
 endpoints are used read-only, gated to the validated 11.0 series and covered by
 version-specific fixtures; see the M6 decision in `IMPLEMENTATION_PLAN.md`.
 
+## UniFi Protect Connection Gate (M7)
+
+Protect runs on its own console with its own local API key; the Network
+console's key and URL are not reused. Read-only probe on 2026-11-14 against the
+UDM Pro Max (Network console): `/proxy/protect/integration/v1/meta/info`,
+`nvrs` and `cameras` returned HTTP 200 with `text/html` (the UniFi OS page), so
+Protect is not installed there. The gate therefore treats HTML answers as
+"no Protect". Endpoint fields of Protect 7.3.70 on the UNVR are verified once
+that connection is configured.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/proxy/protect/integration/v1/meta/info` | Application version (gate: 7.3 series) |
+| `/proxy/protect/integration/v1/nvrs` | NVR read access |
+| `/proxy/protect/integration/v1/cameras` | Camera read access |
+
 ## Installed-Version Field Capability Matrix
 
 M3 now provides a service-level matrix builder for installed-version capability

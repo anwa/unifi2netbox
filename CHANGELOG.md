@@ -6,6 +6,27 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.7.1
+
+### Added
+
+- M7 slice 1: optional UniFi Protect connection. A new `[unifi_protect]`
+  section stores the URL, local API key and TLS options of the console running
+  Protect (for example a UNVR), edited on a new **UniFi Protect** settings page.
+  The check reads `meta/info`, `nvrs` and `cameras` of the Protect local
+  Integration API (GET only, no redirects, no proxy environment), accepts the
+  Protect 7.3 series and reports a console without Protect (HTML answer) as
+  unsupported. A header chip shows the state ("Protect · Off" while
+  unconfigured); an unconfigured Protect never blocks NetBox or Network work.
+
+### Validation
+
+- Added Protect check tests (online, unconfigured without requests, HTML
+  answer, HTTP failures, version gate, response shapes, timeout), config round
+  trips that keep other sections, and GUI tests for the settings page and the
+  chip. Live read-only: the UDM (Network console) answers the Protect paths
+  with its HTML page, confirming that Protect needs its own connection.
+
 ## v0.7.0
 
 ### Summary

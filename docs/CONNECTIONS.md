@@ -10,6 +10,17 @@ preserves unrelated tables/comments. Version 0.1.4 includes the unified GUI and
 read-only local API checks. See
 [the capability matrix](API_CAPABILITIES.md) for endpoints and reference versions.
 
+## UniFi Protect Configuration
+
+The optional `[unifi_protect]` section stores the base URL and local API key of
+the console that runs UniFi Protect (for example a UNVR), plus TLS verification,
+private CA path and timeout. Without it Protect is shown as "Off" and nothing
+else changes. The check sends GET requests to
+`/proxy/protect/integration/v1/meta/info`, `nvrs` and `cameras`; Online means
+all three succeed with a validated Protect series (7.3). A console without
+Protect answers these paths with its HTML page; this is reported as
+Unsupported. Recordings, snapshots and streams are never requested.
+
 The first milestone supports NetBox 4.7.x through pynetbox 7.9.0. It performs
 GET requests only, first to `/api/status/`, then `/api/dcim/devices/?limit=1`.
 The second request checks actual inventory access, including an empty inventory.

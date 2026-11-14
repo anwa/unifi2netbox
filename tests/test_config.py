@@ -2,7 +2,14 @@ import tomllib
 
 import pytest
 
-from unifi2netbox.config import ConfigError, NetBoxConfig, load_config, save_config
+from unifi2netbox.config import (
+    ConfigError,
+    NetBoxConfig,
+    UniFiConfig,
+    load_config,
+    save_config,
+    save_connections,
+)
 
 
 def test_missing_file_is_unconfigured(tmp_path):
@@ -76,3 +83,32 @@ def test_security_warnings():
         in NetBoxConfig("https://netbox.invalid", verify_tls=False).security_warning
     )
     assert not NetBoxConfig("https://netbox.invalid").security_warning
+
+
+def test_protect_section_round_trips_and_keeps_other_sections(tmp_path):
+    from unifi2netbox.config import ProtectConfig, load_protect_config
+
+    path = tmp_path / "config.toml"
+    netbox = NetBoxConfig("https://netbox.invalid", "nb")
+    unifi = UniFiConfig("https://udm.invalid", "uf")
+    protect = ProtectConfig("https://unvr.invalid", "pr", verify_tls=False)
+
+    save_connections(path, netbox, unifi, protect=protect)
+
+    assert load_protect_config(path) == protect
+    assert load_config(path) == netbox
+    save_connections(path, netbox, unifi)
+    assert load_protect_config(path) == protect
+
+
+def test_missing_protect_section_is_unconfigured(tmp_path):
+    from unifi2netbox.config import load_protect_config
+
+    path = tmp_path / "config.toml"
+    save_connections(
+        path,
+        NetBoxConfig("https://netbox.invalid", "nb"),
+        UniFiConfig("https://udm.invalid", "uf"),
+    )
+
+    assert not load_protect_config(path).configured
