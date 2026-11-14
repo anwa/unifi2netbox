@@ -1,21 +1,22 @@
 # unifi2netbox
 
-Latest main release: **v0.9.0**, the UniFi Access inventory milestone (M8).
+Latest main release: **v0.10.0**, the UniFi Drive / UNAS inventory milestone (M9).
 
-Release **v0.9.0** compares UniFi Network inventory with NetBox in a modern
+Release **v0.10.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
 history. Beyond devices it covers VLANs and prefixes, switch port
 configuration on NetBox interfaces, cable suggestions from LLDP and,
-optionally, the NVR and cameras of UniFi Protect and the hubs, readers and
-intercoms of UniFi Access. UniFi stays read-only.
+optionally, the NVR and cameras of UniFi Protect, the hubs, readers and
+intercoms of UniFi Access and a UNAS with its drives (UniFi Drive). UniFi
+stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v0.9.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v0.10.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities
@@ -180,7 +181,7 @@ file content and personal access records are excluded. All UI/code/docs are Engl
 | Network | Network 11.0.99 live-verified read-only on the developer workstation (2026-11-14); 10.6 series accepted per M2 user-reported tests |
 | Protect | UNVR 6.0.11 / Protect 7.3 series; 7.3.74 live-verified read-only plus an approved NetBox write test (2026-11-14) |
 | Access | 4.3.22 (user-reported; the API reports no version); developer API live-verified read-only plus an approved NetBox write test (2026-11-14) |
-| Drive | UNAS Pro 6.0.11 / Drive 4.4.20; later capability gate |
+| Drive | UNAS Pro 6.0.11 / Drive 4.4.20; no documented API, public system info and internal storage endpoint live-verified read-only plus an approved NetBox write test (2026-11-14) |
 
 Future Python versions are not automatically certified. The user reported all
 NetBox online tests passed on 2026-10-25; see the

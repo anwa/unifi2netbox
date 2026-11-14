@@ -403,6 +403,9 @@ read-only even when the API token itself has broader permissions.
 
 Branch: `feature/drive-inventory`; follows M8.
 
+Status: completed for release v0.10.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.10.0 tag.
+
 Gate finding (2026-11-14, read-only): Ubiquiti's developer portal lists no
 Drive or UNAS API. The UNAS Pro (one device: management 1G and data 10G SFP+
 interfaces, both visible as UniFi Network clients) answers the public UniFi OS
@@ -439,6 +442,8 @@ display-only.
 - [x] Verify Drive 4.4.20 / UNAS Pro 6.0.11 inventory APIs and authentication.
 - [x] Add verified chassis/interface/hardware inventory with cross-source matching.
 - [x] Keep unsupported storage metrics display-only; never access file contents.
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.10.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.10.0.
 
 Gate: suitable Drive API coverage is not yet established. Network client visibility
 is not full hardware inventory. Stop for a decision if no suitable endpoint exists;

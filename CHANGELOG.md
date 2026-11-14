@@ -6,12 +6,42 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.10.0
+
+### Summary
+
+- UniFi Drive / UNAS inventory milestone (M9): the UNAS joins the review as
+	one device and its drives become NetBox inventory items.
+
+### Added
+
+- Optional `[unifi_drive]` connection (UNAS console URL and local API key), a
+	settings page and a header chip. Ubiquiti documents no Drive API; the
+	check reads the public UniFi OS system information.
+- The UNAS is read as one device (name, model, system MAC) and its drive bays
+	from the internal Drive storage endpoint (GET, local API key,
+	allow-listed fields); bays are listed display-only in the details.
+- Drives of a matched UNAS are planned and written as NetBox inventory items
+	`Disk <slot>` (part ID, serial, description) after device writes, with a
+	fresh bay check, duplicate-safe creates, drift-checked updates and
+	read-back; items are never deleted.
+- NetBox inventory items are read with the inventory (optional permission).
+
 ### Validation
 
-- M9 slice 4 live write test (0.9.3, commit 6c38286): an approved create of
-  the UNAS device and its five drive inventory items against the NetBox
-  developer instance passed 9/9 checks; items, device and test role were
-  removed afterwards.
+- Milestone-wide offline gate: 531 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): UNAS Pro Online, read as
+	one device with 7 bays (5 HDDs, 2 empty); approved NetBox
+	developer-instance write test of the UNAS and its five drive items (9/9,
+	verified, in sync after refresh, test objects removed). The internal
+	storage endpoint is undocumented and may change with Drive updates.
+
+### Compatibility
+
+- No configuration change is required; Drive stays off until `[unifi_drive]`
+	is set. Snapshots gain a `unifi_drive` source, drive bays and NetBox
+	inventory items; older snapshots load without migration.
 
 ## v0.9.3
 
