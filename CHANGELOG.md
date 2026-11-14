@@ -6,6 +6,129 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.9.0
+
+### Summary
+
+- UniFi Access inventory milestone (M8): hubs, readers and intercoms of an
+	optional Access connection join the same review and approved NetBox write
+	flow.
+
+### Added
+
+- Optional `[unifi_access]` connection (Access API URL with port 12445 and an
+	Access API token with device-read permission), a settings page and a
+	header chip; GET-only reads of `/api/v1/developer/devices`. Users, logs and
+	doors are never requested.
+- Access hardware is stored in its own snapshot with name, model, MAC (from
+	the device ID), kind and online state; unadopted devices are skipped.
+- Fresh Access devices are matched, previewed and written like Network
+	devices with precedence Network, then Access, then Protect for the same
+	MAC; stale Access data never authorizes writes; Access is re-read before
+	writing. Access devices never inherit the default network role; a single
+	fitting role ("Access Control", "Door", "Reader", "Intercom") is
+	preselected, never "Access Point".
+
+### Changed
+
+- Optional service chips appear only once configured; unconfigured required
+	connections read "Not set". A rejected Access URL without a port points to
+	port 12445.
+
+### Validation
+
+- Milestone-wide offline gate: 488 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): Access on the UDM Online
+	with its own token, 2 devices read (UAH hub, UA-Intercom); the intercom
+	comes from Access instead of Protect; approved NetBox developer-instance
+	write test of the hub with a test role and test device type (7/7,
+	verified, matched after refresh, test objects removed). Failing Access
+	re-reads and stale Access snapshots are covered by offline tests only.
+
+### Compatibility
+
+- No configuration change is required; Access stays off until
+	`[unifi_access]` is set. Snapshots gain a `unifi_access` source; older
+	snapshots load without migration. Access reports no serial numbers,
+	firmware or IP addresses.
+
+## v0.8.3
+
+### Added
+
+- M8 slice 3: Access devices join matching and the review with the ID prefix
+  `access:`. Source precedence for the same MAC is Network, then Access, then
+  Protect; the preview reports how many duplicates were dropped. Only a fresh
+  Access read joins the preview; a stale snapshot never authorizes writes.
+  The detail panel shows "from UniFi Access (hub, online)". Access devices
+  never inherit the default network role; a single role named like
+  "Access Control", "Door", "Reader" or "Intercom" is preselected (never
+  "Access Point").
+- The pre-write re-read includes Access (as for Protect); an Access failure
+  only skips Access device writes.
+
+### Validation
+
+- Added merge precedence, fresh/stale preview, re-read, write wiring, role
+  and origin tests. Live read-only preview on 2026-11-14: 31 UniFi devices
+  (19 Network, 2 Access, 10 Protect); the UA-Intercom comes from Access and
+  its Protect copy is dropped; hub and intercom are create rows without a
+  device type or role because NetBox has neither for Access hardware.
+
+## v0.8.2
+
+### Added
+
+- M8 slice 2: Access inventory. A configured Access connection is read on
+  every refresh into its own `unifi_access` snapshot (GET `devices` only):
+  name (alias first), model (`type`), manufacturer Ubiquiti, the MAC taken
+  from the device ID, kind (hub, reader, intercom or other Access hardware)
+  and online state. Unadopted devices are skipped. Failures keep the last
+  snapshot as stale and never block NetBox or Network; the preview reports
+  the Access device count. Access devices join matching in slice 3.
+
+### Changed
+
+- A rejected Access token on a URL without a port now points to port 12445,
+  because such requests reach UniFi OS on port 443 instead of Access.
+
+### Validation
+
+- Added Access reader, refresh, preview and port-hint tests. Live read-only
+  on 2026-11-14: the saved URL lacked `:12445` (check now explains this);
+  with the port the reader returned a UAH hub and a UA-Intercom, both
+  online, MACs derived from the IDs; the intercom MAC equals its Protect
+  MAC, the hub is new to both other sources.
+
+## v0.8.1
+
+### Added
+
+- M8 slice 1: optional UniFi Access connection. A new `[unifi_access]` section
+  stores the Access API URL (console running Access, port 12445), an Access API
+  token and TLS options, edited on a new **UniFi Access** settings page. The
+  check reads `/api/v1/developer/devices` with a Bearer token (GET only, no
+  redirects, no proxy environment), accepts the grouped or flat device list of
+  the `SUCCESS` envelope and reports rejected tokens, missing APIs (HTML or
+  404) and error codes without echoing secrets.
+
+### Changed
+
+- Settings pages and header chips for optional UniFi applications (Protect,
+  Access) share one description; their chips appear only once a service is
+  configured, and unconfigured required connections read "Not set" so four
+  chips fit. A connection without a reported version shows no version text.
+
+### Validation
+
+- Added Access check tests (online with Bearer token, unconfigured without
+  requests, HTTP and envelope failures, timeout, list shapes, URL rule), a
+  config round trip next to Protect and GUI tests for the settings page and
+  chips. Live read-only: the UNVR answers Access paths with HTML; on the UDM
+  the Access proxy answers JSON 404 and port 12445 answers 401 without an
+  Access token, so Access runs on the UDM and needs its own token.
+
 ## v0.8.0
 
 ### Summary

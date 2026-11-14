@@ -2,7 +2,13 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 
-from unifi2netbox.config import NetBoxConfig, ProtectConfig, UniFiConfig
+from unifi2netbox.access import check_access_connection as _check_access
+from unifi2netbox.config import (
+    AccessConfig,
+    NetBoxConfig,
+    ProtectConfig,
+    UniFiConfig,
+)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
 from unifi2netbox.protect import check_protect_connection as _check_protect
 from unifi2netbox.unifi import check_connection as check_network_connection
@@ -20,6 +26,12 @@ def check_protect_connection(config: NetBoxConfig) -> ConnectionResult:
     if not isinstance(config, ProtectConfig):
         raise TypeError("Protect checks require Protect connection settings.")
     return _check_protect(config)
+
+
+def check_access_connection(config: NetBoxConfig) -> ConnectionResult:
+    if not isinstance(config, AccessConfig):
+        raise TypeError("Access checks require Access connection settings.")
+    return _check_access(config)
 
 
 class JobSignals(QObject):

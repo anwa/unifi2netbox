@@ -196,3 +196,43 @@ def test_protect_is_refreshed_only_when_configured_and_fails_softly(
     assert "denied" in failed.protect.error
     assert not failed.netbox.error and not failed.unifi.error
     assert store.load_current(InventorySource.UNIFI_PROTECT) == good
+
+
+def test_access_is_refreshed_only_when_configured_and_fails_softly(
+    tmp_path, monkeypatch
+):
+    from unifi2netbox.config import AccessConfig
+
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    netbox = NetBoxConfig("https://netbox.invalid", "nb")
+    unifi = UniFiConfig("https://udm.invalid", "uf")
+    access = AccessConfig("https://udm.invalid:12445", "ac")
+    good = snapshot(InventorySource.UNIFI_ACCESS, "2026-11-14T12:00:00+00:00")
+    reads = {"access": 0}
+
+    def access_reader(config, **kwargs):
+        reads["access"] += 1
+        if reads["access"] == 2:
+            raise InventoryError("The Access API token was rejected.")
+        return good
+
+    monkeypatch.setattr(
+        "unifi2netbox.refresh.read_netbox_inventory",
+        lambda config, **kw: snapshot(InventorySource.NETBOX, good.captured_at),
+    )
+    monkeypatch.setattr(
+        "unifi2netbox.refresh.read_unifi_inventory",
+        lambda config, **kw: snapshot(InventorySource.UNIFI_NETWORK, good.captured_at),
+    )
+    monkeypatch.setattr("unifi2netbox.access.read_access_inventory", access_reader)
+
+    assert refresh_snapshots(netbox, unifi, store).access is None
+    assert refresh_snapshots(netbox, unifi, store, None, AccessConfig()).access is None
+    first = refresh_snapshots(netbox, unifi, store, None, access)
+    failed = refresh_snapshots(netbox, unifi, store, None, access)
+
+    assert first.access.snapshot == good and not first.access.error
+    assert failed.access.stale and failed.access.snapshot == good
+    assert "rejected" in failed.access.error
+    assert not failed.netbox.error and not failed.unifi.error
+    assert store.load_current(InventorySource.UNIFI_ACCESS) == good

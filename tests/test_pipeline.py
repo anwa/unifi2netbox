@@ -203,7 +203,7 @@ def test_run_write_execution_passes_fresh_sources(monkeypatch):
     monkeypatch.setattr(
         pipeline,
         "reread_unifi_snapshot",
-        lambda config, site, protect=None: (
+        lambda config, site, protect=None, access=None: (
             _snapshot(InventorySource.UNIFI_NETWORK, [fresh_device]),
             "",
         ),
@@ -603,3 +603,216 @@ def test_protect_creates_need_a_fitting_role_not_the_default(monkeypatch, tmp_pa
 
     with_camera = preview(("Access Point", "Camera"))
     assert with_camera.role_by_key[camera_key] == "Camera"
+
+
+def test_preview_reports_the_access_snapshot(monkeypatch, tmp_path):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import AccessConfig
+    from unifi2netbox.refresh import RefreshResult, RefreshStatus
+
+    netbox = _snapshot(InventorySource.NETBOX, [])
+    unifi = _snapshot(
+        InventorySource.UNIFI_NETWORK, [InventoryDevice("sw", "switch", site="Home")]
+    )
+    access = InventorySnapshot(
+        InventorySource.UNIFI_ACCESS,
+        "2026-11-14T12:00:00+00:00",
+        devices=(InventoryDevice("a1b2c3d4e5f6", "Hub", kind="hub"),),
+    )
+    calls = []
+
+    def refresh(*args):
+        calls.append(args)
+        return RefreshResult(
+            RefreshStatus(snapshot=netbox),
+            RefreshStatus(snapshot=unifi),
+            None,
+            RefreshStatus(snapshot=access),
+        )
+
+    monkeypatch.setattr(pipeline, "refresh_snapshots", refresh)
+    config = AccessConfig("https://udm.invalid:12445", "ac")
+    result = pipeline.build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UniFiConfig("https://udm.invalid", "uf"),
+        include_all_netbox_delete_candidates=False,
+        access_config=config,
+    )
+
+    assert calls[0][-1] == config
+    assert result.access_devices == access.devices
+    assert result.access_status == "Access: 1 device read."
+    assert "Access: 1 device read." in result.detail_lines
+    assert any("access:a1b2c3d4e5f6" in row.device_key for row in result.rows)
+
+
+def _optional(source, *devices):
+    return InventorySnapshot(source, "2026-11-14T12:00:00+00:00", devices=devices)
+
+
+def test_merge_prefers_network_then_access_then_protect():
+    from unifi2netbox.pipeline import (
+        ACCESS_PREFIX,
+        PROTECT_PREFIX,
+        merge_optional_devices,
+    )
+
+    network = _snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice("sw", "switch", mac_address="AA:00:00:00:00:01", site="Home")],
+    )
+    access = _optional(
+        InventorySource.UNIFI_ACCESS,
+        InventoryDevice("a-dup", "hub", mac_address="AA:00:00:00:00:01"),
+        InventoryDevice("a2", "intercom", mac_address="AA:00:00:00:00:02"),
+        InventoryDevice("a3", "lock", kind="access"),
+    )
+    protect = _optional(
+        InventorySource.UNIFI_PROTECT,
+        InventoryDevice("p2", "intercom cam", mac_address="AA:00:00:00:00:02"),
+        InventoryDevice("p3", "camera", mac_address="AA:00:00:00:00:03"),
+    )
+
+    merged, dropped = merge_optional_devices(
+        network, ((ACCESS_PREFIX, access), (PROTECT_PREFIX, protect))
+    )
+
+    assert [d.source_id for d in merged.devices] == [
+        "sw",
+        "access:a2",
+        "access:a3",
+        "protect:p3",
+    ]
+    assert {d.site for d in merged.devices} == {"Home"}
+    assert dropped == {ACCESS_PREFIX: 1, PROTECT_PREFIX: 1}
+    assert merge_optional_devices(network, ((ACCESS_PREFIX, None),)) == (network, {})
+
+
+def test_preview_uses_fresh_access_only_and_reports_duplicates(monkeypatch, tmp_path):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import AccessConfig, ProtectConfig
+    from unifi2netbox.refresh import RefreshResult, RefreshStatus
+
+    netbox = _snapshot(InventorySource.NETBOX, [])
+    unifi = _snapshot(
+        InventorySource.UNIFI_NETWORK, [InventoryDevice("sw", "switch", site="Home")]
+    )
+    access = _optional(
+        InventorySource.UNIFI_ACCESS,
+        InventoryDevice(
+            "0a0b0c0d0e0f",
+            "Front door",
+            mac_address="0A:0B:0C:0D:0E:0F",
+            kind="intercom",
+        ),
+    )
+    protect = _optional(
+        InventorySource.UNIFI_PROTECT,
+        InventoryDevice(
+            "c9", "Front door", mac_address="0A:0B:0C:0D:0E:0F", kind="camera"
+        ),
+    )
+
+    def run(access_status):
+        monkeypatch.setattr(
+            pipeline,
+            "refresh_snapshots",
+            lambda *args: RefreshResult(
+                RefreshStatus(snapshot=netbox),
+                RefreshStatus(snapshot=unifi),
+                RefreshStatus(snapshot=protect),
+                access_status,
+            ),
+        )
+        return pipeline.build_inventory_preview(
+            tmp_path / "config.toml",
+            NETBOX,
+            UniFiConfig("https://udm.invalid", "uf"),
+            include_all_netbox_delete_candidates=False,
+            protect_config=ProtectConfig("https://unvr.invalid", "pr"),
+            access_config=AccessConfig("https://udm.invalid:12445", "ac"),
+        )
+
+    fresh = run(RefreshStatus(snapshot=access))
+    stale = run(RefreshStatus(snapshot=access, error="timeout", cached=True))
+
+    fresh_keys = [row.device_key for row in fresh.rows]
+    assert any("access:0a0b0c0d0e0f" in key for key in fresh_keys)
+    assert not any("protect:c9" in key for key in fresh_keys)
+    assert any(
+        "1 also seen in UniFi Network or Access" in line for line in fresh.detail_lines
+    )
+    stale_keys = [row.device_key for row in stale.rows]
+    assert not any("access:" in key for key in stale_keys)
+    # Without fresh Access data the Protect record of the intercom is used.
+    assert any("protect:c9" in key for key in stale_keys)
+    assert any("Access refresh failed" in line for line in stale.detail_lines)
+
+
+def test_write_reread_merges_access_and_tolerates_its_failure(monkeypatch):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import AccessConfig
+    from unifi2netbox.inventory import InventoryError
+
+    network = _snapshot(
+        InventorySource.UNIFI_NETWORK, [InventoryDevice("sw", "switch")]
+    )
+    access = _optional(
+        InventorySource.UNIFI_ACCESS, InventoryDevice("h1", "Hub", kind="hub")
+    )
+    monkeypatch.setattr(pipeline, "read_unifi_inventory", lambda config: network)
+    config = AccessConfig("https://udm.invalid:12445", "ac")
+
+    monkeypatch.setattr("unifi2netbox.access.read_access_inventory", lambda c: access)
+    merged, error = pipeline.reread_unifi_snapshot(UniFiConfig(), "Home", None, config)
+    assert error == "" and [d.source_id for d in merged.devices] == ["sw", "access:h1"]
+
+    def fail(config):
+        raise InventoryError("denied")
+
+    monkeypatch.setattr("unifi2netbox.access.read_access_inventory", fail)
+    only_network, error = pipeline.reread_unifi_snapshot(
+        UniFiConfig(), "Home", None, config
+    )
+    assert error == "" and [d.source_id for d in only_network.devices] == ["sw"]
+
+
+def test_run_write_execution_rereads_access(monkeypatch):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import AccessConfig, BehaviorConfig
+    from unifi2netbox.write_execute import WriteExecutionResult
+    from unifi2netbox.write_journal import initialize_journal
+    from unifi2netbox.write_plan import WritePlan, WritePlanSummary
+
+    plan = WritePlan((), (), False, WritePlanSummary(0, 0, 0, 0, 0, (), False, ""))
+    monkeypatch.setattr(
+        pipeline,
+        "execute_write_plan",
+        lambda *a, **k: WriteExecutionResult(
+            journal=initialize_journal(plan, run_id="r", started_at="s")
+        ),
+    )
+    seen = []
+
+    def reread(config, site, protect=None, access=None):
+        seen.append(access)
+        return None, "UniFi request timed out."
+
+    monkeypatch.setattr(pipeline, "reread_unifi_snapshot", reread)
+    config = AccessConfig("https://udm.invalid:12445", "ac")
+    pipeline.run_write_execution(
+        NETBOX,
+        BehaviorConfig(),
+        None,
+        plan,
+        role_overrides={},
+        site_overrides={},
+        status_overrides={},
+        device_type_overrides={},
+        dry_run=True,
+        unifi_config=UNIFI,
+        access_config=config,
+    )
+
+    assert seen == [config]

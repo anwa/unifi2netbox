@@ -67,12 +67,18 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
 - **Config** (`config.py`): TOML via `tomllib` + `tomlkit` (comment-preserving,
   atomic writes). Sections `[netbox]`, `[unifi_network]`, plus behavior settings.
   Default path from `platformdirs.user_config_path`, outside the repo.
-  Optional `[unifi_protect]` (own console URL and key) for UniFi Protect.
-- **Connection checks** (`netbox.py`, `unifi.py`, `protect.py`,
+  Optional `[unifi_protect]` (own console URL and key) for UniFi Protect and
+  `[unifi_access]` (Access API URL with port 12445 and Access token).
+- **Connection checks** (`netbox.py`, `unifi.py`, `protect.py`, `access.py`,
   `connections.py`): NetBox via pynetbox over a `ReadOnlySession` that only
   permits GET; UniFi Network and Protect via httpx against the official local
   integration APIs (read-only, no proxy env, no redirect or login fallback).
   "Online" means authenticated inventory reads succeed.
+- **Access inventory** (`access.py`): optional; hubs, readers and intercoms
+  (name, MAC from the device ID, model, kind, state) into a `unifi_access`
+  snapshot; users, logs and doors are never read. Optional devices join
+  matching via `merge_optional_devices` (prefixes `access:`, `protect:`;
+  precedence Network > Access > Protect by MAC).
 - **Protect inventory** (`protect.py`): optional; NVR and cameras (name, MAC,
   model, kind, state) into a separate `unifi_protect` snapshot; failures never
   block NetBox or Network.

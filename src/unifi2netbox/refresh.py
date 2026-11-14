@@ -1,7 +1,12 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from unifi2netbox.config import NetBoxConfig, ProtectConfig, UniFiConfig
+from unifi2netbox.config import (
+    AccessConfig,
+    NetBoxConfig,
+    ProtectConfig,
+    UniFiConfig,
+)
 from unifi2netbox.inventory import (
     InventoryError,
     InventorySnapshot,
@@ -28,6 +33,7 @@ class RefreshResult:
     netbox: RefreshStatus
     unifi: RefreshStatus
     protect: RefreshStatus | None = None
+    access: RefreshStatus | None = None
 
 
 @dataclass(frozen=True)
@@ -50,8 +56,9 @@ def refresh_snapshots(
     unifi: UniFiConfig,
     store: SnapshotStore,
     protect: ProtectConfig | None = None,
+    access: AccessConfig | None = None,
 ) -> RefreshResult:
-    """Refresh NetBox and Network, plus Protect when it is configured."""
+    """Refresh NetBox and Network, plus Protect and Access when configured."""
     netbox_status = _refresh_netbox(netbox, store)
     unifi_status = _refresh_unifi(unifi, store)
     protect_status = (
@@ -59,8 +66,36 @@ def refresh_snapshots(
         if protect is not None and protect.configured
         else None
     )
+    access_status = (
+        _refresh_access(access, store)
+        if access is not None and access.configured
+        else None
+    )
     return RefreshResult(
-        netbox=netbox_status, unifi=unifi_status, protect=protect_status
+        netbox=netbox_status,
+        unifi=unifi_status,
+        protect=protect_status,
+        access=access_status,
+    )
+
+
+def _refresh_access(config: AccessConfig, store: SnapshotStore) -> RefreshStatus:
+    # Imported here: access.py builds on inventory.py helpers.
+    from unifi2netbox.access import read_access_inventory
+
+    try:
+        snapshot = read_access_inventory(config)
+    except InventoryError as error:
+        return _failed_status(
+            store.load_state(InventorySource.UNIFI_ACCESS), str(error), "Access"
+        )
+    store.save_current(snapshot)
+    state = store.load_state(InventorySource.UNIFI_ACCESS)
+    return RefreshStatus(
+        snapshot=snapshot,
+        previous_snapshot=state.previous,
+        last_updated=state.updated_at,
+        diagnostics=("Access refresh succeeded.",),
     )
 
 

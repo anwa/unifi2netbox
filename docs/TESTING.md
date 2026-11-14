@@ -176,6 +176,18 @@ The focused tests validate that:
 - cable creates re-check UniFi evidence and both interfaces, treat an
 	existing joining cable as done, never replace other cables, look up
 	interrupted creates, read back every cable and write nothing in dry runs,
+- the optional Access connection reads devices with a Bearer token and GET
+	only, never contacts a console while unconfigured, reports rejected tokens,
+	missing APIs and error envelopes, and keeps its own config section;
+	optional chips stay hidden until configured,
+- the Access reader keeps name, model, MAC from the ID, kind and state,
+	skips unadopted devices, rejects duplicates and malformed answers, is
+	refreshed only when configured, keeps a stale snapshot on failure, and a
+	rejected URL without a port points to 12445,
+- optional devices merge with precedence Network, Access, Protect; only
+	fresh Access reads join the preview, the pre-write re-read includes
+	Access and tolerates its failure, Access rows never get the default role
+	and never match an "Access Point" role,
 - fresh Protect devices join matching with prefixed IDs and MAC dedup
 	against Network, stale ones never do, the pre-write re-read merges Protect
 	and tolerates its failure, Protect creates never inherit the default role,
@@ -658,3 +670,23 @@ sync (model text and MAC differ but are not writable, as for Network devices);
 the run was in the write history; the camera and the role were removed
 afterwards (NetBox again had 4 devices and 5 roles). A failing Protect re-read
 and stale Protect snapshots remain covered by offline tests.
+
+On 2026-11-14 the assistant checked M8 (UniFi Access) live on the developer
+workstation. Read-only first (application 0.8.1/0.8.2): Access runs on the
+UDM; the developer API on port 12445 returned a UAH hub and a UA-Intercom,
+both online, with IDs equal to their MACs (the intercom ID matches its Protect
+MAC). A saved URL without `:12445` was rejected with 401 by UniFi OS, which
+the check now explains. With commit 81235c8 (application 0.8.3) the preview
+listed 31 UniFi devices (19 Network, 2 Access, 10 Protect); the intercom came
+from Access and its Protect copy was dropped; a dry run of the hub create
+passed the Access re-read and wrote nothing. Then, with the user's explicit
+approval, a write test against the NetBox developer instance passed 7/7
+checks: a temporary role `u2n test Access Control` and a temporary device type
+`UAH` (Ubiquiti) were created and both preselected for the hub "Haustür Hub";
+the create ran through the real pipeline including the Access re-read and
+was read back as verified with the expected name, role, type and site; a
+refreshed preview matched the new device as in sync (only the MAC differs,
+which is not writable, as for Network devices); the run was in the write
+history; device, type and role were removed afterwards (NetBox again had 4
+devices, 5 roles and 374 device types). Failing Access re-reads and stale
+Access snapshots remain covered by offline tests.
