@@ -1,38 +1,98 @@
 # unifi2netbox
 
-Latest main release: **v0.2.0**, the UniFi Network connection milestone.
+Latest main release: **v0.4.0**, the matching and difference preview
+milestone (M4), including early approved-write (M5) slices.
 
-Release **v0.2.0** adds UniFi Network connectivity alongside NetBox with one
-unified Settings dialog and one shared Check Connections action. Both services
-are checked independently, results remain separate, and the local Network API
-adapter stays read-only.
+Release **v0.4.0** compares UniFi Network inventory with NetBox, explains
+matches, conflicts and Device Type suggestions, and lets you apply selected,
+confirmed changes to NetBox. UniFi stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
-applying selected changes to NetBox. This release checks both API connections;
-actual inventory comparison and writes are not implemented yet.
+applying selected changes to NetBox. The capabilities below are part of
+release v0.4.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+history. Approved writes (M5) are still being completed.
 
-M3 foundation work has started on `feature/inventory-snapshots`: internal
-read-only paginated inventory readers and normalized timestamped snapshot models
-now exist for NetBox and UniFi Network. Versioned SQLite snapshot state with
-current/previous records and an internal refresh service are now included.
-The service layer now also supports stale/offline cache browsing and
-partial-read diagnostics while keeping all behavior read-only.
-An opt-in sanitized fixture/report export is available for target-PC sharing,
-using deterministic pseudonymization for potentially sensitive identifiers.
-A service-level installed-version capability matrix now tracks ports, profiles,
-overrides, VLAN, PoE, speed/duplex, LAG and LLDP readiness states.
-GUI refresh/snapshot browsing and diagnostics integration follow in later M3
-slices.
+## Current Capabilities
+
+### Inventory and snapshots
+
+- Read-only, paginated NetBox and UniFi Network inventory readers normalize
+  devices plus NetBox device types, roles, sites and device statuses.
+- Snapshots are stored in a local SQLite file next to the configuration, with
+  current/previous versions per source. Failed or partial refreshes keep the
+  last good snapshot, mark it stale and report diagnostics.
+- Missing UniFi vendor values default to `Ubiquiti`. If NetBox's device status
+  choices endpoint is unavailable to a restricted token, statuses are inferred
+  from existing devices.
+- Opt-in sanitized fixture/report export pseudonymizes IDs, serials, MAC
+  addresses and site labels. A capability matrix tracks which port, profile,
+  override, VLAN, PoE, speed/duplex, LAG and LLDP fields are verified.
+
+### Matching and preview
+
+- Matching uses confirmed mappings first, then ranked passes per UniFi device:
+  normalized name, serial number, MAC address. Multiple hits in one pass are an
+  ambiguity conflict and are never auto-matched.
+- Unmatched UniFi devices get ranked, explainable Device Type suggestions from
+  existing NetBox device types, using model names, part numbers and common
+  UniFi aliases. Candidates with a different port count or only a matching
+  manufacturer are not suggested. An unambiguous match is preselected as the
+  create row's `Device type`.
+- The difference preview shows source/target values with provenance,
+  configured vs. operational fields and unsupported-field markers, with batch,
+  device and field selection plus explicit write dependencies.
+- **NetBox site for UniFi devices** in Settings maps the UniFi site to an
+  existing NetBox site for matching, creates and delete scoping. Without it, a
+  UniFi site name that does not exist in NetBox is never written by updates and
+  create rows show a warning until a `Device site` is chosen.
+- Update rows preselect only fields the update executor can write (`name`,
+  `serial`, `site`). Other differences, such as UniFi model names versus NetBox
+  device types, are shown as preview-only. Empty UniFi values never clear
+  NetBox values.
+- NetBox-only devices (delete proposals) are limited to the active UniFi site
+  by default; a setting includes all NetBox devices. Nothing is deleted.
+
+### Main window
+
+- **Refresh Inventory Preview** shows counts and clickable highlight lines
+  (matches, conflicts, planned operations, fallback explanations), with a
+  detail field and **Copy selected** / **Copy all**.
+- **Show all rows** lists every preview row with action and executable-only
+  filters, a `Reason` for blocked rows and `Suggested Device Types`. Create rows
+  offer `Device role`, `Device site`, `Device status` and `Device type`
+  dropdowns fed from the NetBox catalogs; the chosen values (including the exact
+  device-type ID) are used for the create.
+- **Export UniFi API dump** saves the raw UniFi API responses and device rows
+  of the current preview as JSON; **Show all rows** can also export the raw
+  UniFi payload of one selected row. Dumps contain unsanitized inventory data;
+  never commit or share them unreviewed.
+
+### Approved NetBox writes
+
+- Selected previews become an ordered write plan (creates before updates) with
+  preflight blockers and one summary confirmation. Creates need a default
+  NetBox device role in Settings or a per-row role.
+- **Execute write plan** asks once, then writes; **Dry run only** records the
+  outcomes without changing NetBox. A single executable row can also be run from
+  **Show all rows** when other rows block the full plan.
+- Before each write, NetBox is re-read: an update is skipped if the target
+  device was deleted or a selected field changed since the preview, and a
+  create is skipped if a device with the same name or serial appeared
+  meanwhile. Refresh the preview and review the row before retrying.
+- Every operation is journaled as success, failed or skipped. NetBox rejections
+  include parsed field-level details. Ambiguous creates are flagged for manual
+  reconciliation and read-back requests are planned for successful writes.
 
 ## Goals
 
  - Read local UniFi APIs; never modify UniFi.
  - Display and approve individual fields, devices or batches before NetBox writes.
 	 Approving a device does not prompt again for every field.
- - Match stable identities and expose conflicts; suggest manufacturer/model-based
-	 NetBox Device Types only for devices not already mapped.
+ - Match UniFi devices against NetBox in ranked order (name, serial, MAC), expose
+	 ambiguity conflicts and suggest NetBox Device Templates (Device Types) only
+	 for devices not already mapped.
  - Cover port profiles/overrides, native/tagged VLANs, interfaces, IP/MAC, PoE,
 	 LAG and LLDP where verified API data and standard NetBox fields allow it.
  - Separate configuration from operational state. No automatic deletions or
@@ -54,7 +114,7 @@ file content and personal access records are excluded. All UI/code/docs are Engl
 | Client | pynetbox 7.9.0 |
 | Windows | Windows 11 25H2/26H2 acceptance targets |
 | Linux | Ubuntu/Kubuntu 26.04 LTS/26.10; not yet tested |
-| Network | UDM Pro Max OS 5.1.33 / Network 10.6.100 target; preceding M2 online tests reported passed by the user |
+| Network | Network 11.0.99 live-verified read-only on the developer workstation (2026-11-14); 10.6 series accepted per M2 user-reported tests |
 | Protect | UNVR 6.0.11 / Protect 7.3.70; later milestone |
 | Access | 4.3.22; later milestone |
 | Drive | UNAS Pro 6.0.11 / Drive 4.4.20; later capability gate |
@@ -63,8 +123,9 @@ Future Python versions are not automatically certified. The user reported all
 NetBox online tests passed on 2026-10-25; see the
 [acceptance record](docs/TESTING.md#acceptance-record) for evidence and limitations.
 Native Windows standalone startup is verified locally; Linux and exact target-OS
-coverage remain unverified. The development PC cannot reach the infrastructure;
-default tests use fixtures and block live sockets.
+coverage remain unverified. Default tests use fixtures and block live sockets;
+live checks run only on the developer workstation with access to NetBox and
+UniFi, as explicitly opted-in `integration` tests or manual application runs.
 
 ## Installation
 
@@ -174,7 +235,7 @@ python -m ruff format --check .
 ```
 
 [Testing instructions](docs/TESTING.md) cover offline tests and the separate
-target-PC acceptance workflow. Return only sanitized reports including exact
+live acceptance workflow on the developer workstation. Return only sanitized reports including exact
 commit/application/Python/OS/API versions. No live writes run by default.
 
 ## Roadmap and Rules

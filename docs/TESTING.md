@@ -142,6 +142,205 @@ python -m pytest -q tests/test_capabilities.py
 
 This matrix slice remains fully offline and uses synthetic evidence only.
 
+## M4 Matching Core Contracts
+
+The first M4 slice adds a matching core for identity conflict handling,
+confirmed mapping support and cross-source deduplication between UniFi and
+NetBox observations.
+
+The focused tests validate that:
+
+- unique identity evidence produces one deterministic pair,
+- ambiguous identity evidence is reported as an explicit conflict,
+- confirmed mappings can pair observations without identity evidence,
+- duplicate or missing confirmed mapping targets are reported as conflicts.
+
+Run the focused matching checks:
+
+```powershell
+python -m pytest -q tests/test_matching.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M4 Device Type Suggestion Contracts
+
+The second M4 slice adds explainable Device Type suggestions for unmatched
+UniFi observations only. Suggestions are ranked by manufacturer/model evidence
+against existing NetBox manufacturer/model combinations and remain read-only.
+
+The focused tests validate that:
+
+- only unmatched UniFi observations receive suggestions,
+- UniFi model names resolve to NetBox library types by model, part number or
+	alias (`AC Pro` -> `UAP-AC-PRO`, `US 16 PoE 150W` -> `US-16-150W`),
+- different port counts and manufacturer-only candidates are never suggested,
+- only a single top exact/part-number/alias candidate is preselected,
+- suggested candidates are ranked and include explainable reasons,
+- no suggestions are emitted when no target catalog evidence exists.
+
+Run the focused suggestion checks:
+
+```powershell
+python -m pytest -q tests/test_matching.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M4 Difference Preview Contracts
+
+The third M4 slice adds a service-level difference preview model that includes:
+
+- source/target field values with explicit provenance,
+- configured versus operational field categories,
+- unsupported field markers for preview-only visibility,
+- immutable batch/device/field selection helpers.
+
+The focused tests validate matched/create/target-only rows and selection state
+transitions without write paths.
+
+Run the focused preview checks:
+
+```powershell
+python -m pytest -q tests/test_preview.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M4 Immutable Change Preview Contracts
+
+The fourth M4 slice adds immutable change-preview summaries with explicit
+dependencies and write-readiness states, still without any write execution.
+
+The focused tests validate that:
+
+- target-only rows are always non-executable,
+- create actions require selected non-empty `name` and `site` values,
+- a configured NetBox site replaces UniFi site names before matching; without
+	it, sites missing in NetBox are never selected for updates and create rows
+	get an `unknown_netbox_site` warning,
+- update rows only preselect writable fields (`name`, `serial`, `site`) with
+	non-empty source values; other changed fields are preview-only,
+- selected `model` updates depend on selected `manufacturer` updates.
+
+Run the focused dependency checks:
+
+```powershell
+python -m pytest -q tests/test_preview.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M5 Write-Plan Contracts
+
+The first M5 slice adds a read-only write-planning layer that converts selected
+immutable change previews into ordered write operations with preflight blockers,
+without executing NetBox API mutations.
+
+The focused tests validate that:
+
+- create operations are ordered before updates,
+- dependency-blocked selections are not considered executable,
+- duplicate create/update targets are surfaced as explicit blockers,
+- one immutable summary confirmation is generated per plan with stable counts,
+- target-only rows never produce write operations,
+- repeated planning over identical inputs is idempotent.
+
+Run the focused write-plan checks:
+
+```powershell
+python -m pytest -q tests/test_write_plan.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M5 Write-Journal Contracts
+
+The next M5 micro-slice adds an immutable write-journal model for operation
+outcomes and run summaries, still without executing NetBox writes.
+
+The focused tests validate that:
+
+- journal initialization creates pending outcomes for planned operations,
+- per-operation updates are immutable and sequence-safe,
+- unknown operation sequence updates fail fast,
+- ambiguous successful creates are flagged when object IDs are missing or duplicated,
+- finalization marks a run as completed/cancelled with stable summaries.
+
+Run the focused journal checks:
+
+```powershell
+python -m pytest -q tests/test_write_journal.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M5 Read-back Planner Contracts
+
+The next M5 micro-slice adds a read-only read-back planner for successful
+operations, still without executing NetBox writes.
+
+The focused tests validate that:
+
+- successful create outcomes with object IDs produce read-back requests,
+- successful updates derive target object IDs deterministically from device keys,
+- successful create outcomes without object IDs are skipped explicitly,
+- partial-failure journals generate read-back requests only for successful
+	operations,
+- cancelled runs without successful outcomes produce zero read-back requests,
+- missing operation sequences are skipped explicitly (concurrent-edit safety).
+
+GUI/config coverage also validates the delete-scope behavior toggle in Settings
+and the default site-scoped filtering of NetBox-only delete proposals.
+GUI coverage now also validates apply-flow behavior: enabling write execution
+for executable plans, confirmation-triggered runner start and visible write
+result rendering in preview highlights.
+Rows-dialog coverage also validates single-row execution for selected executable
+entries.
+
+Run the focused read-back checks:
+
+```powershell
+python -m pytest -q tests/test_write_readback.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## M5 Write-Executor Contracts
+
+The next M5 micro-slice adds a service-level NetBox write executor for
+create/update operations with immutable journal outcomes and a dry-run mode.
+
+The focused tests validate that:
+
+- matched update operations produce deterministic NetBox patch payloads,
+- create execution requires an explicit default NetBox device role setting,
+- create execution succeeds with resolvable site/role/device-type references,
+- dry-run execution records skipped outcomes without backend writes,
+- mixed create/update runs continue and record partial failures per operation.
+- every operation re-reads NetBox first: updates are skipped when the target
+	was deleted or a selected field changed since the preview, creates are skipped
+	when a device with the same name or serial now exists, and a failing re-read
+	marks the operation as failed without writing.
+
+Run the focused executor checks:
+
+```powershell
+python -m pytest -q tests/test_write_execute.py
+```
+
+This slice remains fully offline and uses synthetic fixtures only.
+
+## Preview Pipeline Contracts
+
+The Qt-free `pipeline` module orchestrates refresh, matching, delete scoping,
+difference preview and write planning. Its tests patch the inventory readers
+and validate ready and partial results without a GUI:
+
+```powershell
+python -m pytest -q tests/test_pipeline.py
+```
+
 ## Offline Suite
 
 Use Python >=3.15.1 in `.venv` and install `requirements-dev.txt`.
@@ -151,6 +350,38 @@ python -m pytest -m "not integration"
 python -m ruff check .
 python -m ruff format --check .
 ```
+
+For GUI preview visibility checks introduced after M5 service slices, run:
+
+```powershell
+python -m pytest -q tests/test_gui.py
+```
+
+The GUI check includes inventory-preview highlight rendering for sample match,
+conflict and planned-operation lines.
+It also validates interactive highlight selection and detail-field updates.
+Fallback highlight behavior for partial refresh states is also covered.
+Clipboard copy behavior (`Copy selected` / `Copy all`) is covered as well.
+The non-modal `Show all rows` dialog and table population are covered too.
+Row filtering in that dialog (action + executable-only) is covered as well.
+A dedicated regression check ensures row hits remain visible after filtering.
+Blocked-row reason rendering in the dialog is covered as well.
+NetBox role catalog ingestion and create-row role selection/override execution
+are covered as well.
+NetBox site catalog ingestion and create-row site selection/override execution
+are covered as well.
+NetBox device-status choice ingestion and create-row status selection/override
+execution are covered as well.
+Coverage also includes fallback behavior when the NetBox
+`dcim/devices/_choices/` endpoint is unavailable, ensuring refresh still
+succeeds and status values can be inferred from device rows.
+Create-row device-type selection and write execution with explicit NetBox
+device-type ID overrides are covered as well.
+UniFi raw API feedback capture and persistence plus row/source-id mapping
+helpers used for full-dump and row-level dump export are covered as well.
+Matching coverage now includes ordered criteria evaluation (name -> serial ->
+MAC), ambiguity handling per active criterion and NetBox device-type catalog
+ingestion for unmatched create suggestions.
 
 Default tests block socket connections. API tests exercise the real pynetbox
 request construction against a synthetic requests transport. No infrastructure
@@ -188,6 +419,36 @@ Report commit, application/Python/OS/NetBox versions and observed results withou
 tokens, raw responses or private inventory. Linux and live checks are not passed
 until executed on the corresponding systems.
 
+## Pre-write Re-read Live Acceptance
+
+Version 0.3.34 and later re-read NetBox before each write. This check uses
+live NetBox writes, so limit it to one dedicated test device and run it only
+with explicit opt-in. Use a UniFi device whose NetBox counterpart you may
+change, or a test site. Never use production records you cannot restore.
+
+Use the exact branch commit, reinstall requirements in `.venv` and record
+`python -m unifi2netbox --version` (expect 0.3.36 or later) and
+`git rev-parse HEAD`.
+
+1. Refresh Inventory Preview. In **Show all rows**, pick one matched update row
+	with a selected field (for example `serial`). Note the NetBox device ID.
+2. Without refreshing, change that field for the device in the NetBox web UI.
+3. Enable **Dry run only** and execute the selected row. Expect `skipped` with
+	"NetBox values changed since the preview (serial)". NetBox stays unchanged.
+4. Disable **Dry run only** and execute the same row. Expect the same `skipped`
+	result and no change in NetBox (check the device changelog).
+5. Refresh the preview. The row now shows the new NetBox value. Executing it
+	writes normally and reports `success`.
+6. Pick one create row. Before executing, create a NetBox device with the same
+	name manually. Execute the row: expect `skipped` with "A NetBox device with
+	name '...' now exists (ID ...)" and no second device. Delete your manual test
+	device afterwards in NetBox yourself; the application never deletes.
+7. Optional: for an update row, delete the target device in NetBox before
+	executing. Expect `skipped` with "no longer exists".
+
+Report version, commit and the observed status/message per step. Do not share
+tokens, raw dumps or private inventory in the report.
+
 ## Acceptance Record
 
 On 2026-10-25, the user reported that all online tests passed for the NetBox
@@ -206,3 +467,66 @@ single shared actions, tabbed unified settings, separate service outcomes, Cance
 preserving both tabs, atomic combined save behavior and safe close handling while
 checks were active. This is user feedback; the assistant did not execute live tests
 against the infrastructure.
+
+On 2026-11-14, the assistant ran a read-only live check on the developer
+workstation (commit b1b087f, application 0.3.36, CPython 3.15.1, Windows 11
+10.0.26200) with the saved configuration. No writes were made; snapshots went
+to a scratch directory instead of the real snapshot database.
+
+- NetBox 4.7.3: Online. Read 4 devices, 374 device types, 5 roles, 1 site and
+  1 device status. Plain HTTP with TLS verification not applicable.
+- UniFi Network 11.0.99 (not the planned 10.6.100): the connection check reports
+  `Unsupported` because of the 10.6 version gate, while the inventory reader
+  succeeded with 19 devices over 3 API pages. TLS verification is disabled.
+- Field coverage: UniFi provides name, model, manufacturer, MAC and site for all
+  devices but no serial numbers; NetBox devices have no serial or primary MAC.
+- Preview: 4 matched, 15 unmatched UniFi devices, no conflicts; 15 create and
+  4 update rows. 3 update rows are blocked by `model_requires_manufacturer`
+  (UniFi model names differ from NetBox device-type models while manufacturers
+  match), so the full write plan is not executable. No default device role is
+  configured, so creates need a per-row role.
+
+After 0.3.37 (update selection limited to writable fields) the same live
+preview became executable: 15 creates and 4 updates without blockers. All 4
+updates only change `site`, and the UniFi site name does not exist in NetBox,
+so executing them (and the creates) would fail at site lookup until a NetBox
+site is chosen per row or a site mapping exists. No write was attempted.
+After 0.3.38 the UniFi connection check reports Online for Network 11.0.99
+(0.47 s first run, 0.02 s second run); the earlier 9.3 s first check did not
+recur.
+After 0.3.39 the same live preview without a site mapping plans 15 creates with
+`unknown_netbox_site` warnings and no site updates; with the mapping set to the
+only NetBox site it plans 15 creates without warnings. The mapping was passed in
+the check script; the saved configuration was not changed.
+
+On 2026-11-14, with the user's explicit approval, the assistant ran the
+pre-write re-read acceptance as a scripted live write test against the NetBox
+developer instance (commit 89397de, application 0.3.39). The script used the
+same pipeline and executor as the GUI, with the site mapping and one NetBox
+role passed in; UniFi was only read. Results, all passed (9/9):
+
+- T1: a device with the same name created after the preview made the create
+	operation `skipped` ("now exists"); no second device was created.
+- T2: after a refresh the create succeeded; read-back confirmed name, site,
+	device type and role.
+- T3: an unselected field change (serial) did not block a site update, which
+	succeeded and was read back.
+- T4: a site change after the preview made both the dry run and the real run
+	`skipped` ("changed since the preview (site)"); NetBox kept the new value.
+- T5: deleting the target after the preview made the update `skipped`
+	("no longer exists").
+
+All test objects (one duplicate device, the created device and two test sites)
+were removed afterwards; NetBox again held 4 devices and 1 site. The GUI itself
+was not driven in this test.
+
+Observed limitation: only 1 of 11 UniFi model names in this installation
+(`U6 Lite`) matches a NetBox device-type model exactly. Device-type suggestions
+rank manufacturer-only candidates (score 20) and partial matches such as
+`USW-Pro-8-PoE` for `USW Pro 24 PoE`, so creates currently need a manually
+chosen `Device type` per row.
+After 0.3.40 a read-only live preview preselects the correct NetBox device type
+for all 11 UniFi models in this installation (15 of 15 create rows): one by
+exact model, seven by part number and three by alias. 203 of 210 Ubiquiti
+device types in this NetBox carry a part number.
+

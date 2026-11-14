@@ -2,19 +2,54 @@ from threading import Event
 
 import pytest
 from PySide6.QtCore import QThreadPool, QTimer
-from PySide6.QtWidgets import QDialog, QLineEdit, QToolBar
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QLineEdit,
+    QPushButton,
+    QTableWidget,
+    QToolBar,
+)
 
 from unifi2netbox.config import (
+    BehaviorConfig,
     NetBoxConfig,
     UniFiConfig,
+    load_behavior_config,
     load_config,
     load_unifi_config,
     save_config,
     save_unifi_config,
 )
 from unifi2netbox.connections import ConnectionRunner
-from unifi2netbox.gui import MainWindow, SettingsDialog
+from unifi2netbox.gui import (
+    MainWindow,
+    SettingsDialog,
+    _find_unifi_raw_device,
+    _unifi_source_id_from_device_key,
+)
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryDeviceType,
+    InventorySnapshot,
+    InventorySource,
+)
+from unifi2netbox.matching import (
+    deduplicate_inventory,
+    suggest_device_types_for_unmatched,
+)
 from unifi2netbox.netbox import ConnectionResult, ConnectionState
+from unifi2netbox.pipeline import (
+    InventoryPreviewResult,
+    InventoryPreviewRow,
+    WriteExecutionReport,
+    preview_rows,
+    scope_unmatched_netbox_for_delete,
+)
+from unifi2netbox.preview import build_change_preview, build_difference_preview
+from unifi2netbox.write_plan import build_write_plan
 
 
 @pytest.fixture
@@ -330,6 +365,35 @@ def test_unifi_settings_cancel_preserves_saved_values(qtbot, tmp_path, pool):
     assert load_unifi_config(path) == config
 
 
+def test_settings_save_persists_delete_scope_behavior(qtbot, tmp_path, pool):
+    path = tmp_path / "config.toml"
+    widget = SettingsDialog(
+        path,
+        NetBoxConfig("https://netbox.invalid", "netbox-synthetic"),
+        pool,
+        online,
+        unifi_config=UniFiConfig("https://console.invalid", "unifi-synthetic"),
+        unifi_checker=unifi_online,
+    )
+    qtbot.addWidget(widget)
+    widget.include_all_netbox_delete_candidates.setChecked(True)
+    widget.default_device_role_name.setText("Network Device")
+    widget.netbox_site_name.setText("Home")
+    widget.save()
+
+    assert widget.result() == QDialog.DialogCode.Accepted
+    assert widget.saved_behavior_config == BehaviorConfig(
+        include_all_netbox_delete_candidates=True,
+        default_device_role_name="Network Device",
+        netbox_site_name="Home",
+    )
+    assert load_behavior_config(path) == BehaviorConfig(
+        include_all_netbox_delete_candidates=True,
+        default_device_role_name="Network Device",
+        netbox_site_name="Home",
+    )
+
+
 def test_old_unifi_result_cannot_replace_new_settings(qtbot, tmp_path, pool):
     release = Event()
     running = Event()
@@ -398,6 +462,681 @@ def test_close_waits_for_both_connection_workers(qtbot, tmp_path, pool):
     qtbot.waitUntil(lambda: not window.isVisible())
 
 
+def test_inventory_preview_requires_configured_connections(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.refresh_inventory_preview()
+
+    assert window.preview_status.text() == "Unconfigured"
+    assert "Configure NetBox and UniFi Network" in window.preview_plan.text()
+
+
+def test_inventory_preview_finished_updates_visible_summary(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            netbox_devices=12,
+            unifi_devices=10,
+            matched_devices=8,
+            unmatched_unifi=2,
+            unmatched_netbox=4,
+            conflicts=1,
+            preview_rows=6,
+            executable_operations=5,
+            last_updated="2026-11-01T14:00:00+00:00",
+            detail_lines=(
+                "Match unifi:a -> netbox:1 (identity)",
+                "Plan #1 create_device create:unifi:a",
+            ),
+        )
+    )
+
+    assert window.preview_status.text() == "Ready"
+    assert "NetBox: 12 | UniFi: 10" in window.preview_counts.text()
+    assert "Matched: 8" in window.preview_matches.text()
+    assert "Executable operations: 5" in window.preview_plan.text()
+    assert window.preview_checked_at.text() == "2026-11-01T14:00:00+00:00"
+    assert window.preview_detail_list.count() == 2
+    assert "Match unifi:a -> netbox:1" in window.preview_detail_text.text()
+    window.preview_detail_list.setCurrentRow(1)
+    assert "Plan #1 create_device create:unifi:a" in window.preview_detail_text.text()
+
+
+def test_inventory_preview_enables_execute_when_plan_is_executable(
+    qtbot, tmp_path, pool
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="switch-a", site="HQ"),),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                ),
+            ),
+            difference_preview=diff,
+            write_plan=plan,
+        )
+    )
+
+    assert window.execute_plan_button.isEnabled()
+
+
+def test_execute_write_plan_starts_runner_after_confirmation(
+    qtbot, tmp_path, pool, monkeypatch
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="switch-a", site="HQ"),),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.current_difference_preview = diff
+    window.current_write_plan = plan
+
+    monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    started = {}
+
+    def fake_start(
+        netbox_config,
+        behavior,
+        difference_preview,
+        write_plan,
+        role_overrides,
+        site_overrides,
+        status_overrides,
+        device_type_overrides,
+        *,
+        dry_run,
+    ):
+        started["called"] = True
+        started["dry_run"] = dry_run
+        started["plan"] = write_plan
+        started["role_overrides"] = role_overrides
+        started["site_overrides"] = site_overrides
+        started["status_overrides"] = status_overrides
+        started["device_type_overrides"] = device_type_overrides
+        return True
+
+    monkeypatch.setattr(window.write_runner, "start", fake_start)
+    window.dry_run_only.setChecked(True)
+
+    window.execute_write_plan_from_preview()
+
+    assert started["called"] is True
+    assert started["dry_run"] is True
+    assert started["plan"] == plan
+    assert isinstance(started["role_overrides"], dict)
+    assert isinstance(started["site_overrides"], dict)
+    assert isinstance(started["status_overrides"], dict)
+    assert isinstance(started["device_type_overrides"], dict)
+
+
+def test_write_execution_finished_updates_preview_details(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.write_execution_finished(
+        WriteExecutionReport(
+            status="Applied",
+            details="Write execution finished: 1 success, 0 failed, 0 skipped.",
+            detail_lines=("Write #1 update_device: success Updated device in NetBox.",),
+        )
+    )
+
+    assert window.preview_status.text() == "Applied"
+    assert "1 success" in window.preview_plan.text()
+    assert window.preview_detail_list.count() == 1
+
+
+def test_inventory_preview_finished_shows_fallback_details_for_partial(
+    qtbot, tmp_path, pool
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Partial",
+            details="Synthetic partial refresh.",
+            detail_lines=("Inventory refresh is partial; check source diagnostics.",),
+        )
+    )
+
+    assert window.preview_detail_list.count() == 1
+    assert "partial" in window.preview_detail_text.text().lower()
+
+
+def test_inventory_preview_copy_selected_highlight(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            detail_lines=("Line A", "Line B"),
+        )
+    )
+    window.preview_detail_list.setCurrentRow(1)
+    window.copy_selected_highlight()
+
+    assert QApplication.clipboard().text() == "Line B"
+
+
+def test_inventory_preview_copy_all_highlights(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            detail_lines=("First", "Second", "Third"),
+        )
+    )
+    window.copy_all_highlights()
+
+    assert QApplication.clipboard().text() == "First\nSecond\nThird"
+
+
+def test_inventory_preview_show_all_rows_dialog(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            detail_lines=("Line A",),
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                ),
+            ),
+        )
+    )
+
+    assert window.show_rows_button.isEnabled()
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    assert window.preview_rows_dialog.isVisible()
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    assert table is not None
+    assert table.rowCount() == 1
+    assert table.item(0, 0).text() == "create:unifi:a"
+    window.preview_rows_dialog.close()
+
+
+def test_inventory_preview_rows_dialog_filters(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                ),
+                InventoryPreviewRow(
+                    device_key="unifi:b->netbox:2",
+                    action="update",
+                    source_label="switch-b",
+                    target_label="switch-b-old",
+                    selected_fields="name",
+                    executable="No",
+                ),
+                InventoryPreviewRow(
+                    device_key="target-only:netbox:3",
+                    action="target_only",
+                    source_label="",
+                    target_label="switch-c",
+                    selected_fields="",
+                    executable="No",
+                ),
+            ),
+        )
+    )
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    action_filter = window.preview_rows_dialog.findChild(
+        QComboBox, "preview_rows_action_filter"
+    )
+    executable_filter = window.preview_rows_dialog.findChild(
+        QCheckBox, "preview_rows_executable_filter"
+    )
+    assert table is not None
+    assert action_filter is not None
+    assert executable_filter is not None
+
+    assert table.rowCount() == 3
+    action_filter.setCurrentIndex(action_filter.findData("update"))
+    qtbot.waitUntil(lambda: table.rowCount() == 1)
+    assert table.item(0, 1).text() == "update"
+
+    action_filter.setCurrentIndex(action_filter.findData(""))
+    executable_filter.setChecked(True)
+    qtbot.waitUntil(lambda: table.rowCount() == 1)
+    assert table.item(0, 5).text() == "Yes"
+    window.preview_rows_dialog.close()
+
+
+def test_inventory_preview_rows_dialog_shows_blocked_reason(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="switch-a", site=""),),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=preview_rows(diff, change, plan),
+            difference_preview=diff,
+            write_plan=plan,
+        )
+    )
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    assert table is not None
+    assert table.rowCount() == 1
+    assert table.item(0, 5).text() == "No"
+    assert "create_required_identity" in table.item(0, 10).text()
+    window.preview_rows_dialog.close()
+
+
+def test_inventory_preview_rows_dialog_shows_create_device_type_suggestions(
+    qtbot, tmp_path, pool
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+        device_types=(
+            InventoryDeviceType(
+                source_id="101",
+                manufacturer="Ubiquiti",
+                model="USW-Pro-24",
+            ),
+        ),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(
+                source_id="a",
+                name="switch-a",
+                manufacturer="Ubiquiti",
+                model="USW-Pro-24",
+                site="HQ",
+            ),
+        ),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=preview_rows(
+                diff,
+                change,
+                plan,
+                suggestions=suggest_device_types_for_unmatched(dedup, netbox, unifi),
+            ),
+            difference_preview=diff,
+            write_plan=plan,
+        )
+    )
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    assert table is not None
+    assert table.rowCount() == 1
+    assert "Ubiquiti USW-Pro-24" in table.item(0, 11).text()
+    window.preview_rows_dialog.close()
+
+
+def test_confident_type_suggestion_preselects_create_device_type(qtbot, tmp_path, pool):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi_network:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                    suggested_device_types="Ubiquiti UniFi Switch 24 Pro (95)",
+                    suggested_device_type_id="101",
+                ),
+            ),
+            netbox_device_types=(("101", "Ubiquiti", "UniFi Switch 24 Pro"),),
+        )
+    )
+
+    assert window.create_device_type_by_device_key == {"create:unifi_network:a": "101"}
+
+
+def test_inventory_preview_rows_dialog_shows_role_dropdown_for_create_rows(
+    qtbot, tmp_path, pool
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=(
+                InventoryPreviewRow(
+                    device_key="create:unifi:a",
+                    action="create",
+                    source_label="switch-a",
+                    target_label="",
+                    selected_fields="name, site",
+                    executable="Yes",
+                ),
+            ),
+            netbox_device_types=(("101", "Ubiquiti", "USW-Pro-24"),),
+            netbox_device_statuses=("active", "planned"),
+            netbox_device_roles=("Network Device", "Wireless"),
+            netbox_sites=("HQ", "Branch"),
+        )
+    )
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    assert table is not None
+
+    status_widget = table.cellWidget(0, 6)
+    assert isinstance(status_widget, QComboBox)
+    assert status_widget.count() == 2
+    assert status_widget.itemText(0) == "active"
+    assert status_widget.itemText(1) == "planned"
+
+    site_widget = table.cellWidget(0, 7)
+    assert isinstance(site_widget, QComboBox)
+    assert site_widget.count() == 2
+    assert site_widget.itemText(0) == "HQ"
+    assert site_widget.itemText(1) == "Branch"
+
+    role_widget = table.cellWidget(0, 8)
+    assert isinstance(role_widget, QComboBox)
+    assert role_widget.count() == 2
+    assert role_widget.itemText(0) == "Network Device"
+    assert role_widget.itemText(1) == "Wireless"
+
+    type_widget = table.cellWidget(0, 9)
+    assert isinstance(type_widget, QComboBox)
+    assert type_widget.count() == 2
+    assert type_widget.itemData(1) == "101"
+    assert "Ubiquiti USW-Pro-24" in type_widget.itemText(1)
+    window.preview_rows_dialog.close()
+
+
+def test_inventory_preview_rows_dialog_execute_selected_row(
+    qtbot, tmp_path, pool, monkeypatch
+):
+    window = MainWindow(tmp_path / "config.toml", pool, open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="1", name="switch-a", serial="S1", site="HQ"),
+        ),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="a", name="switch-a", serial="S1-new", site="HQ"),
+            InventoryDevice(source_id="b", name="switch-b", site="HQ"),
+        ),
+    )
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    window.inventory_preview_finished(
+        InventoryPreviewResult(
+            status="Ready",
+            details="Synthetic summary.",
+            rows=preview_rows(diff, change, plan),
+            difference_preview=diff,
+            write_plan=plan,
+        )
+    )
+
+    monkeypatch.setattr(QDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    started = {}
+
+    def fake_start(
+        netbox_config,
+        behavior,
+        difference_preview,
+        write_plan,
+        role_overrides,
+        site_overrides,
+        status_overrides,
+        device_type_overrides,
+        *,
+        dry_run,
+    ):
+        started["called"] = True
+        started["count"] = len(write_plan.operations)
+        started["device_key"] = write_plan.operations[0].device_key
+        started["role_overrides"] = role_overrides
+        started["site_overrides"] = site_overrides
+        started["status_overrides"] = status_overrides
+        started["device_type_overrides"] = device_type_overrides
+        return True
+
+    monkeypatch.setattr(window.write_runner, "start", fake_start)
+
+    window.show_preview_rows_dialog()
+    assert window.preview_rows_dialog is not None
+    table = window.preview_rows_dialog.findChild(QTableWidget, "preview_rows_table")
+    execute_button = window.preview_rows_dialog.findChild(
+        QPushButton, "preview_rows_execute_selected"
+    )
+    assert table is not None
+    assert execute_button is not None
+
+    # Select first executable row and trigger single-row execution.
+    table.setCurrentCell(0, 0)
+    execute_button.click()
+
+    assert started["called"] is True
+    assert started["count"] == 1
+    assert started["device_key"] == table.item(0, 0).text()
+    assert isinstance(started["role_overrides"], dict)
+    assert isinstance(started["site_overrides"], dict)
+    assert isinstance(started["status_overrides"], dict)
+    assert isinstance(started["device_type_overrides"], dict)
+    window.preview_rows_dialog.close()
+
+
+def test_preview_rows_uses_change_executable_state_without_plan_devices():
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="switch-a", site="HQ"),),
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    diff = build_difference_preview(netbox, unifi, dedup)
+    change = build_change_preview(diff)
+    plan = build_write_plan(diff, change)
+
+    rows = preview_rows(diff, change, plan)
+
+    assert len(rows) == 1
+    assert rows[0].action == "create"
+    assert rows[0].executable == "Yes"
+
+
+def test_delete_scope_filters_unmatched_netbox_by_unifi_site_by_default():
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="1", name="nb-hq", site="HQ"),
+            InventoryDevice(source_id="2", name="nb-branch", site="Branch"),
+        ),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="uf-a", site="HQ"),),
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    scoped, hidden = scope_unmatched_netbox_for_delete(
+        dedup,
+        netbox,
+        unifi,
+        include_all_netbox_delete_candidates=False,
+    )
+
+    assert len(dedup.unmatched_netbox) == 2
+    assert scoped.unmatched_netbox == ("netbox:1",)
+    assert hidden == 1
+
+
+def test_delete_scope_can_include_all_unmatched_netbox_devices():
+    netbox = InventorySnapshot(
+        source=InventorySource.NETBOX,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(
+            InventoryDevice(source_id="1", name="nb-hq", site="HQ"),
+            InventoryDevice(source_id="2", name="nb-branch", site="Branch"),
+        ),
+    )
+    unifi = InventorySnapshot(
+        source=InventorySource.UNIFI_NETWORK,
+        captured_at="2026-11-01T10:00:00+00:00",
+        devices=(InventoryDevice(source_id="a", name="uf-a", site="HQ"),),
+    )
+
+    dedup = deduplicate_inventory(netbox, unifi)
+    scoped, hidden = scope_unmatched_netbox_for_delete(
+        dedup,
+        netbox,
+        unifi,
+        include_all_netbox_delete_candidates=True,
+    )
+
+    assert scoped.unmatched_netbox == dedup.unmatched_netbox
+    assert hidden == 0
+
+
 def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
     checked = []
 
@@ -420,12 +1159,28 @@ def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
     toolbar = window.findChild(QToolBar)
     assert [action.text() for action in toolbar.actions()] == [
         "Check Connections",
+        "Refresh Inventory Preview",
         "Settings",
     ]
     window.check_action.trigger()
     assert not window.check_action.isEnabled()
     qtbot.waitUntil(lambda: window.check_action.isEnabled())
-    assert sorted(checked) == ["netbox", "unifi"]
+
+
+def test_unifi_source_id_is_extracted_from_preview_device_keys():
+    assert _unifi_source_id_from_device_key("create:unifi_network:dev-1") == "dev-1"
+    assert _unifi_source_id_from_device_key("unifi_network:dev-2->netbox:42") == "dev-2"
+    assert _unifi_source_id_from_device_key("target-only:netbox:42") == ""
+
+
+def test_find_unifi_raw_device_matches_id_and__id_fields():
+    rows = (
+        {"id": "dev-1", "name": "switch-1"},
+        {"_id": "dev-2", "name": "ap-2"},
+    )
+    assert _find_unifi_raw_device(rows, "dev-1") == rows[0]
+    assert _find_unifi_raw_device(rows, "dev-2") == rows[1]
+    assert _find_unifi_raw_device(rows, "missing") is None
 
 
 def test_unified_settings_action_saves_and_rechecks_both(

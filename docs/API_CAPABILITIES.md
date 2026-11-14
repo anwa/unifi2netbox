@@ -13,7 +13,7 @@ these API requests and still needs targeted GUI confirmation.
 
 | Local GET endpoint | Purpose | Required result |
 | --- | --- | --- |
-| `/proxy/network/integration/v1/info` | Application version | `applicationVersion` string in stable 10.6 series |
+| `/proxy/network/integration/v1/info` | Application version | `applicationVersion` string in stable 10.6 or 11.0 series |
 | `/proxy/network/integration/v1/sites` | Accessible sites | Valid paginated sites with UUID, name and internalReference |
 | `/proxy/network/integration/v1/sites/{siteId}/devices?limit=1` | Authenticated device-read capability | Valid page, including an empty inventory |
 
@@ -21,7 +21,15 @@ Authentication uses `X-API-KEY` from the local console's integration settings.
 No cloud connector, user/password login, internal endpoint fallback or mutation is
 implemented. The adapter only sends GET. Missing endpoints report Unsupported;
 permission failures report Unauthorized rather than Online. Versions outside the
-targeted stable 10.6 family also report Unsupported until explicitly validated.
+validated stable 10.6 and 11.0 families report Unsupported until explicitly
+validated; pre-releases are always Unsupported.
+
+On 2026-11-14 the installed console reported Network 11.0.99. An
+assistant-executed read-only live check on the developer workstation confirmed
+the three endpoints above plus paginated device reads (19 devices, 3 pages)
+with the same response shape the adapter expects. The 11.0 published schema was
+not compared separately. Network 11.0 devices in this installation expose no
+serial numbers through the Integration API.
 
 Site discovery follows offset pagination with at most ten pages of up to 200 sites.
 A blank site auto-selects only one accessible site; multiple sites require an

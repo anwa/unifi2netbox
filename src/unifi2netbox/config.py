@@ -96,12 +96,41 @@ class UniFiConfig(NetBoxConfig):
             raise ConfigError("Enter the UniFi console base URL, not an API endpoint.")
 
 
+@dataclass(frozen=True)
+class BehaviorConfig:
+    include_all_netbox_delete_candidates: bool = False
+    default_device_role_name: str = ""
+    netbox_site_name: str = ""
+
+    def __post_init__(self) -> None:
+        if type(self.include_all_netbox_delete_candidates) is not bool:
+            raise ConfigError(
+                "Delete-candidate scope must be enabled or disabled explicitly."
+            )
+        if not isinstance(self.default_device_role_name, str) or any(
+            ord(character) < 32 for character in self.default_device_role_name
+        ):
+            raise ConfigError(
+                "Default device role name must be a string without control characters."
+            )
+        if not isinstance(self.netbox_site_name, str) or any(
+            ord(character) < 32 for character in self.netbox_site_name
+        ):
+            raise ConfigError(
+                "NetBox site name must be a string without control characters."
+            )
+
+
 def load_config(path: Path) -> NetBoxConfig:
     return _load_section(path, "netbox", NetBoxConfig)
 
 
 def load_unifi_config(path: Path) -> UniFiConfig:
     return _load_section(path, "unifi_network", UniFiConfig)
+
+
+def load_behavior_config(path: Path) -> BehaviorConfig:
+    return _load_section(path, "behavior", BehaviorConfig)
 
 
 def _load_section[Config: NetBoxConfig](
@@ -141,11 +170,23 @@ def save_unifi_config(path: Path, config: UniFiConfig) -> None:
     _save_sections(path, {"unifi_network": config})
 
 
-def save_connections(path: Path, netbox: NetBoxConfig, unifi: UniFiConfig) -> None:
-    _save_sections(path, {"netbox": netbox, "unifi_network": unifi})
+def save_behavior_config(path: Path, config: BehaviorConfig) -> None:
+    _save_sections(path, {"behavior": config})
 
 
-def _save_sections(path: Path, configs: dict[str, NetBoxConfig]) -> None:
+def save_connections(
+    path: Path,
+    netbox: NetBoxConfig,
+    unifi: UniFiConfig,
+    behavior: BehaviorConfig | None = None,
+) -> None:
+    sections: dict[str, object] = {"netbox": netbox, "unifi_network": unifi}
+    if behavior is not None:
+        sections["behavior"] = behavior
+    _save_sections(path, sections)
+
+
+def _save_sections(path: Path, configs: dict[str, object]) -> None:
     temporary: Path | None = None
     try:
         document = (

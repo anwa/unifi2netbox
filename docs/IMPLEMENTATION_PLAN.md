@@ -9,14 +9,17 @@ passed on 2026-10-25. Linux/exact-platform verification remains open.
 ## Requirements and Environment
 
 - Python >=3.15.1; PySide6 Qt Widgets; English GUI, code and documentation.
+- The installed UDM Pro Max reported Network 11.0.99 on 2026-11-14 (planned:
+  10.6.100). Both the 10.6 and 11.0 stable series are accepted by the gate.
 - Windows 11 25H2/26H2; Ubuntu and Kubuntu 26.04 LTS/26.10.
 - One local UniFi site/controller initially. UDM Pro Max: OS 5.1.33,
   Network 10.6.100. UNVR: 6.0.11, Protect 7.3.70. Access: 4.3.22.
   UNAS Pro: 6.0.11, Drive 4.4.20. Applications may use separate consoles.
 - NetBox Community 4.7.3, netbox-docker 5.1.1. Addresses, explicit HTTP/HTTPS
   schemes, tokens, site and role choices are runtime inputs, not hardcoded defaults.
-- This development PC cannot reach the infrastructure. The user can clone the
-  exact branch/commit and execute documented acceptance tests on the target PC.
+- The developer workstation (from 2026-11-14) has direct access to NetBox and
+  UniFi; live acceptance runs there. The external developer notebook used
+  earlier has no access. Earlier "target PC" results were user-reported.
 - UniFi is read-only. NetBox changes are selected and explicitly confirmed.
   No automatic deletion, automatic background writes or unapproved Custom Fields.
 - Network first; later inventory of cameras, NVRs, Access hardware and UNAS.
@@ -43,12 +46,13 @@ passed on 2026-10-25. Linux/exact-platform verification remains open.
 2. Later startup may show the last complete snapshot, clearly timestamped/stale.
    Refresh retrieves current data without writing. Failed/partial scans preserve
    the last complete baseline and never imply deletion.
-3. Normalize serial/MAC/source IDs and deduplicate cross-application observations.
-   One nonempty identity can find a candidate, but contradictory/duplicate
-   identities block automatic matching. Names/IP/model similarity are suggestions.
+3. Deduplicate cross-application observations per UniFi device in strict order:
+  normalized name, then serial, then MAC. One nonempty criterion can yield a
+  candidate; duplicate candidates in the active pass are ambiguity conflicts.
 4. Only unmatched devices receive Device Type suggestions, ranked by manufacturer,
-   exact model, aliases and explainable fuzzy similarity. No type match means an
-   explicit missing-type state, not an invented type or external catalog import.
+  exact model, aliases and explainable fuzzy similarity using NetBox Device
+  Templates (dcim device types). No type match means an explicit missing-type
+  state, not an invented type or external catalog import.
 5. Select existing NetBox site, role, type, VLAN group and IP scope as needed.
    Missing prerequisite taxonomy blocks creation with an actionable message.
 6. Keep configured values separate from operational values. Link down must not
@@ -159,11 +163,27 @@ exports contain no credentials/personal data and remain useful as test fixtures.
 
 Branch: `feature/diff-and-device-matching`; depends on M3.
 
-- [ ] Implement identity conflicts, confirmed mappings and cross-source deduplication.
-- [ ] Suggest existing manufacturer/model Device Types only for missing devices.
-- [ ] Display source/target values, provenance, operational/configured category,
-  unsupported fields and field/device/batch checkboxes.
-- [ ] Create immutable change previews with explicit dependencies, without writes.
+Status: completed for release v0.4.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.4.0 release. The branch also contains
+early M5 write slices; M5 stays open (source-side re-read before writes).
+
+- [x] Implement identity conflicts, confirmed mappings and cross-source
+  deduplication (service-level matching core and offline contract tests on
+  2026-10-28).
+- [x] Suggest existing manufacturer/model Device Types only for missing devices
+  (read-only ranked suggestions and offline contract tests on 2026-10-28).
+- [x] Display source/target values, provenance, operational/configured category,
+  unsupported fields and field/device/batch checkboxes (service-level preview
+  model and offline contract tests on 2026-10-28).
+- [x] Create immutable change previews with explicit dependencies, without writes
+  (service-level dependency model and offline contract tests on 2026-10-28).
+- [x] Match UniFi models to NetBox device types by part number and alias, and
+  map the UniFi site to a NetBox site (offline tests and live read-only checks
+  on 2026-11-14).
+- [x] Run live acceptance on the developer workstation (read-only checks and an
+  approved NetBox developer-instance write test on 2026-11-14).
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.4.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.4.0.
 
 Acceptance: ambiguous matches never auto-apply; unavailable values never erase
 targets; selecting a device selects eligible displayed fields, with exceptions.
@@ -172,13 +192,31 @@ targets; selecting a device selects eligible displayed fields, with exceptions.
 
 Branch: `feature/approved-netbox-writes`; depends on M4.
 
-- [ ] Implement creation prerequisites and selected standard inventory updates.
-- [ ] Add preflight conflicts, one summary confirmation and ordered execution.
-- [ ] Journal outcomes, reconcile ambiguous creates and read back successful writes.
-- [ ] Test zero writes on Cancel, partial failures, concurrent edits and idempotence.
+- [x] Implement creation prerequisites and selected standard inventory updates
+  (service-level write-plan model and offline contract tests on 2026-11-01).
+- [x] Add preflight conflicts, one summary confirmation and ordered execution
+  (service-level preflight blockers, deterministic operation ordering and
+  immutable plan summaries with confirmation readiness on 2026-11-01).
+- [x] Journal outcomes, reconcile ambiguous creates and read back successful writes.
+  (journal outcome model, ambiguous-create reconcile helper, read-back planner
+  and offline contract tests implemented on 2026-11-01)
+- [x] Test zero writes on Cancel, partial failures, concurrent edits and idempotence
+  (service-level journal/read-back/write-plan contract tests on 2026-11-01).
+- [x] Add service-level device write executor for create/update with dry-run and
+  deterministic outcome journaling (offline contract tests on 2026-11-01).
+- [x] Map the UniFi site to a configured NetBox site and guard against writing
+  site names that do not exist in NetBox (offline tests and live read-only
+  check on 2026-11-14).
+- [x] Re-read NetBox targets before each write and skip operations whose preview
+  baseline changed (deleted/changed update targets, newly appeared create
+  duplicates by name/serial; offline contract tests and approved live write
+  test against the NetBox developer instance on 2026-11-14). Source-side
+  UniFi re-read before writes remains open.
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
 visible; live write tests require explicit narrow test scope and separate opt-in.
+For delete proposals, default scope remains safety-first (site-scoped NetBox-only
+devices), with an explicit user setting to include all NetBox devices when needed.
 
 ### M6: Switch Ports and VLANs -> v0.6.0
 
@@ -271,9 +309,11 @@ are implemented. Update milestone checkboxes with evidence, not intentions.
 - Block accidental live network in default tests; use synthetic or reviewed,
   consistently pseudonymized fixtures. Keep raw exports outside version control.
 - Test GUI persistence, first-run errors, selection, signal handling and shutdown.
-- Target-PC workflow: clone exact commit, install pinned requirements in `.venv`,
-  configure through GUI, perform read-only checks, return a sanitized report with
-  application/commit/Python/OS/API versions. Write tests are separately opted in.
+- Live workflow on the developer workstation: exact commit, pinned requirements
+  in `.venv`, configuration through the GUI, read-only checks first; record
+  application/commit/Python/OS/API versions. Live NetBox write tests need
+  separate explicit approval and dedicated test objects. Opt-in live pytest
+  checks use the `integration` marker and never run by default or in CI.
 - Correct activation: Windows `.\.venv\Scripts\Activate.ps1`; Linux
   `source .venv/bin/activate`. Do not use system-wide pip or break system packages.
 - Before each commit: tests, lint, format, staged diff, secret check and version.

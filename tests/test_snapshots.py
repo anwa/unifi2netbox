@@ -2,7 +2,12 @@ import sqlite3
 
 import pytest
 
-from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryDeviceType,
+    InventorySnapshot,
+    InventorySource,
+)
 from unifi2netbox.snapshots import (
     SNAPSHOT_SCHEMA_VERSION,
     SnapshotStore,
@@ -24,6 +29,13 @@ def netbox_snapshot(captured: str, serial: str) -> InventorySnapshot:
                 manufacturer="Ubiquiti",
                 mac_address="00:11:22:33:44:55",
                 site="HQ",
+            ),
+        ),
+        device_types=(
+            InventoryDeviceType(
+                source_id="101",
+                manufacturer="Ubiquiti",
+                model="USW-24",
             ),
         ),
     )
@@ -69,6 +81,14 @@ def test_sources_are_stored_independently(tmp_path):
         source_version="10.6.100",
         scope="Default (site)",
         devices=(InventoryDevice(source_id="u1", name="ap-1"),),
+        unifi_api_feedback=(
+            {
+                "endpoint": "info",
+                "params": {},
+                "payload": {"applicationVersion": "10.6.100"},
+            },
+        ),
+        unifi_raw_devices=({"id": "u1", "name": "ap-1"},),
     )
 
     store.save_current(netbox)

@@ -43,6 +43,7 @@ def netbox_transport(monkeypatch):
                         "id": 7,
                         "name": "edge-a",
                         "serial": " abcd1234 ",
+                        "status": {"value": "active", "label": "Active"},
                         "primary_mac_address": "00-11-22-33-44-55",
                         "device_type": {
                             "model": "USW-24",
@@ -64,6 +65,7 @@ def netbox_transport(monkeypatch):
                         "id": 8,
                         "name": "edge-b",
                         "serial": "xyz",
+                        "status": {"value": "planned", "label": "Planned"},
                         "primary_mac_address": "66:55:44:33:22:11",
                         "device_type": {
                             "model": "U7-Pro",
@@ -72,6 +74,87 @@ def netbox_transport(monkeypatch):
                         "site": {"name": "HQ"},
                     }
                 ],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": "https://netbox.invalid/api/dcim/device-types/?limit=1&offset=1",
+                "previous": None,
+                "results": [
+                    {
+                        "id": 101,
+                        "model": "USW-24",
+                        "manufacturer": {"name": "Ubiquiti"},
+                    }
+                ],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": None,
+                "previous": "https://netbox.invalid/api/dcim/device-types/?limit=1&offset=0",
+                "results": [
+                    {
+                        "id": 102,
+                        "model": "U7-Pro",
+                        "manufacturer": {"name": "Ubiquiti"},
+                    }
+                ],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": "https://netbox.invalid/api/dcim/device-roles/?limit=1&offset=1",
+                "previous": None,
+                "results": [{"id": 201, "name": "Network Device"}],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": None,
+                "previous": "https://netbox.invalid/api/dcim/device-roles/?limit=1&offset=0",
+                "results": [{"id": 202, "name": "Wireless"}],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": "https://netbox.invalid/api/dcim/sites/?limit=1&offset=1",
+                "previous": None,
+                "results": [{"id": 301, "name": "HQ"}],
+            },
+        ),
+        (
+            200,
+            {
+                "count": 2,
+                "next": None,
+                "previous": "https://netbox.invalid/api/dcim/sites/?limit=1&offset=0",
+                "results": [{"id": 302, "name": "Branch"}],
+            },
+        ),
+        (
+            200,
+            {
+                "actions": {
+                    "POST": {
+                        "status": {
+                            "choices": [
+                                {"value": "active", "label": "Active"},
+                                {"value": "planned", "label": "Planned"},
+                            ]
+                        }
+                    }
+                }
             },
         ),
     ]
@@ -174,6 +257,17 @@ def test_netbox_inventory_is_paginated_and_normalized(netbox_transport):
     assert snapshot.devices[0].mac_address == "00:11:22:33:44:55"
     assert snapshot.devices[0].manufacturer == "Ubiquiti"
     assert snapshot.devices[1].name == "edge-b"
+    assert [item.source_id for item in snapshot.device_types] == ["101", "102"]
+    assert snapshot.device_types[0].manufacturer == "Ubiquiti"
+    assert snapshot.device_types[1].model == "U7-Pro"
+    assert [item.source_id for item in snapshot.device_roles] == ["201", "202"]
+    assert snapshot.device_roles[0].name == "Network Device"
+    assert snapshot.device_roles[1].name == "Wireless"
+    assert [item.source_id for item in snapshot.sites] == ["301", "302"]
+    assert snapshot.sites[0].name == "HQ"
+    assert snapshot.sites[1].name == "Branch"
+    assert [item.value for item in snapshot.device_statuses] == ["active", "planned"]
+    assert snapshot.device_statuses[0].label == "Active"
 
     for request, options in calls:
         assert request.method == "GET"
@@ -188,6 +282,23 @@ def test_netbox_inventory_page_limit_is_bounded(netbox_transport):
             page_size=1,
             max_pages=1,
         )
+
+
+def test_netbox_inventory_succeeds_when_status_choices_endpoint_is_unavailable(
+    netbox_transport,
+):
+    _, responses = netbox_transport
+    responses[-1] = (404, {"detail": "Not found."})
+
+    snapshot = read_netbox_inventory(
+        NetBoxConfig("https://netbox.invalid", "synthetic-token"),
+        page_size=1,
+    )
+
+    assert snapshot.source == InventorySource.NETBOX
+    assert [device.source_id for device in snapshot.devices] == ["7", "8"]
+    assert [item.source_id for item in snapshot.sites] == ["301", "302"]
+    assert [item.value for item in snapshot.device_statuses] == ["active", "planned"]
 
 
 def test_unifi_inventory_is_paginated_and_normalized(unifi_api):
@@ -207,8 +318,15 @@ def test_unifi_inventory_is_paginated_and_normalized(unifi_api):
     assert [device.source_id for device in snapshot.devices] == ["dev-1", "dev-2"]
     assert snapshot.devices[0].serial == "ABC123"
     assert snapshot.devices[0].mac_address == "00:11:22:33:44:55"
+    assert snapshot.devices[0].manufacturer == "Ubiquiti"
     assert snapshot.devices[1].name == "ap-2"
     assert snapshot.devices[1].mac_address == "66:55:44:33:22:11"
+    assert snapshot.devices[1].manufacturer == "Ubiquiti"
+    assert len(snapshot.unifi_api_feedback) == 4
+    assert snapshot.unifi_api_feedback[0]["endpoint"] == "info"
+    assert snapshot.unifi_api_feedback[-1]["endpoint"].endswith("/devices")
+    assert len(snapshot.unifi_raw_devices) == 2
+    assert snapshot.unifi_raw_devices[0]["id"] == "dev-1"
 
     assert [request.url.path for request in calls] == [
         "/proxy/network/integration/v1/info",

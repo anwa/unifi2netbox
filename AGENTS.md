@@ -28,8 +28,12 @@
   Support private CA certificates and warn about disabled TLS checks/plain HTTP.
 - Initial plaintext local token storage is accepted, not considered encryption.
   Never log secrets or commit real configuration, cache, raw captures or reports.
-- Do not contact the user's infrastructure from default tests. This development
-  machine has no access to it. Live tests require explicit opt-in on the target PC.
+- Do not contact the user's infrastructure from default tests or CI.
+- The developer workstation has direct access to NetBox and UniFi; the external
+  developer notebook has none. Live checks run only on the workstation and only
+  as explicitly opted-in `integration` tests or manual app runs. Live reads are
+  allowed there; every live NetBox write needs explicit user approval for that
+  test, limited to dedicated test objects. Never write to UniFi.
 
 ## Git and Versions
 

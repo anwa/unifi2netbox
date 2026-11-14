@@ -31,12 +31,44 @@ class InventoryDevice:
 
 
 @dataclass(frozen=True)
+class InventoryDeviceType:
+    source_id: str
+    manufacturer: str
+    model: str
+    part_number: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryDeviceRole:
+    source_id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class InventorySite:
+    source_id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class InventoryDeviceStatus:
+    value: str
+    label: str
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     source: InventorySource
     captured_at: str
     source_version: str = ""
     scope: str = ""
     devices: tuple[InventoryDevice, ...] = ()
+    device_types: tuple[InventoryDeviceType, ...] = ()
+    device_roles: tuple[InventoryDeviceRole, ...] = ()
+    sites: tuple[InventorySite, ...] = ()
+    device_statuses: tuple[InventoryDeviceStatus, ...] = ()
+    unifi_api_feedback: tuple[dict[str, object], ...] = ()
+    unifi_raw_devices: tuple[dict[str, object], ...] = ()
 
 
 def _text(value: object) -> str:
@@ -78,7 +110,7 @@ def _netbox_json(
     return payload
 
 
-def _normalize_netbox_device(row: dict[str, object]) -> InventoryDevice:
+def normalize_netbox_device(row: dict[str, object]) -> InventoryDevice:
     device_type = row.get("device_type")
     manufacturer = ""
     model = ""
@@ -104,6 +136,131 @@ def _normalize_netbox_device(row: dict[str, object]) -> InventoryDevice:
     )
 
 
+def _normalize_netbox_device_type(row: dict[str, object]) -> InventoryDeviceType | None:
+    manufacturer = ""
+    vendor = row.get("manufacturer")
+    if isinstance(vendor, dict):
+        manufacturer = _text(vendor.get("name"))
+    model = _text(row.get("model"))
+    source_id = str(row.get("id", "")).strip()
+    if not manufacturer or not model or not source_id:
+        return None
+    return InventoryDeviceType(
+        source_id=source_id,
+        manufacturer=manufacturer,
+        model=model,
+        part_number=_text(row.get("part_number")),
+    )
+
+
+def _normalize_netbox_device_role(row: dict[str, object]) -> InventoryDeviceRole | None:
+    source_id = str(row.get("id", "")).strip()
+    name = _text(row.get("name"))
+    if not source_id or not name:
+        return None
+    return InventoryDeviceRole(source_id=source_id, name=name)
+
+
+def _normalize_netbox_site(row: dict[str, object]) -> InventorySite | None:
+    source_id = str(row.get("id", "")).strip()
+    name = _text(row.get("name"))
+    if not source_id or not name:
+        return None
+    return InventorySite(source_id=source_id, name=name)
+
+
+def _netbox_device_statuses(
+    session: requests.Session, config: NetBoxConfig
+) -> list[InventoryDeviceStatus]:
+    payload = _netbox_json(session, config, "/api/dcim/devices/_choices/")
+    actions = payload.get("actions") if isinstance(payload, dict) else None
+    post = actions.get("POST") if isinstance(actions, dict) else None
+    status = post.get("status") if isinstance(post, dict) else None
+    choices = status.get("choices") if isinstance(status, dict) else None
+    if not isinstance(choices, list):
+        raise InventoryError("NetBox device status choices payload is invalid.")
+
+    values: list[InventoryDeviceStatus] = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        value = _text(choice.get("value"))
+        label = _text(choice.get("label")) or value
+        if not value:
+            continue
+        values.append(InventoryDeviceStatus(value=value, label=label))
+    return values
+
+
+def _netbox_device_statuses_from_devices(
+    device_rows: list[dict[str, object]],
+) -> list[InventoryDeviceStatus]:
+    inferred: dict[str, str] = {}
+    for row in device_rows:
+        status = row.get("status")
+        value = ""
+        label = ""
+        if isinstance(status, dict):
+            value = _text(status.get("value"))
+            label = _text(status.get("label")) or _text(status.get("name"))
+        elif isinstance(status, str):
+            value = _text(status)
+        if not value:
+            continue
+        if not label:
+            label = value
+        inferred[value] = label
+    return [
+        InventoryDeviceStatus(value=value, label=inferred[value])
+        for value in sorted(inferred)
+    ]
+
+
+def _netbox_paginated_rows(
+    session: requests.Session,
+    config: NetBoxConfig,
+    path: str,
+    *,
+    page_size: int,
+    max_pages: int,
+    limit_error: str,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    offset = 0
+    pages = 0
+
+    while pages < max_pages:
+        payload = _netbox_json(
+            session,
+            config,
+            f"{path}?limit={page_size}&offset={offset}",
+        )
+        count = payload.get("count")
+        page_rows = payload.get("results")
+        if (
+            type(count) is not int
+            or count < 0
+            or not isinstance(page_rows, list)
+            or not all(isinstance(row, dict) for row in page_rows)
+            or len(page_rows) > page_size
+            or offset + len(page_rows) > count
+        ):
+            raise InventoryError("NetBox returned an invalid paginated payload.")
+        rows.extend(page_rows)
+        pages += 1
+        if offset + len(page_rows) >= count:
+            break
+        if not page_rows:
+            raise InventoryError(
+                "NetBox pagination stopped unexpectedly before count was reached."
+            )
+        offset += len(page_rows)
+    else:
+        raise InventoryError(limit_error)
+
+    return rows
+
+
 def read_netbox_inventory(
     config: NetBoxConfig,
     *,
@@ -117,46 +274,84 @@ def read_netbox_inventory(
         raise InventoryError("Pagination bounds must be positive.")
 
     devices: list[InventoryDevice] = []
-    offset = 0
-    pages = 0
+    device_types: list[InventoryDeviceType] = []
+    device_roles: list[InventoryDeviceRole] = []
+    sites: list[InventorySite] = []
+    device_statuses: list[InventoryDeviceStatus] = []
     version = ""
     try:
         with ReadOnlySession(config) as session:
             status = _netbox_json(session, config, "/api/status/")
             version = _text(status.get("netbox-version"))
-            while pages < max_pages:
-                payload = _netbox_json(
-                    session,
-                    config,
-                    f"/api/dcim/devices/?limit={page_size}&offset={offset}",
-                )
-                count = payload.get("count")
-                rows = payload.get("results")
-                if (
-                    type(count) is not int
-                    or count < 0
-                    or not isinstance(rows, list)
-                    or not all(isinstance(row, dict) for row in rows)
-                    or len(rows) > page_size
-                    or offset + len(rows) > count
-                ):
-                    raise InventoryError(
-                        "NetBox returned an invalid paginated payload."
-                    )
-                devices.extend(_normalize_netbox_device(row) for row in rows)
-                pages += 1
-                if offset + len(rows) >= count:
-                    break
-                if not rows:
-                    raise InventoryError(
-                        "NetBox pagination stopped unexpectedly before count was "
-                        "reached."
-                    )
-                offset += len(rows)
-            else:
-                raise InventoryError(
+            device_rows = _netbox_paginated_rows(
+                session,
+                config,
+                "/api/dcim/devices/",
+                page_size=page_size,
+                max_pages=max_pages,
+                limit_error=(
                     "NetBox pagination exceeded the configured page safety limit."
-                )
+                ),
+            )
+            devices.extend(normalize_netbox_device(row) for row in device_rows)
+            device_statuses.extend(_netbox_device_statuses_from_devices(device_rows))
+
+            type_rows = _netbox_paginated_rows(
+                session,
+                config,
+                "/api/dcim/device-types/",
+                page_size=page_size,
+                max_pages=max_pages,
+                limit_error=(
+                    "NetBox device-type pagination exceeded the configured page "
+                    "safety limit."
+                ),
+            )
+            for row in type_rows:
+                item = _normalize_netbox_device_type(row)
+                if item is not None:
+                    device_types.append(item)
+
+            role_rows = _netbox_paginated_rows(
+                session,
+                config,
+                "/api/dcim/device-roles/",
+                page_size=page_size,
+                max_pages=max_pages,
+                limit_error=(
+                    "NetBox device-role pagination exceeded the configured page "
+                    "safety limit."
+                ),
+            )
+            for row in role_rows:
+                role = _normalize_netbox_device_role(row)
+                if role is not None:
+                    device_roles.append(role)
+
+            site_rows = _netbox_paginated_rows(
+                session,
+                config,
+                "/api/dcim/sites/",
+                page_size=page_size,
+                max_pages=max_pages,
+                limit_error=(
+                    "NetBox site pagination exceeded the configured page safety limit."
+                ),
+            )
+            for row in site_rows:
+                site = _normalize_netbox_site(row)
+                if site is not None:
+                    sites.append(site)
+
+            try:
+                # Device status choices are optional enrichment for create defaults.
+                # Inventory refresh must still succeed when this endpoint is missing
+                # or restricted on a specific NetBox deployment/version.
+                endpoint_statuses = _netbox_device_statuses(session, config)
+                if endpoint_statuses:
+                    device_statuses = endpoint_statuses
+            except InventoryError:
+                pass
     except RedirectError as error:
         raise InventoryError(
             "Redirect refused. Configure the final NetBox URL explicitly."
@@ -171,6 +366,10 @@ def read_netbox_inventory(
         captured_at=_timestamp(captured_at),
         source_version=version,
         devices=tuple(devices),
+        device_types=tuple(device_types),
+        device_roles=tuple(device_roles),
+        sites=tuple(sites),
+        device_statuses=tuple(device_statuses),
     )
 
 
@@ -238,11 +437,22 @@ def _select_site(config: UniFiConfig, sites: list[dict[str, str]]) -> dict[str, 
 
 
 def _normalize_unifi_device(row: dict[str, object], site_name: str) -> InventoryDevice:
+    manufacturer = ""
+    manufacturer_value = row.get("manufacturer")
+    if isinstance(manufacturer_value, dict):
+        manufacturer = _text(manufacturer_value.get("name"))
+    else:
+        manufacturer = _text(manufacturer_value)
+    if not manufacturer:
+        # UniFi Network devices belong to the Ubiquiti vendor family.
+        manufacturer = "Ubiquiti"
+
     return InventoryDevice(
         source_id=_text(row.get("id")) or _text(row.get("_id")),
         name=_text(row.get("name")) or _text(row.get("hostname")),
         serial=_text(row.get("serial")).upper(),
         model=_text(row.get("model")),
+        manufacturer=manufacturer,
         mac_address=_normalize_mac(row.get("macAddress") or row.get("mac")),
         site=site_name,
     )
@@ -268,6 +478,8 @@ def read_unifi_inventory(
     site_scope = ""
     version = ""
     devices: list[InventoryDevice] = []
+    api_feedback: list[dict[str, object]] = []
+    raw_devices: list[dict[str, object]] = []
     try:
         with httpx.Client(
             base_url=config.url.rstrip("/") + "/proxy/network/integration/v1/",
@@ -280,6 +492,7 @@ def read_unifi_inventory(
             transport=transport,
         ) as client:
             info = _unifi_json(client, "info")
+            api_feedback.append({"endpoint": "info", "params": {}, "payload": info})
             version = _text(info.get("applicationVersion"))
 
             sites: list[dict[str, str]] = []
@@ -287,6 +500,13 @@ def read_unifi_inventory(
             for _ in range(max_pages):
                 offset = len(sites)
                 site_payload = _unifi_json(client, "sites", offset=offset, limit=200)
+                api_feedback.append(
+                    {
+                        "endpoint": "sites",
+                        "params": {"offset": offset, "limit": 200},
+                        "payload": site_payload,
+                    }
+                )
                 rows = _unifi_page(site_payload, offset, 200)
                 for row in rows:
                     site_id = _text(row.get("id"))
@@ -317,7 +537,15 @@ def read_unifi_inventory(
                     offset=offset,
                     limit=page_size,
                 )
+                api_feedback.append(
+                    {
+                        "endpoint": f"sites/{site['id']}/devices",
+                        "params": {"offset": offset, "limit": page_size},
+                        "payload": payload,
+                    }
+                )
                 rows = _unifi_page(payload, offset, page_size)
+                raw_devices.extend(rows)
                 devices.extend(
                     _normalize_unifi_device(row, site["name"]) for row in rows
                 )
@@ -340,4 +568,6 @@ def read_unifi_inventory(
         source_version=version,
         scope=site_scope,
         devices=tuple(devices),
+        unifi_api_feedback=tuple(api_feedback),
+        unifi_raw_devices=tuple(raw_devices),
     )
