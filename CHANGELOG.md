@@ -6,6 +6,38 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.5.0
+
+### Summary
+
+- GUI redesign milestone (M4.5): a modern, review-centric window. Matching,
+	preview and write behavior are unchanged.
+
+### Changed
+
+- Fusion theme that follows the system light/dark mode, with a theme button
+	next to Settings (Follow system, Light, Dark) saved as `[ui] theme`.
+- Header with connection status chips, summary cards and filter chips, a
+	review table with per-device checkboxes, a detail panel with field-level
+	selection and create choices, and an apply bar with dry run. Replaces the
+	`Show all rows` dialog and the highlight list.
+- One confirmation dialog with grouped warnings and blockers; per-device
+	results in the table and a banner with **Refresh now** after real writes.
+- Settings dialog with NetBox, UniFi Network and Sync defaults pages.
+
+### Validation
+
+- Milestone-wide offline gate: 249 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass, with the native and the offscreen Qt platform.
+- Offscreen light and dark screenshots reviewed. On 2026-11-14 the user ran the
+	redesigned app on the developer workstation and approved the look; this is
+	user feedback, not an assistant-driven GUI walkthrough.
+
+### Compatibility
+
+- New optional `[ui] theme` setting; existing configuration and snapshots load
+	without migration.
+
 ## v0.4.2
 
 ### Added

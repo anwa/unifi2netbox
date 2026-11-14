@@ -194,6 +194,10 @@ Branch: `feature/gui-redesign`; depends on M4. Added on 2026-11-14 at the
 user's request before continuing M5; later milestones shift by one minor
 version.
 
+Status: completed for release v0.5.0. On 2026-11-14 the user approved the look
+on the developer workstation and explicitly approved the merge to main and the
+v0.5.0 tag.
+
 - [x] Modern look: Fusion-based theme that follows the system light/dark mode,
   status colors and native Windows icons where available.
 - [x] Review-centric main window: connection chips, summary cards, filterable
@@ -205,8 +209,11 @@ version.
 - [x] Settings dialog grouped into NetBox, UniFi Network and sync defaults.
 - [x] Keep every existing capability (exports, single-row execution, copy of
   details) reachable; update GUI tests and documentation (0.4.1, 2026-11-14;
-  offscreen light/dark screenshots reviewed, Windows desktop rendering pending
-  user review).
+  offscreen light/dark screenshots reviewed; Windows desktop rendering
+  approved by the user).
+- [x] Add a light/dark theme button next to Settings (0.4.2).
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.5.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.5.0.
 
 Acceptance: the workflow connect -> refresh -> review -> apply works in one
 window without extra dialogs except confirmation and settings; light and dark
