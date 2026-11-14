@@ -434,11 +434,11 @@ display-only.
 - [x] 3. Plan and write drives as NetBox inventory items of the matched UNAS
   (name, part ID, serial, description) with re-read, drift checks and
   read-back; never delete (0.9.3).
-- [ ] 4. Approved NetBox write test and live acceptance.
+- [x] 4. Approved NetBox write test and live acceptance (0.9.3, 9/9).
 
-- [ ] Verify Drive 4.4.20 / UNAS Pro 6.0.11 inventory APIs and authentication.
-- [ ] Add verified chassis/interface/hardware inventory with cross-source matching.
-- [ ] Keep unsupported storage metrics display-only; never access file contents.
+- [x] Verify Drive 4.4.20 / UNAS Pro 6.0.11 inventory APIs and authentication.
+- [x] Add verified chassis/interface/hardware inventory with cross-source matching.
+- [x] Keep unsupported storage metrics display-only; never access file contents.
 
 Gate: suitable Drive API coverage is not yet established. Network client visibility
 is not full hardware inventory. Stop for a decision if no suitable endpoint exists;

@@ -6,6 +6,13 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Validation
+
+- M9 slice 4 live write test (0.9.3, commit 6c38286): an approved create of
+  the UNAS device and its five drive inventory items against the NetBox
+  developer instance passed 9/9 checks; items, device and test role were
+  removed afterwards.
+
 ## v0.9.3
 
 ### Added
