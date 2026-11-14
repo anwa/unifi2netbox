@@ -362,3 +362,29 @@ def test_interface_rows_search_counts_and_selection():
     assert state.interface_operation_count() == 1
     state.set_interface_selected("interface:10", "all", False)
     assert state.interface_operation_count() == 0
+
+
+def test_protect_rows_preselect_a_fitting_role():
+    from unifi2netbox.review import role_for_kind
+
+    roles = ("Access Point", "Camera", "Switch", "NVR")
+
+    assert role_for_kind("camera", roles) == "Camera"
+    assert role_for_kind("nvr", roles) == "NVR"
+    assert role_for_kind("camera", ("Camera", "Kamera aussen")) == ""
+    assert role_for_kind("", roles) == ""
+
+
+def test_protect_kind_comes_from_the_key():
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryDevice
+
+    result = replace(
+        make_result(),
+        protect_devices=(InventoryDevice("c1", "Garden", kind="camera"),),
+    )
+    state = ReviewState(result, BehaviorConfig())
+
+    assert state.protect_kind("create:unifi_network:protect:c1") == "camera"
+    assert state.protect_kind("create:unifi_network:sw") == ""

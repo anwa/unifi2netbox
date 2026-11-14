@@ -570,6 +570,7 @@ def fake_runner(monkeypatch, window):
         network_plan=None,
         interface_plan=None,
         cable_plan=None,
+        protect_config=None,
     ):
         started.update(
             plan=write_plan,
@@ -583,6 +584,7 @@ def fake_runner(monkeypatch, window):
             network_plan=network_plan,
             interface_plan=interface_plan,
             cable_plan=cable_plan,
+            protect_config=protect_config,
         )
         return True
 
@@ -1608,3 +1610,18 @@ def test_protect_chip_is_off_until_configured(qtbot, tmp_path, pool):
 
     assert window.protect_chip.text().endswith("Protect · Off")
     assert "Optional." in window.protect_chip.toolTip()
+
+
+def test_role_placeholder_is_shown_when_no_role_is_chosen(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool)
+    key = select_row(window, "ap-1")
+    window.review.role_by_key.pop(key, None)
+    window.show_detail(key)
+
+    role = window.detail.findChild(QComboBox, "choiceRole")
+    assert role.currentText() == "Choose a role"
+    assert role.currentData() == ""
+    role.setCurrentIndex(role.findData("Switch"))
+    assert window.review.role_by_key[key] == "Switch"
+    role.setCurrentIndex(0)
+    assert key not in window.review.role_by_key

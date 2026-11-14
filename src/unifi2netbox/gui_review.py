@@ -538,7 +538,11 @@ class DetailPanel(QScrollArea):
         title = label(item.name, "heading")
         title.setObjectName("detailTitle")
         self.layout_.addWidget(title)
-        self.layout_.addWidget(label(_subtitle(item), "secondary"))
+        subtitle = _subtitle(item)
+        kind = state.protect_kind(key)
+        if kind:
+            subtitle += f" · from UniFi Protect ({kind})"
+        self.layout_.addWidget(label(subtitle, "secondary"))
 
         if item.outcome is not None:
             tone = {"success": "success", "skipped": "warning"}.get(
@@ -614,12 +618,18 @@ class DetailPanel(QScrollArea):
             combo = QComboBox()
             combo.setObjectName(f"choice{kind.capitalize()}")
             if values:
-                combo.addItems(list(values))
                 current = chosen.get(item.key, "")
-                if current in values:
-                    combo.setCurrentText(current)
-                combo.currentTextChanged.connect(
-                    lambda value, k=kind: self._choose(k, value)
+                if current not in values:
+                    # Never show a value that is not chosen (for example a
+                    # camera without a fitting role): show a placeholder.
+                    combo.addItem(f"Choose a {title.lower()}", "")
+                for value in values:
+                    combo.addItem(value, value)
+                combo.setCurrentIndex(max(0, combo.findData(current)))
+                combo.currentIndexChanged.connect(
+                    lambda _i, c=combo, k=kind: self._choose(
+                        k, str(c.currentData() or "")
+                    )
                 )
             else:
                 combo.addItem(f"No {title.lower()}s in NetBox")

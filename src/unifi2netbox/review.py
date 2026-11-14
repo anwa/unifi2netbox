@@ -141,6 +141,10 @@ class ReviewState:
             result.interface_plan if result else None
         )
         self.cable_plan: CablePlan | None = result.cable_plan if result else None
+        self.protect_kinds: dict[str, str] = {
+            device.source_id: device.kind
+            for device in (result.protect_devices if result else ())
+        }
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -212,7 +216,14 @@ class ReviewState:
                 self.site_by_key[key] = source_site
             elif self.sites:
                 self.site_by_key[key] = self.sites[0]
-            if default_role and default_role in self.roles:
+            kind = self.protect_kind(key)
+            if kind:
+                # Cameras and NVRs never inherit the default (network) role;
+                # without a fitting NetBox role the choice stays open.
+                kind_role = role_for_kind(kind, self.roles)
+                if kind_role:
+                    self.role_by_key[key] = kind_role
+            elif default_role and default_role in self.roles:
                 self.role_by_key[key] = default_role
             elif self.roles:
                 self.role_by_key[key] = self.roles[0]
@@ -339,6 +350,13 @@ class ReviewState:
             self.interface_plan = select_interface(
                 self.interface_plan, key, field, selected
             )
+
+    def protect_kind(self, key: str) -> str:
+        """'camera' or 'nvr' for devices that come from UniFi Protect."""
+        unifi_id, _ = _device_ids(key)
+        if not unifi_id.startswith(PROTECT_PREFIX):
+            return ""
+        return self.protect_kinds.get(unifi_id[len(PROTECT_PREFIX) :], "") or "device"
 
     # -- cables -------------------------------------------------------------
 
@@ -566,6 +584,20 @@ def humanize_timestamp(value: str, now: datetime | None = None) -> str:
     if moment.date() == reference.date():
         return f"today {moment:%H:%M}"
     return f"{moment:%d %b %H:%M}"
+
+
+PROTECT_PREFIX = "protect:"
+_ROLE_HINTS = {
+    "camera": ("camera", "kamera", "cctv", "surveillance"),
+    "nvr": ("nvr", "recorder", "video storage"),
+}
+
+
+def role_for_kind(kind: str, roles: tuple[str, ...]) -> str:
+    """The single NetBox role whose name fits a Protect kind, else ''."""
+    hints = _ROLE_HINTS.get(kind, ())
+    matches = [role for role in roles if any(h in role.lower() for h in hints)]
+    return matches[0] if len(matches) == 1 else ""
 
 
 def _device_ids(key: str) -> tuple[str, str]:

@@ -65,6 +65,11 @@ history.
   effective configuration (mode, native and tagged VLANs, profile, LAG), read
   from internal Network endpoints with GET only. All-VLAN trunks stay
   `tagged-all`; unknown profiles or networks are reported, never guessed.
+- With UniFi Protect configured, the NVR and cameras appear as devices in the
+  same review (marked "from UniFi Protect"). Devices also seen in UniFi Network
+  are taken from Network. Cameras and NVRs never get the default network role:
+  create a fitting NetBox role (for example "Camera", "NVR") or choose one per
+  device. Third-party cameras get a device type only on an exact model match.
 - The **Interfaces** filter compares the effective UniFi port configuration
   with the paired NetBox interfaces of matched devices and offers field-level
   writes for enabled state, 802.1Q mode, untagged and tagged VLANs. VLANs come

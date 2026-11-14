@@ -6,6 +6,39 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.7.3
+
+### Added
+
+- M7 slice 3: a fresh Protect read joins matching, preview and write plan.
+  Protect devices get `protect:`-prefixed IDs; a Protect device whose MAC is
+  also a Network device is dropped (Network data wins) and counted in the
+  Protect status line. Protect devices take the most common Network site, then
+  the NetBox site mapping applies. A cached Protect snapshot after a failed
+  refresh never joins the preview, so it cannot authorize writes.
+- Before writing, Protect is re-read and merged like Network; if only Protect
+  fails, its devices are skipped while Network writes proceed.
+- Device type suggestions understand Protect model codes (`UNVR4` is part
+  number `UNVR`, `UVC G4 Instant` is `UVC-G4-INS`); devices without a known
+  manufacturer only get exact model or part-number matches.
+- Cameras and NVRs never inherit the default device role; a NetBox role whose
+  name fits (camera/kamera/CCTV/surveillance, NVR/recorder) is preselected,
+  otherwise the role must be chosen. The detail panel shows "from UniFi
+  Protect (camera)".
+
+### Fixed
+
+- Role, site and status choices no longer display the first NetBox value
+  when nothing is chosen; a "Choose a ..." placeholder is shown instead.
+
+### Validation
+
+- Added merge, fresh-only, re-read, role, alias, exact-match and placeholder
+  tests. Live read-only preview: 11 Protect devices as create rows, 6 with a
+  preselected device type (NVR, G4 Instant, G6 Bullet x2, G3 Flex x2), 5
+  without (G5 Bullet, UA Intercom and three third-party CAM-PT2);
+  roles stay open because NetBox has no camera or NVR role yet.
+
 ## v0.7.2
 
 ### Added

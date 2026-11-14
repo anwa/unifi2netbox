@@ -342,8 +342,9 @@ Slices:
   proposed for creation when NetBox already has a device type with exactly
   that model; the manufacturer is never assumed. The Access intercom listed by
   Protect is treated as a camera and noted for M8.
-- [ ] 3. Match and preview Protect devices with the existing flow,
-  deduplicated by MAC against Network devices.
+- [x] 3. Match and preview Protect devices with the existing flow,
+  deduplicated by MAC against Network devices. (0.7.3, 2026-11-14: live
+  preview with 11 Protect create rows, 6 with a device type; roles open.)
 - [ ] 4. Approved NetBox writes for Protect devices and live acceptance.
 
 - [x] Verify Protect 7.3.70 inventory/NVR endpoints and credentials per console.

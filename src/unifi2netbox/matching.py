@@ -450,6 +450,10 @@ def _rank_candidates(
             else:
                 continue
 
+        if not manufacturer and score < PART_NUMBER_SCORE:
+            # Unknown vendor (e.g. third-party cameras): exact model or part
+            # number only, never a similar model of some other manufacturer.
+            continue
         ranked.append(
             DeviceTypeCandidate(
                 manufacturer=item.manufacturer,
@@ -483,6 +487,7 @@ def _alias_keys(model: str) -> set[str]:
 
     - ``AC Pro`` is part number ``UAP-AC-PRO``.
     - ``US 16 PoE 150W`` is part number ``US-16-150W`` (no ``PoE`` token).
+    - Protect: ``UVC G4 Instant`` is ``UVC-G4-INS``; ``UNVR4`` is ``UNVR``.
     """
     tokens = _tokens(model)
     keys = {"".join(tokens)}
@@ -491,10 +496,21 @@ def _alias_keys(model: str) -> set[str]:
         token.endswith("w") and token[:-1].isdigit() for token in tokens
     ):
         keys.add("".join(without_poe))
+    abbreviated = [_TOKEN_ABBREVIATIONS.get(token, token) for token in tokens]
+    if abbreviated != tokens:
+        keys.add("".join(abbreviated))
     for key in list(keys):
         if key.startswith("ac"):
             keys.add("uap" + key)
+        # Protect reports hardware codes such as UNVR4 (4-bay UNVR).
+        if key.startswith("unvr") and key[4:].isdigit():
+            keys.add("unvr")
     return keys - {""}
+
+
+# Words Protect spells out where NetBox part numbers abbreviate them:
+# ``UVC G4 Instant`` is part number ``UVC-G4-INS``.
+_TOKEN_ABBREVIATIONS = {"instant": "ins"}
 
 
 def _tokens(value: str) -> list[str]:
