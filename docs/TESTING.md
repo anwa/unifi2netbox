@@ -43,7 +43,7 @@ Use the exact `feature/unifi-network-connection` commit, reinstall requirements
 in `.venv`, and record `python -m unifi2netbox --version` before starting.
 
 1. Confirm the previously configured NetBox connection still works unchanged.
-2. Open File > Settings, then the UniFi Network tab. Enter the local UDM base URL and
+2. Open Settings, then the UniFi Network page. Enter the local UDM base URL and
 	local integration API key. Never use a cloud key or put a key in a report.
 3. Configure TLS validation independently. Prefer the appropriate CA file; if
 	explicitly disabled, verify the visible warning. Test before saving.
@@ -351,34 +351,24 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-For GUI preview visibility checks introduced after M5 service slices, run:
+The redesigned review window (M4.5) keeps its logic in the Qt-free `review`
+module. `tests/test_review.py` covers categories, counts, device and field
+selection, create choices, blockers and write outcomes; `tests/test_gui.py`
+covers the window: cards and filters, row checkboxes, detail field selection,
+create choices, confirmation blockers, per-row results, banners, copy, exports,
+connection chips and the light/dark theme.
+
+For GUI checks, run:
 
 ```powershell
 python -m pytest -q tests/test_gui.py
 ```
 
-The GUI check includes inventory-preview highlight rendering for sample match,
-conflict and planned-operation lines.
-It also validates interactive highlight selection and detail-field updates.
-Fallback highlight behavior for partial refresh states is also covered.
-Clipboard copy behavior (`Copy selected` / `Copy all`) is covered as well.
-The non-modal `Show all rows` dialog and table population are covered too.
-Row filtering in that dialog (action + executable-only) is covered as well.
-A dedicated regression check ensures row hits remain visible after filtering.
-Blocked-row reason rendering in the dialog is covered as well.
-NetBox role catalog ingestion and create-row role selection/override execution
-are covered as well.
-NetBox site catalog ingestion and create-row site selection/override execution
-are covered as well.
-NetBox device-status choice ingestion and create-row status selection/override
-execution are covered as well.
-Coverage also includes fallback behavior when the NetBox
-`dcim/devices/_choices/` endpoint is unavailable, ensuring refresh still
-succeeds and status values can be inferred from device rows.
-Create-row device-type selection and write execution with explicit NetBox
-device-type ID overrides are covered as well.
-UniFi raw API feedback capture and persistence plus row/source-id mapping
-helpers used for full-dump and row-level dump export are covered as well.
+Service-level coverage behind the GUI includes NetBox role, site, status and
+device-type catalog ingestion, the status fallback when the NetBox
+`dcim/devices/_choices/` endpoint is unavailable, explicit device-type ID
+overrides for creates, and UniFi raw API capture with the row/source-id helpers
+used by the dump exports.
 Matching coverage now includes ordered criteria evaluation (name -> serial ->
 MAC), ambiguity handling per active criterion and NetBox device-type catalog
 ingestion for unmatched create suggestions.
@@ -430,12 +420,13 @@ Use the exact branch commit, reinstall requirements in `.venv` and record
 `python -m unifi2netbox --version` (expect 0.3.36 or later) and
 `git rev-parse HEAD`.
 
-1. Refresh Inventory Preview. In **Show all rows**, pick one matched update row
-	with a selected field (for example `serial`). Note the NetBox device ID.
+1. Refresh. Filter **Changed** and pick a device with a checked field (for
+	example `serial`) in the detail panel. Note the NetBox device ID.
 2. Without refreshing, change that field for the device in the NetBox web UI.
-3. Enable **Dry run only** and execute the selected row. Expect `skipped` with
-	"NetBox values changed since the preview (serial)". NetBox stays unchanged.
-4. Disable **Dry run only** and execute the same row. Expect the same `skipped`
+3. Enable **Dry run (no changes)** and use **Apply this device**. Expect
+	`Skipped` with "NetBox values changed since the preview (serial)". NetBox
+	stays unchanged.
+4. Disable the dry run and apply the same device. Expect the same `Skipped`
 	result and no change in NetBox (check the device changelog).
 5. Refresh the preview. The row now shows the new NetBox value. Executing it
 	writes normally and reports `success`.

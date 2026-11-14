@@ -146,3 +146,14 @@ def test_invalid_behavior_settings_are_rejected():
         BehaviorConfig(default_device_role_name="bad\nrole")
     with pytest.raises(ConfigError):
         BehaviorConfig(netbox_site_name="bad\tsite")
+
+
+def test_ui_section_roundtrip_defaults_and_validation(tmp_path):
+    from unifi2netbox.config import UiConfig, load_ui_config, save_ui_config
+
+    path = tmp_path / "config.toml"
+    assert load_ui_config(path) == UiConfig()
+    save_ui_config(path, UiConfig(theme="dark"))
+    assert load_ui_config(path).theme == "dark"
+    with pytest.raises(ConfigError):
+        UiConfig(theme="purple")

@@ -121,6 +121,18 @@ class BehaviorConfig:
             )
 
 
+THEME_CHOICES = ("system", "light", "dark")
+
+
+@dataclass(frozen=True)
+class UiConfig:
+    theme: str = "system"
+
+    def __post_init__(self) -> None:
+        if self.theme not in THEME_CHOICES:
+            raise ConfigError("Theme must be system, light or dark.")
+
+
 def load_config(path: Path) -> NetBoxConfig:
     return _load_section(path, "netbox", NetBoxConfig)
 
@@ -172,6 +184,14 @@ def save_unifi_config(path: Path, config: UniFiConfig) -> None:
 
 def save_behavior_config(path: Path, config: BehaviorConfig) -> None:
     _save_sections(path, {"behavior": config})
+
+
+def load_ui_config(path: Path) -> UiConfig:
+    return _load_section(path, "ui", UiConfig)
+
+
+def save_ui_config(path: Path, config: UiConfig) -> None:
+    _save_sections(path, {"ui": config})
 
 
 def save_connections(

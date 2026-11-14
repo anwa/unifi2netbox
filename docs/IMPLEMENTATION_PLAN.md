@@ -188,7 +188,38 @@ early M5 write slices; M5 stays open (source-side re-read before writes).
 Acceptance: ambiguous matches never auto-apply; unavailable values never erase
 targets; selecting a device selects eligible displayed fields, with exceptions.
 
-### M5: Approved NetBox Inventory Writes -> v0.5.0
+### M4.5: GUI Redesign -> v0.5.0
+
+Branch: `feature/gui-redesign`; depends on M4. Added on 2026-11-14 at the
+user's request before continuing M5; later milestones shift by one minor
+version.
+
+Status: completed for release v0.5.0. On 2026-11-14 the user approved the look
+on the developer workstation and explicitly approved the merge to main and the
+v0.5.0 tag.
+
+- [x] Modern look: Fusion-based theme that follows the system light/dark mode,
+  status colors and native Windows icons where available.
+- [x] Review-centric main window: connection chips, summary cards, filterable
+  review table with device selection, a detail panel with per-device choices
+  and field-level selection, and an apply bar. Replaces the `Show all rows`
+  dialog and the highlight list.
+- [x] Apply flow: one confirmation summary, optional dry run first, per-row
+  results in the table.
+- [x] Settings dialog grouped into NetBox, UniFi Network and sync defaults.
+- [x] Keep every existing capability (exports, single-row execution, copy of
+  details) reachable; update GUI tests and documentation (0.4.1, 2026-11-14;
+  offscreen light/dark screenshots reviewed; Windows desktop rendering
+  approved by the user).
+- [x] Add a light/dark theme button next to Settings (0.4.2).
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.5.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.5.0.
+
+Acceptance: the workflow connect -> refresh -> review -> apply works in one
+window without extra dialogs except confirmation and settings; light and dark
+mode render legibly; no service-layer behavior changes.
+
+### M5: Approved NetBox Inventory Writes -> v0.6.0
 
 Branch: `feature/approved-netbox-writes`; depends on M4.
 
@@ -218,7 +249,7 @@ visible; live write tests require explicit narrow test scope and separate opt-in
 For delete proposals, default scope remains safety-first (site-scoped NetBox-only
 devices), with an explicit user setting to include all NetBox devices when needed.
 
-### M6: Switch Ports and VLANs -> v0.6.0
+### M6: Switch Ports and VLANs -> v0.7.0
 
 Branch: `feature/ports-and-vlans`; depends on M5 and M3 capabilities.
 
@@ -233,7 +264,7 @@ Branch: `feature/ports-and-vlans`; depends on M5 and M3 capabilities.
 Acceptance: correct effective configuration, no lifecycle/operational confusion,
 no unsupported writes and no redundant changes on a second apply.
 
-### M7: Protect Inventory -> v0.7.0
+### M7: Protect Inventory -> v0.8.0
 
 Branch: `feature/protect-inventory`; follows M6.
 
@@ -244,7 +275,7 @@ Branch: `feature/protect-inventory`; follows M6.
 Acceptance: camera/NVR fixtures and target-PC read verification; existing common
 approval and conflict handling remains effective.
 
-### M8: Access Inventory -> v0.8.0
+### M8: Access Inventory -> v0.9.0
 
 Branch: `feature/access-inventory`; follows M7.
 
@@ -255,7 +286,7 @@ Branch: `feature/access-inventory`; follows M7.
 Acceptance: version-specific fixtures and target-PC read verification; source is
 read-only even when the API token itself has broader permissions.
 
-### M9: Drive/UNAS Inventory -> v0.9.0
+### M9: Drive/UNAS Inventory -> v0.10.0
 
 Branch: `feature/drive-inventory`; follows M8.
 
@@ -267,7 +298,7 @@ Gate: suitable Drive API coverage is not yet established. Network client visibil
 is not full hardware inventory. Stop for a decision if no suitable endpoint exists;
 do not substitute SSH or scraping without approval.
 
-### M10: Deployment and Platform Acceptance -> v0.10.0
+### M10: Deployment and Platform Acceptance -> v0.11.0
 
 Branch: `feature/deployment`; follows supported prior milestones.
 

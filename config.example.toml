@@ -19,3 +19,6 @@ timeout = 10.0
 include_all_netbox_delete_candidates = false
 default_device_role_name = ""
 netbox_site_name = ""
+
+[ui]
+theme = "system"
