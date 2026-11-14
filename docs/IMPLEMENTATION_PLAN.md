@@ -223,6 +223,9 @@ mode render legibly; no service-layer behavior changes.
 
 Branch: `feature/approved-netbox-writes`; depends on M4.
 
+Status: completed for release v0.6.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.6.0 tag.
+
 - [x] Implement creation prerequisites and selected standard inventory updates
   (service-level write-plan model and offline contract tests on 2026-11-01).
 - [x] Add preflight conflicts, one summary confirmation and ordered execution
@@ -255,6 +258,8 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
 - [x] Live acceptance of read-back, UniFi re-read and write history on the
   developer workstation (read-only checks plus an approved NetBox developer-
   instance write test, 6/6, 2026-11-14).
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.6.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.6.0.
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
 visible; live write tests require explicit narrow test scope and separate opt-in.

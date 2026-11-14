@@ -6,6 +6,40 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.0
+
+### Summary
+
+- Approved NetBox writes milestone (M5): writes are now guarded before, during
+	and after execution and every run is recorded.
+
+### Added
+
+- UniFi is re-read right before writing; devices whose selected UniFi values
+	changed or vanished are skipped, and nothing is written if UniFi is
+	unreachable. NetBox is re-read before every write as before.
+- Interrupted creates (timeout, dropped connection, HTTP 502/503/504) are
+	reconciled by name in NetBox instead of being retried.
+- Successful writes are read back and marked Verified, Mismatch or Not verified,
+	without automatic rewrites.
+- Every run is saved to `write-journal.sqlite3`; **More > Write history** lists
+	recent runs with per-device results.
+
+### Validation
+
+- Milestone-wide offline gate: 281 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): read-only UniFi re-read and a
+	dry run over all 15 planned creates, plus an approved NetBox developer-
+	instance write test (create and site update verified, history saved, 6/6,
+	test objects removed). Interrupted creates and changed UniFi values are
+	covered by offline tests only.
+
+### Compatibility
+
+- New local file `write-journal.sqlite3` next to the configuration; existing
+	configuration and snapshots load without migration.
+
 ## v0.5.4
 
 ### Added

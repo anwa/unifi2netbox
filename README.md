@@ -1,18 +1,19 @@
 # unifi2netbox
 
-Latest main release: **v0.5.0**, the GUI redesign milestone (M4.5).
+Latest main release: **v0.6.0**, the approved NetBox writes milestone (M5).
 
-Release **v0.5.0** compares UniFi Network inventory with NetBox in a modern
+Release **v0.6.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
-Type suggestions, and lets you apply selected, confirmed changes to NetBox.
-UniFi stays read-only.
+Type suggestions, and applies selected, confirmed changes to NetBox with
+re-reads before writing, read-back verification afterwards and a saved write
+history. UniFi stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v0.5.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
-history. Approved writes (M5) are still being completed.
+release v0.6.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+history.
 
 ## Current Capabilities
 
