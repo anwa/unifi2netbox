@@ -6,11 +6,52 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.9.0
+
+### Summary
+
+- UniFi Access inventory milestone (M8): hubs, readers and intercoms of an
+	optional Access connection join the same review and approved NetBox write
+	flow.
+
+### Added
+
+- Optional `[unifi_access]` connection (Access API URL with port 12445 and an
+	Access API token with device-read permission), a settings page and a
+	header chip; GET-only reads of `/api/v1/developer/devices`. Users, logs and
+	doors are never requested.
+- Access hardware is stored in its own snapshot with name, model, MAC (from
+	the device ID), kind and online state; unadopted devices are skipped.
+- Fresh Access devices are matched, previewed and written like Network
+	devices with precedence Network, then Access, then Protect for the same
+	MAC; stale Access data never authorizes writes; Access is re-read before
+	writing. Access devices never inherit the default network role; a single
+	fitting role ("Access Control", "Door", "Reader", "Intercom") is
+	preselected, never "Access Point".
+
+### Changed
+
+- Optional service chips appear only once configured; unconfigured required
+	connections read "Not set". A rejected Access URL without a port points to
+	port 12445.
+
 ### Validation
 
-- M8 slice 4 live write test (0.8.3, commit 81235c8): an approved create of
-  the UniFi Access hub against the NetBox developer instance passed 7/7
-  checks; test role, device type and device were removed afterwards.
+- Milestone-wide offline gate: 488 passed, 1 skipped, 0 failed; Ruff lint and
+	format checks pass.
+- Live on the developer workstation (2026-11-14): Access on the UDM Online
+	with its own token, 2 devices read (UAH hub, UA-Intercom); the intercom
+	comes from Access instead of Protect; approved NetBox developer-instance
+	write test of the hub with a test role and test device type (7/7,
+	verified, matched after refresh, test objects removed). Failing Access
+	re-reads and stale Access snapshots are covered by offline tests only.
+
+### Compatibility
+
+- No configuration change is required; Access stays off until
+	`[unifi_access]` is set. Snapshots gain a `unifi_access` source; older
+	snapshots load without migration. Access reports no serial numbers,
+	firmware or IP addresses.
 
 ## v0.8.3
 

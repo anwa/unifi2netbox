@@ -371,6 +371,9 @@ approval and conflict handling remains effective.
 
 Branch: `feature/access-inventory`; follows M7.
 
+Status: completed for release v0.9.0. On 2026-11-14 the user explicitly
+approved the merge to main and the v0.9.0 tag.
+
 Decision (2026-11-14, user-approved): Access gets its own optional connection
 (`[unifi_access]`: Access API URL with port 12445 and an Access API token with
 device-read permission). Source precedence for the same MAC: Network, then
@@ -390,6 +393,8 @@ Slices:
 - [x] Validate Access 4.3.22 API documentation, console placement and token scopes.
 - [x] Add supported hubs/readers/equipment, never users, access logs or door control.
 - [x] Record unsupported hardware fields instead of promising complete coverage.
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 0.9.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.9.0.
 
 Acceptance: version-specific fixtures and target-PC read verification; source is
 read-only even when the API token itself has broader permissions.
