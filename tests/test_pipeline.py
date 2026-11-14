@@ -389,6 +389,12 @@ def test_run_write_execution_runs_networks_first_and_records_them(
         )
 
     monkeypatch.setattr(pipeline, "execute_network_plan", fake_networks)
+
+    def fake_interfaces(interface_plan, backend, **kwargs):
+        order.append("interfaces")
+        return ()
+
+    monkeypatch.setattr(pipeline, "execute_interface_plan", fake_interfaces)
     monkeypatch.setattr(pipeline, "execute_write_plan", fake_execute)
     path = tmp_path / "write-journal.sqlite3"
 
@@ -406,7 +412,7 @@ def test_run_write_execution_runs_networks_first_and_records_them(
         network_plan=object(),
     )
 
-    assert order == ["networks", "devices"]
+    assert order == ["networks", "interfaces", "devices"]
     assert "1 success" in report.details and "1 verified" in report.details
     assert report.outcomes[0].device_key == "network:n1"
     stored = JournalStore(path).recent()[0].outcomes[0]

@@ -171,6 +171,9 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- interface writes patch only selected fields, skip on NetBox or UniFi drift,
+	read back every write, write nothing in dry runs and run between network
+	and device writes,
 - the interface plan compares enabled, mode, untagged and tagged VLANs per
 	paired port, uses only the site VLAN group, turns missing VLANs into notes,
 	never expands `tagged-all`, never clears values for unknown configurations,

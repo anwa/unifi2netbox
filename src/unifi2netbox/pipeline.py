@@ -12,6 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
+from unifi2netbox.interface_execute import execute_interface_plan
 from unifi2netbox.interface_plan import (
     DevicePair,
     InterfacePlan,
@@ -301,12 +302,14 @@ def run_write_execution(
     unifi_config: UniFiConfig | None = None,
     journal_path: Path | None = None,
     network_plan: NetworkPlan | None = None,
+    interface_plan: InterfacePlan | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
     With ``unifi_config`` the UniFi inventory is re-read once first; devices and
     networks whose UniFi values changed since the preview are skipped. Network
-    writes (VLAN group, VLANs, prefixes) run before device writes.
+    writes (VLAN group, VLANs, prefixes) run first, then interface
+    configuration of matched devices, then device writes.
     """
     started = _now()
     snapshot, source_error = (
@@ -325,11 +328,23 @@ def run_write_execution(
         else None
     )
 
+    source_configs = (
+        {(c.device_id, c.idx): c for c in snapshot.port_configs}
+        if snapshot is not None
+        else None
+    )
+    backend = RequestsNetBoxWriteBackend(netbox_config)
     network_outcomes = execute_network_plan(
         network_plan,
-        RequestsNetBoxWriteBackend(netbox_config),
+        backend,
         dry_run=dry_run,
         source_networks=source_networks,
+        source_error=source_error,
+    ) + execute_interface_plan(
+        interface_plan,
+        backend,
+        dry_run=dry_run,
+        source_configs=source_configs,
         source_error=source_error,
     )
     result = execute_write_plan(

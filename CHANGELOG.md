@@ -6,6 +6,24 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.9
+
+### Added
+
+- M6 slice 4, execution: selected interface changes are written with one PATCH
+  per interface after the network writes and before device writes. UniFi is
+  re-read and rows whose port configuration changed are skipped; each NetBox
+  interface is re-read and skipped when a selected field no longer has its
+  preview value; dry runs run all checks; every write is read back as
+  verified, mismatch or unverified and recorded in the write history.
+  Interfaces are never created or deleted.
+
+### Validation
+
+- Added executor tests (payload of selected fields only, verification, second
+  run without changes, dry run, NetBox and UniFi drift, missing interface,
+  transport failure, read-back mismatch) and pipeline ordering.
+
 ## v0.6.8
 
 ### Added
