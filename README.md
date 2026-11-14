@@ -41,6 +41,10 @@ version-by-version history.
 - The difference preview shows source/target values with provenance,
   configured vs. operational fields and unsupported-field markers, with batch,
   device and field selection plus explicit write dependencies.
+- Update rows preselect only fields the update executor can write (`name`,
+  `serial`, `site`). Other differences, such as UniFi model names versus NetBox
+  device types, are shown as preview-only. Empty UniFi values never clear
+  NetBox values.
 - NetBox-only devices (delete proposals) are limited to the active UniFi site
   by default; a setting includes all NetBox devices. Nothing is deleted.
 

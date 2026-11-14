@@ -212,6 +212,8 @@ The focused tests validate that:
 
 - target-only rows are always non-executable,
 - create actions require selected non-empty `name` and `site` values,
+- update rows only preselect writable fields (`name`, `serial`, `site`) with
+	non-empty source values; other changed fields are preview-only,
 - selected `model` updates depend on selected `manufacturer` updates.
 
 Run the focused dependency checks:

@@ -6,6 +6,24 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.37
+
+### Fixed
+
+- Update previews only preselect fields the update executor can write (`name`,
+	`serial`, `site`). Changed `model`, `manufacturer` and `mac_address` values
+	stay visible as preview-only, so naming differences between UniFi models and
+	NetBox device types no longer block the whole write plan.
+- Empty UniFi values are never selected for updates, so missing source fields
+	can no longer clear existing NetBox values (for example serial numbers).
+
+### Validation
+
+- Added preview tests for preview-only fields and empty source values; the
+	model/manufacturer dependency tests now force the selection explicitly.
+- Live read-only check on the developer workstation: the plan changed from
+	3 dependency blockers to executable with 15 creates and 4 updates.
+
 ## v0.3.36
 
 ### Changed

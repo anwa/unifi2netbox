@@ -81,6 +81,9 @@ _FIELD_SPECS: tuple[tuple[str, FieldCategory], ...] = (
     ("mac_address", FieldCategory.OPERATIONAL),
 )
 
+# Fields the update executor can write; keep in sync with write_execute.
+_UPDATE_WRITABLE_FIELDS: frozenset[str] = frozenset({"name", "serial", "site"})
+
 _UNSUPPORTED_FIELDS: tuple[str, ...] = (
     "profile",
     "overrides",
@@ -325,7 +328,14 @@ def _field_previews(
         source_value = _value(source, field_name)
         target_value = _value(target, field_name)
         changed = source_value != target_value
-        selectable = changed
+        writable = field_name in _UPDATE_WRITABLE_FIELDS
+        # Empty source values never clear NetBox; non-writable fields stay visible.
+        selectable = changed and writable and bool(source_value)
+        provenance = f"UniFi.{field_name} -> NetBox.{field_name}"
+        if changed and not writable:
+            provenance += " (preview only; updates do not write this field)"
+        elif changed and not source_value:
+            provenance += " (source empty; NetBox value is kept)"
         previews.append(
             FieldPreview(
                 name=field_name,
@@ -334,7 +344,7 @@ def _field_previews(
                 target_value=target_value,
                 changed=changed,
                 supported=True,
-                provenance=f"UniFi.{field_name} -> NetBox.{field_name}",
+                provenance=provenance,
                 selectable=selectable,
                 selected=selectable,
             )

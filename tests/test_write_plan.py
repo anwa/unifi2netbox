@@ -1,15 +1,33 @@
+from dataclasses import replace
+
 from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
 from unifi2netbox.matching import deduplicate_inventory
 from unifi2netbox.preview import (
+    DifferencePreview,
     build_change_preview,
     build_difference_preview,
-    select_field,
 )
 from unifi2netbox.write_plan import (
     IssueSeverity,
     OperationType,
     build_write_plan,
 )
+
+
+def force_select(preview, device_key, field_name):
+    """Simulate a selectable field the update executor does not support yet."""
+    devices = []
+    for device in preview.devices:
+        if device.device_key == device_key:
+            fields = tuple(
+                replace(field, selectable=True, selected=True)
+                if field.name == field_name
+                else field
+                for field in device.fields
+            )
+            device = replace(device, fields=fields, selectable=True, selected=True)
+        devices.append(device)
+    return DifferencePreview(devices=tuple(devices))
 
 
 def snapshot(
@@ -84,7 +102,7 @@ def test_write_plan_blocks_on_dependency_failure():
     dedup = deduplicate_inventory(netbox, unifi)
     diff = build_difference_preview(netbox, unifi, dedup)
     update = next(item for item in diff.devices if item.action.value == "update")
-    diff = select_field(diff, update.device_key, "manufacturer", False)
+    diff = force_select(diff, update.device_key, "model")
     change = build_change_preview(diff)
     plan = build_write_plan(diff, change)
 

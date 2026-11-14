@@ -1,7 +1,10 @@
+from dataclasses import replace
+
 from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
 from unifi2netbox.matching import deduplicate_inventory
 from unifi2netbox.preview import (
     DeviceAction,
+    DifferencePreview,
     FieldCategory,
     build_change_preview,
     build_difference_preview,
@@ -20,6 +23,22 @@ def snapshot(
         source_version="x",
         devices=tuple(devices),
     )
+
+
+def force_select(preview, device_key, field_name):
+    """Simulate a selectable field the update executor does not support yet."""
+    devices = []
+    for device in preview.devices:
+        if device.device_key == device_key:
+            fields = tuple(
+                replace(field, selectable=True, selected=True)
+                if field.name == field_name
+                else field
+                for field in device.fields
+            )
+            device = replace(device, fields=fields, selectable=True, selected=True)
+        devices.append(device)
+    return DifferencePreview(devices=tuple(devices))
 
 
 def test_preview_contains_provenance_categories_and_unsupported_fields():
@@ -196,10 +215,8 @@ def test_change_preview_model_depends_on_selected_manufacturer():
         item for item in preview.devices if item.action == DeviceAction.UPDATE
     )
 
-    manufacturer_cleared = select_field(
-        preview, update.device_key, "manufacturer", False
-    )
-    changes = build_change_preview(manufacturer_cleared)
+    model_only = force_select(preview, update.device_key, "model")
+    changes = build_change_preview(model_only)
     update_change = next(
         item for item in changes.devices if item.device_key == update.device_key
     )
@@ -212,3 +229,50 @@ def test_change_preview_model_depends_on_selected_manufacturer():
     assert update_change.executable is False
     assert dependency.satisfied is False
     assert dependency.missing_fields == ("manufacturer",)
+
+
+def _matched_pair(netbox_device, unifi_device):
+    netbox = snapshot(InventorySource.NETBOX, [netbox_device])
+    unifi = snapshot(InventorySource.UNIFI_NETWORK, [unifi_device])
+    preview = build_difference_preview(
+        netbox, unifi, deduplicate_inventory(netbox, unifi)
+    )
+    update = next(d for d in preview.devices if d.action == DeviceAction.UPDATE)
+    return preview, update, {field.name: field for field in update.fields}
+
+
+def test_update_preview_shows_but_does_not_select_unwritable_fields():
+    preview, update, fields = _matched_pair(
+        InventoryDevice(
+            source_id="1", name="sw", manufacturer="Ubiquiti", model="USW-Pro-24"
+        ),
+        InventoryDevice(
+            source_id="a",
+            name="sw",
+            manufacturer="Ubiquiti Inc",
+            model="USW Pro 24",
+            mac_address="00:11:22:33:44:55",
+        ),
+    )
+
+    for name in ("model", "manufacturer", "mac_address"):
+        assert fields[name].changed is True
+        assert fields[name].selectable is False
+        assert fields[name].selected is False
+        assert "preview only" in fields[name].provenance
+    assert update.selectable is False
+    change = build_change_preview(preview)
+    assert change.devices[0].selected_fields == ()
+
+
+def test_update_preview_never_selects_empty_source_values():
+    _, update, fields = _matched_pair(
+        InventoryDevice(source_id="1", name="sw", serial="NB-SERIAL", site="HQ"),
+        InventoryDevice(source_id="a", name="sw", serial="", site="Branch"),
+    )
+
+    assert fields["serial"].changed is True
+    assert fields["serial"].selectable is False
+    assert "NetBox value is kept" in fields["serial"].provenance
+    assert fields["site"].selected is True
+    assert update.selectable is True
