@@ -270,13 +270,31 @@ devices), with an explicit user setting to include all NetBox devices when neede
 
 Branch: `feature/ports-and-vlans`; depends on M5 and M3 capabilities.
 
-- [ ] Resolve profile inheritance and per-port overrides into effective settings.
-- [ ] Map native/tagged VLANs with correct groups/scopes and explicit all-VLAN
-  semantics; do not silently expand unrestricted VLANs to a current finite list.
-- [ ] Map interfaces, MAC/IP associations, management primary IP and LAG according
-  to the real NetBox 4.7 schema. PoE/speed need verified standard target fields.
-- [ ] Suggest cables only with unambiguous physical endpoint evidence/approval.
-- [ ] Test disabled versus down, unknown profiles, VLAN collisions and numbering.
+Decision (2026-11-14, user-approved): the official Network 11.0 Integration
+API exposes per port only index, link state, connector, speeds and PoE, so it
+cannot provide port names, configured enable state, port profiles, native or
+tagged VLANs, LAG membership or LLDP (see `API_CAPABILITIES.md`). Internal
+Network endpoints fill that gap and are used read-only: GET only, enabled for
+the validated 11.0 series, an explicit field allow-list (secrets such as WAN
+passwords are never read into models, stored or exported), marked as
+`internal` provenance, and the official data keeps working when they fail.
+
+Slices, in this order:
+
+- [ ] 1. Read UniFi ports and NetBox interfaces; match ports to interfaces of
+  matched devices by connector family and numbering; show them per device.
+  Operational state (link, speed) is display-only and never written.
+- [ ] 2. Create NetBox VLANs (in a site-scoped VLAN group) and prefixes from
+  UniFi networks, with preview and approval.
+- [ ] 3. Read internal port configuration: names, configured enable state,
+  profiles plus overrides resolved to effective native/tagged VLANs (all-VLAN
+  trunks stay explicit `tagged-all`, never expanded), LAG membership.
+- [ ] 4. Write interface configuration (enabled, mode, untagged/tagged VLANs,
+  LAG) with field-level preview and approval; a second apply is a no-op.
+- [ ] 5. Suggest cables only from unambiguous LLDP/uplink evidence, with
+  explicit approval.
+- [ ] Test disabled versus down, unknown profiles, VLAN collisions and
+  numbering; live read-only checks and an approved dev-instance write test.
 
 Acceptance: correct effective configuration, no lifecycle/operational confusion,
 no unsupported writes and no redundant changes on a second apply.
