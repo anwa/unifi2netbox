@@ -10,103 +10,70 @@ See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
-applying selected changes to NetBox. This release checks both API connections;
-actual inventory comparison and writes are not implemented yet.
+applying selected changes to NetBox. Release v0.2.0 only checks both API
+connections. The features below exist on the development branches (M3-M5) and
+are not part of a main release yet; see [CHANGELOG.md](CHANGELOG.md) for the
+version-by-version history.
 
-M3 foundation work has started on `feature/inventory-snapshots`: internal
-read-only paginated inventory readers and normalized timestamped snapshot models
-now exist for NetBox and UniFi Network. Versioned SQLite snapshot state with
-current/previous records and an internal refresh service are now included.
-The service layer now also supports stale/offline cache browsing and
-partial-read diagnostics while keeping all behavior read-only.
-An opt-in sanitized fixture/report export is available for target-PC sharing,
-using deterministic pseudonymization for potentially sensitive identifiers.
-A service-level installed-version capability matrix now tracks ports, profiles,
-overrides, VLAN, PoE, speed/duplex, LAG and LLDP readiness states.
-GUI refresh/snapshot browsing and diagnostics integration follow in later M3
-slices.
-M4 has started with a service-level matching core for identity conflicts,
-confirmed mappings and cross-source deduplication between NetBox and UniFi
-observations.
-M4 now also adds read-only ranked Device Type suggestions for unmatched UniFi
-devices based on existing NetBox manufacturer/model combinations.
-M4 now includes a service-level difference preview model with source/target
-values, provenance, configured/operational field categories, unsupported field
-markers and immutable batch/device/field selection helpers.
-M4 now also includes an immutable change preview dependency model that keeps
-write prerequisites explicit without performing any writes.
-M5 has now started with a read-only write-planning layer that turns approved
-change previews into deterministic create/update operation sequences and
-preflight blockers, still without executing NetBox mutations.
-M5 now also adds one immutable confirmation summary per plan, including
-operation totals, blocker visibility and confirmation-readiness hints.
-M5 now adds an immutable write-journal model for operation outcomes and run
-summary counters, still without performing NetBox mutations.
-M5 now also flags ambiguous successful create outcomes when NetBox object IDs
-are missing or duplicated, keeping manual reconciliation explicit.
-M5 now includes a read-only read-back planner for successful create/update
-operations, preparing deterministic verification reads in later slices.
-The main window now also includes a visible Inventory Preview section and a
-"Refresh Inventory Preview" action to surface M4/M5 service summaries.
-Inventory Preview now also shows structured highlight lines for sample matches,
-conflicts and planned write operations.
-Those highlights are now clickable in the main window and show the selected
-entry in a dedicated detail field.
-When NetBox is still empty or a preview refresh is partial, fallback highlights
-now explain why direct matches are missing.
-Highlights can now be copied directly (single selected line or all lines) for
-ticketing and change-approval notes.
-The GUI also provides a `Show all rows` dialog to inspect the full current
-difference-preview table directly from the main window.
-Inside that dialog, action and executable filters help narrow larger result
-sets without rerunning the refresh.
-Rows that cannot be executed now include a `Reason` value so blockers are
-visible without leaving the dialog.
-Create rows also include `Suggested Device Types` candidates derived from the
-current NetBox device-type catalog.
-For UniFi inventory imports, missing vendor values default to `Ubiquiti` so
-create prerequisites remain actionable when the local API omits manufacturer
-metadata.
-Create rows now also expose a `Device role` dropdown in `Show all rows`, fed
-from NetBox `dcim/device-roles`; the selected role is used for create writes.
-Create rows also expose a `Device site` dropdown in `Show all rows`, fed from
-NetBox `dcim/sites`; the selected site is used for create writes.
-Create rows also expose a `Device status` dropdown in `Show all rows`, fed
-from NetBox `dcim/devices/_choices`; the selected status is used for create
-writes.
-If that choices endpoint is unavailable for a restricted/read-only token,
-status values are inferred from observed NetBox device rows so refresh remains
-successful and the selector can still be populated from existing statuses.
-Create rows also expose a `Device type` dropdown in `Show all rows`, fed from
-the NetBox device-type catalog with explicit IDs. Choosing one passes that
-exact type ID into create execution and avoids ambiguous manufacturer/model
-lookups.
-The rows dialog regression that could hide all row hits after filtering has
-been fixed.
-Matching now runs in passes: confirmed mappings first, then ranked candidate
-checks per UniFi device in this order: normalized name, serial number, MAC
-address. A hit in any pass is a candidate match; multiple hits in the same pass
-are treated as ambiguity conflicts and are not auto-matched.
-Delete proposals for NetBox-only devices are scope-limited by default to the
-active UniFi site context; Settings now provide an explicit option to include
-all NetBox devices in delete proposals.
-Settings also include a default NetBox device role name used by the device-create
-write executor to resolve create prerequisites deterministically.
-The preview section now includes an `Execute write plan` action with one
-confirmation step and an optional `Dry run only` toggle that records outcome
-journal entries without mutating NetBox.
-When NetBox rejects create/update writes, the surfaced error now includes
-parsed NetBox response details (field-level validation where available), not
-only the HTTP status code.
-The `Show all rows` dialog also supports executing one selected executable row,
-which helps when global plan blockers prevent full-batch execution; selecting a
-blocked row reports its specific reason in the status bar.
-The preview also supports exporting full UniFi API feedback as JSON as well as
-exporting the raw UniFi payload for one selected preview row.
-Before each write, NetBox is re-read: an update is skipped if the target device
-was deleted or a selected field changed since the preview, and a create is
-skipped if a device with the same name or serial appeared meanwhile. Refresh the
-preview and review the row before retrying.
+## Current Development Capabilities
+
+### Inventory and snapshots
+
+- Read-only, paginated NetBox and UniFi Network inventory readers normalize
+  devices plus NetBox device types, roles, sites and device statuses.
+- Snapshots are stored in a local SQLite file next to the configuration, with
+  current/previous versions per source. Failed or partial refreshes keep the
+  last good snapshot, mark it stale and report diagnostics.
+- Missing UniFi vendor values default to `Ubiquiti`. If NetBox's device status
+  choices endpoint is unavailable to a restricted token, statuses are inferred
+  from existing devices.
+- Opt-in sanitized fixture/report export pseudonymizes IDs, serials, MAC
+  addresses and site labels. A capability matrix tracks which port, profile,
+  override, VLAN, PoE, speed/duplex, LAG and LLDP fields are verified.
+
+### Matching and preview
+
+- Matching uses confirmed mappings first, then ranked passes per UniFi device:
+  normalized name, serial number, MAC address. Multiple hits in one pass are an
+  ambiguity conflict and are never auto-matched.
+- Unmatched UniFi devices get ranked, explainable Device Type suggestions from
+  existing NetBox manufacturer/model combinations.
+- The difference preview shows source/target values with provenance,
+  configured vs. operational fields and unsupported-field markers, with batch,
+  device and field selection plus explicit write dependencies.
+- NetBox-only devices (delete proposals) are limited to the active UniFi site
+  by default; a setting includes all NetBox devices. Nothing is deleted.
+
+### Main window
+
+- **Refresh Inventory Preview** shows counts and clickable highlight lines
+  (matches, conflicts, planned operations, fallback explanations), with a
+  detail field and **Copy selected** / **Copy all**.
+- **Show all rows** lists every preview row with action and executable-only
+  filters, a `Reason` for blocked rows and `Suggested Device Types`. Create rows
+  offer `Device role`, `Device site`, `Device status` and `Device type`
+  dropdowns fed from the NetBox catalogs; the chosen values (including the exact
+  device-type ID) are used for the create.
+- **Export UniFi API dump** saves the raw UniFi API responses and device rows
+  of the current preview as JSON; **Show all rows** can also export the raw
+  UniFi payload of one selected row. Dumps contain unsanitized inventory data;
+  never commit or share them unreviewed.
+
+### Approved NetBox writes
+
+- Selected previews become an ordered write plan (creates before updates) with
+  preflight blockers and one summary confirmation. Creates need a default
+  NetBox device role in Settings or a per-row role.
+- **Execute write plan** asks once, then writes; **Dry run only** records the
+  outcomes without changing NetBox. A single executable row can also be run from
+  **Show all rows** when other rows block the full plan.
+- Before each write, NetBox is re-read: an update is skipped if the target
+  device was deleted or a selected field changed since the preview, and a
+  create is skipped if a device with the same name or serial appeared
+  meanwhile. Refresh the preview and review the row before retrying.
+- Every operation is journaled as success, failed or skipped. NetBox rejections
+  include parsed field-level details. Ambiguous creates are flagged for manual
+  reconciliation and read-back requests are planned for successful writes.
 
 ## Goals
 
