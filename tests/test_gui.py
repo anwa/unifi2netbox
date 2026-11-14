@@ -567,6 +567,7 @@ def fake_runner(monkeypatch, window):
         dry_run,
         unifi_config=None,
         journal_path=None,
+        network_plan=None,
     ):
         started.update(
             plan=write_plan,
@@ -577,6 +578,7 @@ def fake_runner(monkeypatch, window):
             type=device_type_overrides,
             unifi_config=unifi_config,
             journal_path=journal_path,
+            network_plan=network_plan,
         )
         return True
 
@@ -1226,3 +1228,96 @@ def test_detail_panel_lists_ports_with_notes(qtbot, tmp_path, pool):
     assert notes is not None
     assert "Port 1: UniFi port supports 2.5 Gbit/s" in notes.text()
     assert "PSE mode" in notes.text()
+
+
+def network_result():
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryNetwork
+    from unifi2netbox.networks import build_network_plan
+
+    result = preview_result()
+    plan = build_network_plan(
+        (
+            InventoryNetwork("n1", "IoT", 20, True, "10.0.20.0/24"),
+            InventoryNetwork("n2", "Guest", 60, False, "10.0.60.0/24"),
+        ),
+        (InventorySite("7", "Home"),),
+        (),
+        (),
+        (),
+        site_name="Home",
+    )
+    return replace(result, network_plan=plan)
+
+
+def test_networks_filter_shows_network_table_and_detail(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, network_result())
+
+    assert window.segments["networks"].text() == "Networks 2"
+    assert window.cards["networks"].count == 1
+    window.set_filter("networks")
+
+    assert window.table_stack.currentWidget() is window.network_table
+    model = window.network_model
+    assert [model.data(model.index(r, 1)) for r in range(model.rowCount())] == [
+        "IoT",
+        "Guest",
+    ]
+    assert model.data(model.index(1, 5)) == "Disabled in UniFi"
+    title = window.detail.findChild(QLabel, "detailTitle")
+    assert title.text() == "IoT"
+    vlan_box = window.detail.findChild(QCheckBox, "network_vlan")
+    assert vlan_box is not None and vlan_box.isChecked()
+    assert "Create VLAN 20 'IoT'" in vlan_box.text()
+
+
+def test_network_writes_count_in_apply_bar_and_reach_the_job(
+    qtbot, tmp_path, pool, monkeypatch
+):
+    window = review_window(qtbot, tmp_path, pool, network_result())
+    assert window.execute_plan_button.text() == "Apply 6 changes..."
+    assert "3 network writes" in window.selection_label.text()
+
+    window.set_filter("networks")
+    window.detail.findChild(QCheckBox, "network_prefix").setChecked(False)
+    assert window.execute_plan_button.text() == "Apply 5 changes..."
+
+    started = fake_runner(monkeypatch, window)
+    window.execute_plan_button.click()
+    assert started["network_plan"] is window.review.network_plan
+    assert started["network_plan"].operation_count == 2
+
+
+def test_network_blocker_is_shown_when_no_site_is_set(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.networks import NetworkPlan
+
+    result = replace(
+        preview_result(),
+        network_plan=NetworkPlan(None, (), blocker="Set the NetBox site first."),
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    window.set_filter("networks")
+
+    placeholder = window.detail.findChild(QLabel, "detailPlaceholder")
+    assert (
+        placeholder is not None and placeholder.text() == "Set the NetBox site first."
+    )
+
+
+def test_confirm_dialog_lists_network_writes(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, network_result())
+
+    confirm = ConfirmDialog(
+        window.review,
+        window.review.plan,
+        dry_run=False,
+        network_plan=window.review.network_plan,
+    )
+    qtbot.addWidget(confirm)
+
+    summary = confirm.findChild(QLabel, "confirmSummary").text()
+    assert "1 VLAN" in summary and "1 prefix" in summary and "1 VLAN group" in summary
+    assert confirm.confirm_button.text() == "Apply 6 changes"

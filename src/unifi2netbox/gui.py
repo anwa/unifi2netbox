@@ -71,6 +71,7 @@ from unifi2netbox.gui_review import (
     ConfirmDialog,
     DetailPanel,
     HistoryDialog,
+    NetworkTableModel,
     ReviewTableModel,
     banner,
     device_summary,
@@ -91,6 +92,7 @@ from unifi2netbox.review import (
     CREATE,
     IN_SYNC,
     NETBOX_ONLY,
+    NETWORKS,
     UPDATE,
     ReviewState,
     humanize_timestamp,
@@ -179,10 +181,12 @@ class WriteExecutionJob(QRunnable):
         dry_run: bool,
         unifi_config: UniFiConfig | None = None,
         journal_path: Path | None = None,
+        network_plan=None,
     ) -> None:
         super().__init__()
         self.unifi_config = unifi_config
         self.journal_path = journal_path
+        self.network_plan = network_plan
         self.netbox_config = netbox_config
         self.behavior = behavior
         self.difference_preview = difference_preview
@@ -209,6 +213,7 @@ class WriteExecutionJob(QRunnable):
                 dry_run=self.dry_run,
                 unifi_config=self.unifi_config,
                 journal_path=self.journal_path,
+                network_plan=self.network_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -245,6 +250,7 @@ class WriteExecutionRunner(QObject):
         dry_run: bool,
         unifi_config: UniFiConfig | None = None,
         journal_path: Path | None = None,
+        network_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -260,6 +266,7 @@ class WriteExecutionRunner(QObject):
             dry_run=dry_run,
             unifi_config=unifi_config,
             journal_path=journal_path,
+            network_plan=network_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1178,6 +1185,7 @@ class MainWindow(QMainWindow):
             (IN_SYNC, "in sync"),
             (ATTENTION, "need attention"),
             (NETBOX_ONLY, "only in NetBox"),
+            (NETWORKS, "network changes"),
         ):
             card = SummaryCard(category, caption)
             card.setObjectName(f"card_{category}")
@@ -1189,7 +1197,15 @@ class MainWindow(QMainWindow):
         filters = QHBoxLayout()
         filters.setSpacing(4)
         self.segments: dict[str, QPushButton] = {}
-        for category in (ALL, CREATE, UPDATE, IN_SYNC, ATTENTION, NETBOX_ONLY):
+        for category in (
+            ALL,
+            CREATE,
+            UPDATE,
+            IN_SYNC,
+            ATTENTION,
+            NETBOX_ONLY,
+            NETWORKS,
+        ):
             button = QPushButton(CATEGORY_LABELS[category])
             button.setObjectName(f"filter_{category}")
             button.setCheckable(True)
@@ -1201,7 +1217,7 @@ class MainWindow(QMainWindow):
         filters.addStretch()
         self.search = QLineEdit()
         self.search.setObjectName("deviceSearch")
-        self.search.setPlaceholderText("Filter by name or model")
+        self.search.setPlaceholderText("Filter by name, model, VLAN or subnet")
         self.search.setClearButtonEnabled(True)
         self.search.setFixedWidth(240)
         self.search.textChanged.connect(lambda _t: self.apply_filter())
@@ -1241,6 +1257,42 @@ class MainWindow(QMainWindow):
             )
         )
 
+        self.network_model = NetworkTableModel(self)
+        self.network_model.selection_changed.connect(self.on_selection_changed)
+        self.network_table = QTableView()
+        self.network_table.setObjectName("networkTable")
+        self.network_table.setModel(self.network_model)
+        self.network_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.network_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.network_table.setShowGrid(False)
+        self.network_table.verticalHeader().hide()
+        self.network_table.verticalHeader().setDefaultSectionSize(38)
+        self.network_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        net_badge = BadgeDelegate(self.network_table)
+        self.network_table.setItemDelegateForColumn(4, net_badge)
+        self.network_table.setItemDelegateForColumn(5, net_badge)
+        net_header = self.network_table.horizontalHeader()
+        net_header.setHighlightSections(False)
+        net_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        net_header.resizeSection(0, 36)
+        net_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        net_header.resizeSection(2, 70)
+        net_header.resizeSection(3, 150)
+        net_header.resizeSection(4, 120)
+        net_header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        self.network_table.selectionModel().currentRowChanged.connect(
+            lambda current, _previous: self.show_detail(
+                self.network_model.key_at(current.row())
+            )
+        )
+        self.table_stack = QStackedWidget()
+        self.table_stack.addWidget(self.table)
+        self.table_stack.addWidget(self.network_table)
+
         self.detail = DetailPanel()
         self.detail.setObjectName("detailPanel")
         self.detail.changed.connect(self.on_detail_changed)
@@ -1254,7 +1306,7 @@ class MainWindow(QMainWindow):
         detail_layout.addWidget(self.detail)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.table)
+        splitter.addWidget(self.table_stack)
         splitter.addWidget(detail_frame)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
@@ -1361,17 +1413,11 @@ class MainWindow(QMainWindow):
             self.open_settings()
 
     def update_review(self, keep_key: str = "") -> None:
-        has_rows = bool(self.review.rows())
+        has_rows = bool(self.review.rows() or self.review.network_rows())
         self.pages.setCurrentIndex(1 if has_rows else 0)
-        counts = self.review.counts()
-        for category, card in self.cards.items():
-            card.set_count(counts[category])
-        for category, button in self.segments.items():
-            count = counts[category]
-            name = CATEGORY_LABELS[category]
-            button.setText(f"{name} {count}" if category != ALL else f"{name} {count}")
+        self.network_model.set_state(self.review)
+        self.update_counts_only()
         self.apply_filter(keep_key)
-        self.update_apply_bar()
 
     def set_filter(self, category: str) -> None:
         self.segments[category].setChecked(True)
@@ -1385,6 +1431,29 @@ class MainWindow(QMainWindow):
         )
 
     def apply_filter(self, keep_key: str = "") -> None:
+        if self.current_filter() == NETWORKS:
+            self.table_stack.setCurrentWidget(self.network_table)
+            self.network_model.set_filter(self.search.text())
+            key = keep_key or self.detail.key
+            row = self.network_model.row_of(key) if key else -1
+            if row < 0 and self.network_model.rowCount() > 0:
+                row = 0
+            if row >= 0:
+                self.network_table.selectionModel().setCurrentIndex(
+                    self.network_model.index(row, 1),
+                    QItemSelectionModel.SelectionFlag.ClearAndSelect
+                    | QItemSelectionModel.SelectionFlag.Rows,
+                )
+                self.show_detail(self.network_model.key_at(row))
+            else:
+                plan = self.review.network_plan
+                self.detail.show_placeholder(
+                    plan.blocker
+                    if plan is not None and plan.blocker
+                    else "UniFi reports no networks."
+                )
+            return
+        self.table_stack.setCurrentWidget(self.table)
         key = keep_key or self.detail.key
         self.table_model.set_filter(self.current_filter(), self.search.text())
         row = self.table_model.row_of(key) if key else -1
@@ -1401,7 +1470,9 @@ class MainWindow(QMainWindow):
             self.detail.show_placeholder()
 
     def show_detail(self, key: str) -> None:
-        if key:
+        if key.startswith("network"):
+            self.detail.show_network(self.review, key)
+        elif key:
             self.detail.show_device(self.review, key)
         else:
             self.detail.show_placeholder()
@@ -1409,16 +1480,21 @@ class MainWindow(QMainWindow):
     def on_selection_changed(self) -> None:
         self.update_counts_only()
         if self.detail.key:
-            self.detail.show_device(self.review, self.detail.key)
+            self.show_detail(self.detail.key)
 
     def on_detail_changed(self) -> None:
         self.table_model.refresh_rows()
+        self.network_model.refresh_rows()
         self.update_counts_only()
 
     def update_counts_only(self) -> None:
         counts = self.review.counts()
         for category, card in self.cards.items():
-            card.set_count(counts[category])
+            card.set_count(
+                self.review.network_changes()
+                if category == NETWORKS
+                else counts[category]
+            )
         for category, button in self.segments.items():
             button.setText(f"{CATEGORY_LABELS[category]} {counts[category]}")
         self.update_apply_bar()
@@ -1426,14 +1502,18 @@ class MainWindow(QMainWindow):
     def update_apply_bar(self) -> None:
         busy = self.closing or self.inventory_runner.busy or self.write_runner.busy
         plan = self.review.plan
-        operations = len(plan.operations) if plan is not None else 0
+        network_ops = self.review.network_operation_count()
+        operations = (len(plan.operations) if plan is not None else 0) + network_ops
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
-        self.selection_label.setText(
-            f"{selected} of {selectable} devices selected" if selectable else ""
-        )
+        parts = []
+        if selectable:
+            parts.append(f"{selected} of {selectable} devices selected")
+        if network_ops:
+            parts.append(f"{network_ops} network writes")
+        self.selection_label.setText(", ".join(parts))
         for button in (self.select_all_button, self.select_none_button):
-            button.setVisible(bool(selectable))
+            button.setVisible(bool(selectable or self.review.network_rows()))
         noun = "change" if operations == 1 else "changes"
         self.execute_plan_button.setText(
             f"Dry run {operations} {noun}..."
@@ -1444,6 +1524,12 @@ class MainWindow(QMainWindow):
         self.apply_bar.setVisible(self.pages.currentIndex() == 1)
 
     def select_visible(self, selected: bool) -> None:
+        if self.current_filter() == NETWORKS:
+            for row in self.network_model.items:
+                self.review.set_network_selected(row.key, "all", selected)
+            self.network_model.refresh_rows()
+            self.on_selection_changed()
+            return
         keys = tuple(
             item.key
             for item in self.table_model.items
@@ -1542,7 +1628,9 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Refresh before applying changes.")
             return
         plan = self.review.plan_for(device_key)
-        if plan is None or not plan.operations:
+        network_plan = self.review.network_plan if device_key is None else None
+        network_ops = network_plan.operation_count if network_plan else 0
+        if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
                 if device_key
@@ -1556,6 +1644,7 @@ class MainWindow(QMainWindow):
             dry_run=dry_run,
             single=device_key is not None,
             parent=self,
+            network_plan=network_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -1576,12 +1665,14 @@ class MainWindow(QMainWindow):
             dry_run=dry_run,
             unifi_config=self.unifi.config,
             journal_path=self.journal_path,
+            network_plan=network_plan,
         )
         self.update_check_action()
 
     def write_execution_finished(self, result: WriteExecutionReport) -> None:
         self.review.record_report(result)
         self.table_model.refresh_rows()
+        self.network_model.refresh_rows()
         failed = sum(o.status == "failed" for o in result.outcomes)
         skipped = sum(o.status == "skipped" for o in result.outcomes)
         if result.status == "Error":
@@ -1601,7 +1692,7 @@ class MainWindow(QMainWindow):
             text += " Refresh to compare with the updated NetBox."
         self.set_banner(text, tone, action)
         if self.detail.key:
-            self.detail.show_device(self.review, self.detail.key)
+            self.show_detail(self.detail.key)
         self.statusBar().showMessage(result.details)
         self.update_check_action()
 
@@ -1637,6 +1728,7 @@ class MainWindow(QMainWindow):
             f"In sync: {counts[IN_SYNC]}",
             f"Need attention: {counts[ATTENTION]}",
             f"Only in NetBox: {counts[NETBOX_ONLY]}",
+            f"Network changes: {self.review.network_changes()}",
             *self.last_result.detail_lines,
         ]
         QApplication.clipboard().setText("\n".join(lines))

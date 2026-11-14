@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 from unifi2netbox.config import BehaviorConfig
+from unifi2netbox.networks import NetworkPlan, NetworkPlanRow, select_network
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
     InventoryPreviewRow,
@@ -42,6 +43,7 @@ UPDATE = "update"
 IN_SYNC = "in_sync"
 NETBOX_ONLY = "netbox_only"
 ATTENTION = "attention"
+NETWORKS = "networks"
 ALL = "all"
 
 CATEGORY_LABELS = {
@@ -51,6 +53,7 @@ CATEGORY_LABELS = {
     IN_SYNC: "In sync",
     ATTENTION: "Needs attention",
     NETBOX_ONLY: "NetBox only",
+    NETWORKS: "Networks",
 }
 
 FIELD_LABELS = {
@@ -119,6 +122,8 @@ class ReviewState:
         self.status_by_key: dict[str, str] = {}
         self.unifi_ports = result.unifi_ports if result else ()
         self.netbox_interfaces = result.netbox_interfaces if result else ()
+        self.network_plan: NetworkPlan | None = result.network_plan if result else None
+        self.network_outcomes: dict[str, list[WriteOutcome]] = {}
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -254,7 +259,37 @@ class ReviewState:
         for item in items:
             counts[item.category] += 1
             counts[ATTENTION] += int(item.attention)
+        counts[NETWORKS] = len(self.network_rows())
         return counts
+
+    # -- networks -----------------------------------------------------------
+
+    def network_rows(self, text: str = "") -> tuple[NetworkPlanRow, ...]:
+        if self.network_plan is None:
+            return ()
+        needle = text.strip().lower()
+        return tuple(
+            row
+            for row in self.network_plan.rows
+            if not needle or needle in f"{row.name} {row.vid} {row.subnet}".lower()
+        )
+
+    def network_row(self, key: str) -> NetworkPlanRow | None:
+        return next((row for row in self.network_rows() if row.key == key), None)
+
+    def network_changes(self) -> int:
+        return sum(
+            1
+            for row in self.network_rows()
+            if row.enabled and row.category != "in_sync"
+        )
+
+    def network_operation_count(self) -> int:
+        return self.network_plan.operation_count if self.network_plan else 0
+
+    def set_network_selected(self, key: str, part: str, selected: bool) -> None:
+        if self.network_plan is not None:
+            self.network_plan = select_network(self.network_plan, key, part, selected)
 
     def selected_count(self) -> int:
         return sum(
@@ -321,8 +356,18 @@ class ReviewState:
 
     def record_report(self, report: WriteExecutionReport) -> None:
         self.last_report = report
+        network_keys = {
+            outcome.device_key
+            for outcome in report.outcomes
+            if outcome.device_key.startswith("network")
+        }
+        for key in network_keys:
+            self.network_outcomes[key] = []
         for outcome in report.outcomes:
-            self.outcomes[outcome.device_key] = outcome
+            if outcome.device_key in network_keys:
+                self.network_outcomes[outcome.device_key].append(outcome)
+            else:
+                self.outcomes[outcome.device_key] = outcome
 
     # -- write plans ---------------------------------------------------------
 

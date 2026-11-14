@@ -171,6 +171,8 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- the Networks view lists networks with separate VLAN and prefix checkboxes,
+	counts selected network writes in the apply bar and passes them to the run,
 - network writes run group -> VLANs -> prefixes with UniFi/NetBox re-reads,
 	no duplicates for objects that appeared, lookup of interrupted creates,
 	read-back and dry runs without writes,

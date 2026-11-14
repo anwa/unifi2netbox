@@ -6,6 +6,24 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.5
+
+### Added
+
+- M6 slice 2, review window: a **Networks** filter and summary card show the
+	UniFi networks with VLAN, subnet, change type and status. The detail panel
+	explains what is created or aligned (VLAN group, VLAN, prefix) with separate
+	checkboxes for the VLAN and the prefix, or shows why planning is blocked.
+	Selected network writes count in the apply bar, are listed in the
+	confirmation dialog and run with the device writes; results appear per
+	network.
+
+### Validation
+
+- Added review and GUI tests for network rows, selection, apply counts, the
+	blocker message and the confirmation summary; offscreen render with live
+	data reviewed (16 networks, 31 planned writes).
+
 ## v0.6.4
 
 ### Added

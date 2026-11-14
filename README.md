@@ -52,6 +52,13 @@ history.
   `serial`, `site`). Other differences, such as UniFi model names versus NetBox
   device types, are shown as preview-only. Empty UniFi values never clear
   NetBox values.
+- The **Networks** filter lists the UniFi networks and plans NetBox IPAM for
+  the configured NetBox site: a VLAN group "UniFi <site>", one VLAN per enabled
+  network and a site-scoped prefix per subnet linked to its VLAN. Existing VLAN
+  names are aligned and missing prefix VLANs filled in; conflicts (a prefix
+  linked to another VLAN, duplicate prefixes or VLAN IDs) are shown but never
+  written. Disabled networks are reference-only. Network writes use the same
+  re-read, read-back and history safeguards as device writes.
 - For matched switches, the detail panel lists each UniFi port with its
   NetBox interface (paired by connector kind and number), connector and speed,
   live link state and PoE, plus notes for speed or PoE differences and
