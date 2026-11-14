@@ -6,6 +6,53 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.0.0
+
+### Summary
+
+- First stable release, completing the deployment and platform acceptance
+	milestone (M10). The user authorized the major version on 2026-11-14; M10
+	is released as v1.0.0 instead of the planned v0.11.0.
+- Includes all milestones M1 to M10: NetBox and UniFi Network connections,
+	inventory snapshots, matching and preview, approved NetBox writes with
+	read-back and history, VLANs, prefixes, interfaces and cables, and the
+	optional UniFi Protect, Access and Drive (UNAS) inventories.
+
+### Added
+
+- Per-user Windows installer (Inno Setup): no administrator rights, Start
+	menu entry, in-place upgrades, uninstall keeps settings and data;
+	`tools/build_windows.ps1` builds exe and installer with a bundle check and
+	smoke test.
+- Linux packages: Ubuntu `.deb` (`/opt/unifi2netbox`, launcher, desktop entry,
+	icons) and a standalone tarball, built and smoke-tested by the Packages
+	GitHub Actions workflow.
+- Application icon for windows, taskbar, executable and Linux desktop entry;
+	native Windows title bars follow the app theme.
+- Hidden `--smoke-test` option for packaging checks.
+
+### Fixed
+
+- The Offline Tests workflow now passes on Ubuntu and Windows (it never
+	passed on Ubuntu before because Qt runtime libraries were missing).
+- Header chips stay readable with five connections at the default width.
+
+### Validation
+
+- Offline gate: 540 passed, 2 skipped; Ruff lint and format pass; GitHub
+	Actions Offline Tests and Packages workflows pass.
+- Windows 11 acceptance on the developer workstation: installer install,
+	in-place upgrade and uninstall; the installed app connected to all five
+	services and refreshed the preview read-only; settings were preserved.
+- Linux: verified only offscreen in GitHub Actions (Ubuntu 24.04); a real
+	Linux desktop and Ubuntu/Kubuntu 26.04 are not verified.
+
+### Compatibility
+
+- No configuration change is required. Settings stay in
+	`%LOCALAPPDATA%\unifi2netbox` (Windows) or `~/.config/unifi2netbox`
+	(Linux).
+
 ## v0.10.5
 
 ### Fixed

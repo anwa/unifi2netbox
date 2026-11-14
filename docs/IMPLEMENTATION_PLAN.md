@@ -447,9 +447,13 @@ Gate: suitable Drive API coverage is not yet established. Network client visibil
 is not full hardware inventory. Stop for a decision if no suitable endpoint exists;
 do not substitute SSH or scraping without approval.
 
-### M10: Deployment and Platform Acceptance -> v0.11.0
+### M10: Deployment and Platform Acceptance -> v1.0.0
 
 Branch: `feature/deployment`; follows supported prior milestones.
+
+Status: completed for release v1.0.0. On 2026-11-14 the user explicitly
+approved the merge to main, authorized the major version (v1.0.0 instead of
+the planned v0.11.0) and a public GitHub release with the installers.
 
 Decisions (2026-11-14, user): Windows ships as a per-user Inno Setup installer
 (Start menu entry, in-place upgrades, uninstaller that keeps the per-user
@@ -484,6 +488,8 @@ Slices:
 - [x] Run source and packaged GUI checks on available requested OS versions
   (Windows 11 on the workstation; Ubuntu only offscreen in CI, real Linux
   desktops and Ubuntu/Kubuntu 26.04 stay unverified).
+- [x] Obtain explicit merge approval (2026-11-14); prepare version 1.0.0.
+- [x] Complete the approved main merge and tag its resulting commit v1.0.0.
 
 Acceptance: verified install/start/settings/read/preview workflows. Unavailable
 platforms stay explicitly unverified rather than being marked supported by CI.

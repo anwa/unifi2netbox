@@ -1,8 +1,10 @@
 # unifi2netbox
 
-Latest main release: **v0.10.0**, the UniFi Drive / UNAS inventory milestone (M9).
+Latest main release: **v1.0.0**, the first stable release (M10: deployment and
+platform acceptance). Download the Windows installer or the Ubuntu `.deb` from
+the [GitHub releases](https://github.com/anwa/unifi2netbox/releases).
 
-Release **v0.10.0** compares UniFi Network inventory with NetBox in a modern
+Release **v1.0.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
@@ -16,7 +18,7 @@ version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v0.10.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v1.0.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities
@@ -179,8 +181,8 @@ file content and personal access records are excluded. All UI/code/docs are Engl
 | GUI | PySide6 6.12.0; basic Windows startup verified |
 | NetBox | Community 4.7.x; target 4.7.3 / netbox-docker 5.1.1 |
 | Client | pynetbox 7.9.0 |
-| Windows | Windows 11 25H2/26H2 acceptance targets |
-| Linux | Ubuntu/Kubuntu 26.04 LTS/26.10; not yet tested |
+| Windows | Windows 11; installer, upgrade and read-only workflow accepted on the developer workstation (2026-11-14) |
+| Linux | Ubuntu/Kubuntu 26.04 LTS/26.10 targeted; `.deb` and tarball built and smoke-tested offscreen on Ubuntu 24.04 in CI; real desktop not verified |
 | Network | Network 11.0.99 live-verified read-only on the developer workstation (2026-11-14); 10.6 series accepted per M2 user-reported tests |
 | Protect | UNVR 6.0.11 / Protect 7.3 series; 7.3.74 live-verified read-only plus an approved NetBox write test (2026-11-14) |
 | Access | 4.3.22 (user-reported; the API reports no version); developer API live-verified read-only plus an approved NetBox write test (2026-11-14) |
