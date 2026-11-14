@@ -410,6 +410,36 @@ Report commit, application/Python/OS/NetBox versions and observed results withou
 tokens, raw responses or private inventory. Linux and live checks are not passed
 until executed on the corresponding systems.
 
+## Pre-write Re-read Target PC Acceptance
+
+Version 0.3.34 and later re-read NetBox before each write. This check uses
+live NetBox writes, so limit it to one dedicated test device and run it only
+with explicit opt-in. Use a UniFi device whose NetBox counterpart you may
+change, or a test site. Never use production records you cannot restore.
+
+Use the exact branch commit, reinstall requirements in `.venv` and record
+`python -m unifi2netbox --version` (expect 0.3.36 or later) and
+`git rev-parse HEAD`.
+
+1. Refresh Inventory Preview. In **Show all rows**, pick one matched update row
+	with a selected field (for example `serial`). Note the NetBox device ID.
+2. Without refreshing, change that field for the device in the NetBox web UI.
+3. Enable **Dry run only** and execute the selected row. Expect `skipped` with
+	"NetBox values changed since the preview (serial)". NetBox stays unchanged.
+4. Disable **Dry run only** and execute the same row. Expect the same `skipped`
+	result and no change in NetBox (check the device changelog).
+5. Refresh the preview. The row now shows the new NetBox value. Executing it
+	writes normally and reports `success`.
+6. Pick one create row. Before executing, create a NetBox device with the same
+	name manually. Execute the row: expect `skipped` with "A NetBox device with
+	name '...' now exists (ID ...)" and no second device. Delete your manual test
+	device afterwards in NetBox yourself; the application never deletes.
+7. Optional: for an update row, delete the target device in NetBox before
+	executing. Expect `skipped` with "no longer exists".
+
+Report version, commit and the observed status/message per step. Do not share
+tokens, raw dumps or private inventory in the report.
+
 ## Acceptance Record
 
 On 2026-10-25, the user reported that all online tests passed for the NetBox
