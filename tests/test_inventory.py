@@ -659,3 +659,24 @@ def test_port_config_failure_keeps_the_official_inventory():
 
     assert configs == ()
     assert error == "Port configuration unavailable: permission denied."
+
+
+def test_netbox_interfaces_carry_vlan_assignments_and_lag():
+    from unifi2netbox.inventory import _normalize_netbox_interface
+
+    interface = _normalize_netbox_interface(
+        {
+            "id": 10,
+            "device": {"id": 1},
+            "name": "Port 1",
+            "type": {"value": "1000base-t"},
+            "mode": {"value": "tagged"},
+            "untagged_vlan": {"id": 5},
+            "tagged_vlans": [{"id": 11}, {"id": 7}, {"id": 7}, "bad"],
+            "lag": {"id": 12},
+        }
+    )
+
+    assert (interface.mode, interface.untagged_vlan_id) == ("tagged", "5")
+    assert interface.tagged_vlan_ids == ("7", "11")
+    assert interface.lag_id == "12"

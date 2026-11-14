@@ -100,6 +100,9 @@ class InventoryInterface:
     poe_mode: str = ""
     poe_type: str = ""
     speed_kbps: int = 0
+    untagged_vlan_id: str = ""
+    tagged_vlan_ids: tuple[str, ...] = ()
+    lag_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -271,6 +274,9 @@ def _normalize_netbox_interface(row: dict[str, object]) -> InventoryInterface | 
     if not device_id or not source_id or not name:
         return None
     speed = row.get("speed")
+    tagged = row.get("tagged_vlans")
+    if not isinstance(tagged, list):
+        tagged = []
     return InventoryInterface(
         source_id=source_id,
         device_id=device_id,
@@ -282,7 +288,19 @@ def _normalize_netbox_interface(row: dict[str, object]) -> InventoryInterface | 
         poe_mode=_choice_value(row.get("poe_mode")),
         poe_type=_choice_value(row.get("poe_type")),
         speed_kbps=speed if type(speed) is int and speed > 0 else 0,
+        untagged_vlan_id=_related_id(row.get("untagged_vlan")),
+        tagged_vlan_ids=tuple(
+            sorted(
+                {vlan_id for item in tagged if (vlan_id := _related_id(item))},
+                key=_numeric_key,
+            )
+        ),
+        lag_id=_related_id(row.get("lag")),
     )
+
+
+def _numeric_key(value: str) -> tuple[int, str]:
+    return (int(value), "") if value.isdigit() else (0, value)
 
 
 def _related_id(value: object) -> str:

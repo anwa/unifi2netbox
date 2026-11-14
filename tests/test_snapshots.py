@@ -201,3 +201,31 @@ def test_port_configs_round_trip(tmp_path):
     loaded = store.load_current(InventorySource.UNIFI_NETWORK)
     assert loaded.port_configs == (config,)
     assert loaded.port_config_error == "limited"
+
+
+def test_interface_vlans_round_trip(tmp_path):
+    from unifi2netbox.inventory import (
+        InventoryInterface,
+        InventorySnapshot,
+        InventorySource,
+    )
+
+    interface = InventoryInterface(
+        "10",
+        "1",
+        "Port 1",
+        "1000base-t",
+        mode="tagged",
+        untagged_vlan_id="5",
+        tagged_vlan_ids=("6", "7"),
+        lag_id="12",
+    )
+    snapshot = InventorySnapshot(
+        InventorySource.NETBOX,
+        "2026-11-14T00:00:00+00:00",
+        interfaces=(interface,),
+    )
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    store.save_current(snapshot)
+
+    assert store.load_current(InventorySource.NETBOX).interfaces == (interface,)

@@ -6,6 +6,26 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.8
+
+### Added
+
+- M6 slice 4, planning: NetBox interfaces now carry their untagged VLAN,
+  tagged VLANs and LAG. A new interface plan compares each paired UniFi port of
+  a matched device with its NetBox interface field by field (enabled, 802.1Q
+  mode, untagged VLAN, tagged VLANs). VLANs come only from the site's
+  "UniFi <site>" VLAN group; missing VLANs or a missing group become notes
+  instead of writes. `tagged-all` ports get no VLAN list, leftover tagged VLANs
+  are cleared outside `tagged` mode, disabled ports only change `enabled`,
+  unknown configurations never clear NetBox values, and LAG membership is shown
+  but not written. VLAN fields follow the mode selection.
+
+### Validation
+
+- Added planner tests and an interface VLAN snapshot round trip. Live
+  read-only: 19 interfaces on 2 matched devices planned (13 mode, 6 enabled);
+  VLAN fields wait for the VLAN group as expected.
+
 ## v0.6.7
 
 ### Added

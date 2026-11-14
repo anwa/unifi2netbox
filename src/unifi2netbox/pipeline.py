@@ -12,6 +12,11 @@ from pathlib import Path
 from uuid import uuid4
 
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
+from unifi2netbox.interface_plan import (
+    DevicePair,
+    InterfacePlan,
+    build_interface_plan,
+)
 from unifi2netbox.inventory import (
     InventoryDevice,
     InventoryError,
@@ -35,7 +40,7 @@ from unifi2netbox.matching import (
     suggest_device_types_for_unmatched,
 )
 from unifi2netbox.network_execute import execute_network_plan
-from unifi2netbox.networks import NetworkPlan, build_network_plan
+from unifi2netbox.networks import NetworkPlan, build_network_plan, group_name_for
 from unifi2netbox.port_config import InventoryPortConfig
 from unifi2netbox.preview import (
     ChangePreview,
@@ -92,6 +97,7 @@ class InventoryPreviewResult:
     netbox_interfaces: tuple[InventoryInterface, ...] = ()
     unifi_port_configs: tuple[InventoryPortConfig, ...] = ()
     port_config_error: str = ""
+    interface_plan: InterfacePlan | None = None
     network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
@@ -188,6 +194,15 @@ def build_inventory_preview(
     )
     change = build_change_preview(diff)
     plan = build_write_plan(diff, change, netbox_sites=site_catalog)
+    network_plan = build_network_plan(
+        unifi_snapshot.networks,
+        netbox_snapshot.sites,
+        netbox_snapshot.vlan_groups,
+        netbox_snapshot.vlans,
+        netbox_snapshot.prefixes,
+        site_name=netbox_site_name.strip(),
+        ipam_error=netbox_snapshot.ipam_error,
+    )
 
     return InventoryPreviewResult(
         status="Ready",
@@ -219,14 +234,9 @@ def build_inventory_preview(
         netbox_interfaces=netbox_snapshot.interfaces,
         unifi_port_configs=unifi_snapshot.port_configs,
         port_config_error=unifi_snapshot.port_config_error,
-        network_plan=build_network_plan(
-            unifi_snapshot.networks,
-            netbox_snapshot.sites,
-            netbox_snapshot.vlan_groups,
-            netbox_snapshot.vlans,
-            netbox_snapshot.prefixes,
-            site_name=netbox_site_name.strip(),
-            ipam_error=netbox_snapshot.ipam_error,
+        network_plan=network_plan,
+        interface_plan=_interface_plan(
+            dedup.pairs, netbox_snapshot, mapped_unifi, network_plan, netbox_site_name
         ),
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
@@ -238,6 +248,42 @@ def build_inventory_preview(
         ),
         difference_preview=diff,
         write_plan=plan,
+    )
+
+
+def _interface_plan(
+    pairs,
+    netbox_snapshot: InventorySnapshot,
+    unifi_snapshot: InventorySnapshot,
+    network_plan: NetworkPlan,
+    site_name: str,
+) -> InterfacePlan:
+    """Interface changes for matched devices against the site VLAN group."""
+    names = {device.source_id: device.name for device in unifi_snapshot.devices}
+    device_pairs = []
+    for pair in pairs:
+        unifi_id = pair.unifi_observation_id.split(":", 1)[-1]
+        netbox_id = pair.netbox_observation_id.split(":", 1)[-1]
+        device_pairs.append(
+            DevicePair(
+                f"{pair.unifi_observation_id}->{pair.netbox_observation_id}",
+                names.get(unifi_id, unifi_id),
+                unifi_id,
+                netbox_id,
+            )
+        )
+    group = network_plan.group
+    group_id = group.netbox_id if group is not None else ""
+    group_name = group.name if group is not None else group_name_for(site_name)
+    return build_interface_plan(
+        device_pairs,
+        unifi_snapshot.ports,
+        netbox_snapshot.interfaces,
+        unifi_snapshot.port_configs,
+        netbox_snapshot.vlans,
+        vlan_group_id=group_id,
+        vlan_group_name=group_name,
+        port_config_error=unifi_snapshot.port_config_error,
     )
 
 

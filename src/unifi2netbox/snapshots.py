@@ -217,7 +217,12 @@ def _decode(raw: str) -> InventorySnapshot:
         unifi_api_feedback=tuple(unifi_api_feedback),
         unifi_raw_devices=tuple(unifi_raw_devices),
         ports=tuple(InventoryPort(**item) for item in ports),
-        interfaces=tuple(InventoryInterface(**item) for item in interfaces),
+        interfaces=tuple(
+            InventoryInterface(
+                **item | {"tagged_vlan_ids": tuple(item.get("tagged_vlan_ids", ()))}
+            )
+            for item in interfaces
+        ),
         networks=tuple(InventoryNetwork(**item) for item in networks),
         vlan_groups=tuple(InventoryVlanGroup(**item) for item in vlan_groups),
         vlans=tuple(InventoryVlan(**item) for item in vlans),

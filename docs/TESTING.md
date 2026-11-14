@@ -171,6 +171,10 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- the interface plan compares enabled, mode, untagged and tagged VLANs per
+	paired port, uses only the site VLAN group, turns missing VLANs into notes,
+	never expands `tagged-all`, never clears values for unknown configurations,
+	keeps LAG display-only and ties VLAN fields to the mode selection,
 - the detail panel shows port name and effective configuration per port,
 	the profile as tooltip, resolution notes and why configuration is missing,
 - internal port configuration resolves profiles before overrides, keeps
