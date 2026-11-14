@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b7bf6"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- tile -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="120" rx="56" fill="url(#shine)"/>
+  <!-- UniFi side: a network node (ring with core) -->
+  <circle cx="74" cy="128" r="34" fill="none" stroke="#ffffff" stroke-width="16"/>
+  <circle cx="74" cy="128" r="11" fill="#ffffff"/>
+  <!-- flow towards NetBox -->
+  <path d="M116 128 H136" stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
+  <path d="M128 112 L146 128 L128 144" fill="none" stroke="#ffffff" stroke-width="14"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- NetBox side: a rack with three units -->
+  <rect x="158" y="70" width="64" height="32" rx="9" fill="#ffffff"/>
+  <rect x="158" y="112" width="64" height="32" rx="9" fill="#ffffff"/>
+  <rect x="158" y="154" width="64" height="32" rx="9" fill="#ffffff"/>
+  <circle cx="204" cy="86" r="6" fill="#22c55e"/>
+  <circle cx="204" cy="128" r="6" fill="#22c55e"/>
+  <circle cx="204" cy="170" r="6" fill="#1d4ed8"/>
+</svg>

@@ -145,7 +145,9 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   settings dialog with NetBox/UniFi/sync pages, and a Fusion theme that follows
   the system light/dark mode. Worker jobs only call pipeline functions. Widgets
   opt into styles via dynamic properties (`variant`, `chip`, `badge`, `banner`,
-  `role`); use `theme.set_variant` when changing them at runtime. Render the
+  `role`); use `theme.set_variant` when changing them at runtime.
+  `window_frame.py` sets the app icon (`resources/`, rebuilt by
+  `tools/build_icons.py`) and themes native Windows title bars via DWM. Render the
   GUI offscreen for screenshots with `QT_QPA_FONTDIR=C:/Windows/Fonts`.
 - **Diagnostics** (`capabilities.py`, `reporting.py`): installed-version field
   capability matrix and opt-in sanitized (pseudonymized) fixture/report export.

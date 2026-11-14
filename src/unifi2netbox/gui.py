@@ -116,6 +116,7 @@ from unifi2netbox.review import (
     humanize_timestamp,
     single_operation_plan,
 )
+from unifi2netbox.window_frame import app_icon
 from unifi2netbox.write_plan import WritePlan
 
 # Kept for callers that used the former private helper.
@@ -1302,6 +1303,11 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(header)
         layout.setContentsMargins(20, 10, 14, 10)
         layout.setSpacing(10)
+        logo = QLabel()
+        logo.setObjectName("appLogo")
+        logo.setPixmap(app_icon().pixmap(28, 28))
+        logo.setAccessibleName("unifi2netbox logo")
+        layout.addWidget(logo)
         title = QLabel("unifi2netbox")
         title.setObjectName("appTitle")
         layout.addWidget(title)

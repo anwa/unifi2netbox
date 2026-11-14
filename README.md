@@ -99,6 +99,9 @@ The window follows the system light or dark mode and is organized around one
 workflow: connect, refresh, review, apply. The moon/sun button next to
 **Settings** switches between light and dark; its arrow menu offers **Follow
 system**. The choice is saved as `[ui] theme` (`system`, `light` or `dark`).
+On Windows the native title bars of all windows follow the theme too (dark
+in dark mode; on Windows 11 in the app's own colors, blending into the
+header), and the app has its own icon in title bars, taskbar and executable.
 
 - The header shows a status chip per connection (green online, amber online
   with a security warning, red on errors). Click a chip for endpoint, version,
