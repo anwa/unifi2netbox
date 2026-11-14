@@ -176,3 +176,28 @@ def test_write_plan_is_idempotent_for_same_preview_inputs():
     second = build_write_plan(diff, change)
 
     assert first == second
+
+
+def _create_plan(site, netbox_sites):
+    netbox = snapshot(InventorySource.NETBOX, [])
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="sw", site=site)],
+    )
+    diff = build_difference_preview(netbox, unifi, deduplicate_inventory(netbox, unifi))
+    return build_write_plan(diff, build_change_preview(diff), netbox_sites=netbox_sites)
+
+
+def test_create_with_unknown_netbox_site_gets_warning_not_blocker():
+    plan = _create_plan("Default", frozenset({"Home"}))
+
+    assert plan.executable is True
+    assert [issue.code for issue in plan.issues] == ["unknown_netbox_site"]
+    assert plan.issues[0].severity == IssueSeverity.WARNING
+    assert "Device site" in plan.issues[0].message
+    assert plan.summary.warning_issues == 1
+
+
+def test_create_with_known_site_or_without_catalog_has_no_site_warning():
+    assert _create_plan("Home", frozenset({"Home"})).issues == ()
+    assert _create_plan("Default", None).issues == ()

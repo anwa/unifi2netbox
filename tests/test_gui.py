@@ -378,16 +378,19 @@ def test_settings_save_persists_delete_scope_behavior(qtbot, tmp_path, pool):
     qtbot.addWidget(widget)
     widget.include_all_netbox_delete_candidates.setChecked(True)
     widget.default_device_role_name.setText("Network Device")
+    widget.netbox_site_name.setText("Home")
     widget.save()
 
     assert widget.result() == QDialog.DialogCode.Accepted
     assert widget.saved_behavior_config == BehaviorConfig(
         include_all_netbox_delete_candidates=True,
         default_device_role_name="Network Device",
+        netbox_site_name="Home",
     )
     assert load_behavior_config(path) == BehaviorConfig(
         include_all_netbox_delete_candidates=True,
         default_device_role_name="Network Device",
+        netbox_site_name="Home",
     )
 
 

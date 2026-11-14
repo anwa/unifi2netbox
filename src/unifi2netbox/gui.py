@@ -71,12 +71,14 @@ class InventoryPreviewJob(QRunnable):
         netbox_config: NetBoxConfig,
         unifi_config: UniFiConfig,
         include_all_netbox_delete_candidates: bool,
+        netbox_site_name: str = "",
     ) -> None:
         super().__init__()
         self.config_path = config_path
         self.netbox_config = netbox_config
         self.unifi_config = unifi_config
         self.include_all_netbox_delete_candidates = include_all_netbox_delete_candidates
+        self.netbox_site_name = netbox_site_name
         self.signals = InventoryJobSignals()
 
     @Slot()
@@ -89,6 +91,7 @@ class InventoryPreviewJob(QRunnable):
                 include_all_netbox_delete_candidates=(
                     self.include_all_netbox_delete_candidates
                 ),
+                netbox_site_name=self.netbox_site_name,
             )
         except Exception:
             result = InventoryPreviewResult(
@@ -221,6 +224,7 @@ class InventoryPreviewRunner(QObject):
         unifi: UniFiConfig,
         *,
         include_all_netbox_delete_candidates: bool,
+        netbox_site_name: str = "",
     ) -> bool:
         if self.busy:
             return False
@@ -229,6 +233,7 @@ class InventoryPreviewRunner(QObject):
             netbox,
             unifi,
             include_all_netbox_delete_candidates,
+            netbox_site_name,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -444,6 +449,11 @@ class SettingsDialog(QDialog):
         behavior_form.addRow(
             "Default NetBox device role (create)", self.default_device_role_name
         )
+        self.netbox_site_name = QLineEdit(self.behavior.netbox_site_name)
+        self.netbox_site_name.setPlaceholderText(
+            "Optional; replaces the UniFi site name for matching and writes"
+        )
+        behavior_form.addRow("NetBox site for UniFi devices", self.netbox_site_name)
         layout.addLayout(behavior_form)
         layout.addWidget(plain_label("Local token storage: plaintext"))
         layout.addWidget(plain_label(str(path)))
@@ -483,6 +493,7 @@ class SettingsDialog(QDialog):
                     self.include_all_netbox_delete_candidates.isChecked()
                 ),
                 default_device_role_name=self.default_device_role_name.text().strip(),
+                netbox_site_name=self.netbox_site_name.text().strip(),
             )
             save_connections(self.path, netbox, unifi, behavior)
         except ConfigError as error:
@@ -872,6 +883,7 @@ class MainWindow(QMainWindow):
             include_all_netbox_delete_candidates=(
                 self.behavior.include_all_netbox_delete_candidates
             ),
+            netbox_site_name=self.behavior.netbox_site_name,
         )
         self.update_check_action()
 

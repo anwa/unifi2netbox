@@ -100,6 +100,7 @@ class UniFiConfig(NetBoxConfig):
 class BehaviorConfig:
     include_all_netbox_delete_candidates: bool = False
     default_device_role_name: str = ""
+    netbox_site_name: str = ""
 
     def __post_init__(self) -> None:
         if type(self.include_all_netbox_delete_candidates) is not bool:
@@ -111,6 +112,12 @@ class BehaviorConfig:
         ):
             raise ConfigError(
                 "Default device role name must be a string without control characters."
+            )
+        if not isinstance(self.netbox_site_name, str) or any(
+            ord(character) < 32 for character in self.netbox_site_name
+        ):
+            raise ConfigError(
+                "NetBox site name must be a string without control characters."
             )
 
 

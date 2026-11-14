@@ -5,7 +5,7 @@ The GUI runs these functions inside worker jobs and only renders their results.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -86,8 +86,13 @@ def build_inventory_preview(
     unifi_config: UniFiConfig,
     *,
     include_all_netbox_delete_candidates: bool,
+    netbox_site_name: str = "",
 ) -> InventoryPreviewResult:
-    """Refresh snapshots, match, build the difference preview and write plan."""
+    """Refresh snapshots, match, build the difference preview and write plan.
+
+    A configured ``netbox_site_name`` replaces the UniFi site name of every UniFi
+    device before matching, so previews and writes use the NetBox site.
+    """
     store = SnapshotStore(config_path.with_name(SNAPSHOT_FILENAME))
     refresh = refresh_snapshots(netbox_config, unifi_config, store)
     diagnostics = (*refresh.netbox.diagnostics, *refresh.unifi.diagnostics)
@@ -119,25 +124,34 @@ def build_inventory_preview(
             detail_lines=(detail,),
         )
 
-    dedup = deduplicate_inventory(netbox_snapshot, unifi_snapshot)
+    mapped_unifi = map_unifi_site(unifi_snapshot, netbox_site_name)
+    known_sites = frozenset(
+        item.name.strip() for item in netbox_snapshot.sites if item.name.strip()
+    )
+    # An empty catalog (e.g. no read permission) disables the unknown-site guard.
+    site_catalog = known_sites or None
+
+    dedup = deduplicate_inventory(netbox_snapshot, mapped_unifi)
     dedup, hidden_unmatched_netbox = scope_unmatched_netbox_for_delete(
         dedup,
         netbox_snapshot,
-        unifi_snapshot,
+        mapped_unifi,
         include_all_netbox_delete_candidates=include_all_netbox_delete_candidates,
     )
     suggestions = suggest_device_types_for_unmatched(
-        dedup, netbox_snapshot, unifi_snapshot
+        dedup, netbox_snapshot, mapped_unifi
     )
-    diff = build_difference_preview(netbox_snapshot, unifi_snapshot, dedup)
+    diff = build_difference_preview(
+        netbox_snapshot, mapped_unifi, dedup, netbox_sites=site_catalog
+    )
     change = build_change_preview(diff)
-    plan = build_write_plan(diff, change)
+    plan = build_write_plan(diff, change, netbox_sites=site_catalog)
 
     return InventoryPreviewResult(
         status="Ready",
         details=message or "Inventory preview and write-plan summary updated.",
         netbox_devices=len(netbox_snapshot.devices),
-        unifi_devices=len(unifi_snapshot.devices),
+        unifi_devices=len(mapped_unifi.devices),
         matched_devices=len(dedup.pairs),
         unmatched_unifi=len(dedup.unmatched_unifi),
         unmatched_netbox=len(dedup.unmatched_netbox),
@@ -391,6 +405,19 @@ def scope_unmatched_netbox_for_delete(
             unmatched_netbox=scoped_unmatched,
         ),
         hidden,
+    )
+
+
+def map_unifi_site(
+    snapshot: InventorySnapshot, netbox_site_name: str
+) -> InventorySnapshot:
+    """Replace UniFi site names with the configured NetBox site name."""
+    site = netbox_site_name.strip()
+    if not site:
+        return snapshot
+    return replace(
+        snapshot,
+        devices=tuple(replace(device, site=site) for device in snapshot.devices),
     )
 
 

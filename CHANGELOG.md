@@ -6,6 +6,29 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.39
+
+### Added
+
+- New Settings field `NetBox site for UniFi devices` (`[behavior]
+	netbox_site_name`). When set, it replaces the UniFi site name of every UniFi
+	device before matching, so creates use that NetBox site, matched devices no
+	longer propose site changes and delete scoping compares NetBox sites.
+
+### Fixed
+
+- A UniFi site name that does not exist in NetBox is no longer selected for
+	updates (shown as preview-only with a hint), and create rows using it get an
+	`unknown_netbox_site` warning with the reason in `Show all rows`. The guard
+	is skipped when the NetBox site catalog is empty.
+
+### Validation
+
+- Added config, settings, preview, write-plan and pipeline tests for the site
+	mapping and the unknown-site guard.
+- Live read-only check: without mapping 15 creates with site warnings and no
+	site updates; with the mapping 15 creates without warnings.
+
 ## v0.3.38
 
 ### Changed

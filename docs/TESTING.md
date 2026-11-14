@@ -212,6 +212,9 @@ The focused tests validate that:
 
 - target-only rows are always non-executable,
 - create actions require selected non-empty `name` and `site` values,
+- a configured NetBox site replaces UniFi site names before matching; without
+	it, sites missing in NetBox are never selected for updates and create rows
+	get an `unknown_netbox_site` warning,
 - update rows only preselect writable fields (`name`, `serial`, `site`) with
 	non-empty source values; other changed fields are preview-only,
 - selected `model` updates depend on selected `manufacturer` updates.
@@ -487,4 +490,7 @@ site is chosen per row or a site mapping exists. No write was attempted.
 After 0.3.38 the UniFi connection check reports Online for Network 11.0.99
 (0.47 s first run, 0.02 s second run); the earlier 9.3 s first check did not
 recur.
-
+After 0.3.39 the same live preview without a site mapping plans 15 creates with
+`unknown_netbox_site` warnings and no site updates; with the mapping set to the
+only NetBox site it plans 15 creates without warnings. The mapping was passed in
+the check script; the saved configuration was not changed.

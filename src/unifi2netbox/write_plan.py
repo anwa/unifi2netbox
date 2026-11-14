@@ -57,6 +57,8 @@ class WritePlanSummary:
 def build_write_plan(
     difference_preview: DifferencePreview,
     change_preview: ChangePreview,
+    *,
+    netbox_sites: frozenset[str] | None = None,
 ) -> WritePlan:
     devices = {device.device_key: device for device in difference_preview.devices}
 
@@ -93,6 +95,22 @@ def build_write_plan(
             continue
 
         if item.action == DeviceAction.CREATE:
+            site = next(
+                (field.source_value for field in device.fields if field.name == "site"),
+                "",
+            )
+            if netbox_sites is not None and site and site not in netbox_sites:
+                issues.append(
+                    PreflightIssue(
+                        device_key=item.device_key,
+                        severity=IssueSeverity.WARNING,
+                        code="unknown_netbox_site",
+                        message=(
+                            f"Site '{site}' does not exist in NetBox; choose a "
+                            "Device site for this row or configure the site mapping."
+                        ),
+                    )
+                )
             raw_operations.append(
                 (
                     OperationType.CREATE_DEVICE,

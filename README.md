@@ -41,6 +41,10 @@ version-by-version history.
 - The difference preview shows source/target values with provenance,
   configured vs. operational fields and unsupported-field markers, with batch,
   device and field selection plus explicit write dependencies.
+- **NetBox site for UniFi devices** in Settings maps the UniFi site to an
+  existing NetBox site for matching, creates and delete scoping. Without it, a
+  UniFi site name that does not exist in NetBox is never written by updates and
+  create rows show a warning until a `Device site` is chosen.
 - Update rows preselect only fields the update executor can write (`name`,
   `serial`, `site`). Other differences, such as UniFi model names versus NetBox
   device types, are shown as preview-only. Empty UniFi values never clear

@@ -276,3 +276,27 @@ def test_update_preview_never_selects_empty_source_values():
     assert "NetBox value is kept" in fields["serial"].provenance
     assert fields["site"].selected is True
     assert update.selectable is True
+
+
+def test_update_preview_does_not_select_site_missing_in_netbox():
+    netbox = snapshot(
+        InventorySource.NETBOX,
+        [InventoryDevice(source_id="1", name="sw", site="Home")],
+    )
+    unifi = snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="sw", site="Default")],
+    )
+    preview = build_difference_preview(
+        netbox,
+        unifi,
+        deduplicate_inventory(netbox, unifi),
+        netbox_sites=frozenset({"Home"}),
+    )
+    update = next(d for d in preview.devices if d.action == DeviceAction.UPDATE)
+    site = next(field for field in update.fields if field.name == "site")
+
+    assert site.changed is True
+    assert site.selectable is False
+    assert "does not exist in NetBox" in site.provenance
+    assert update.selectable is False

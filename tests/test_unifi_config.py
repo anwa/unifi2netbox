@@ -133,6 +133,7 @@ def test_behavior_section_roundtrip_and_defaults(tmp_path):
     config = BehaviorConfig(
         include_all_netbox_delete_candidates=True,
         default_device_role_name="Network Device",
+        netbox_site_name="Home",
     )
     save_behavior_config(path, config)
     assert load_behavior_config(path) == config
@@ -143,3 +144,5 @@ def test_invalid_behavior_settings_are_rejected():
         BehaviorConfig(include_all_netbox_delete_candidates="yes")
     with pytest.raises(ConfigError):
         BehaviorConfig(default_device_role_name="bad\nrole")
+    with pytest.raises(ConfigError):
+        BehaviorConfig(netbox_site_name="bad\tsite")

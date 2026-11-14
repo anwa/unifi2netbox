@@ -83,3 +83,56 @@ def test_build_inventory_preview_partial_on_source_error(tmp_path, monkeypatch):
     assert result.write_plan is None
     assert result.difference_preview is None
     assert result.detail_lines
+
+
+def _site_fixture(monkeypatch):
+    netbox = _snapshot(
+        InventorySource.NETBOX,
+        [InventoryDevice(source_id="1", name="switch-a", site="Home")],
+        sites=(InventorySite(source_id="7", name="Home"),),
+    )
+    unifi = _snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [
+            InventoryDevice(source_id="a", name="switch-a", site="Default"),
+            InventoryDevice(source_id="b", name="ap-new", site="Default"),
+        ],
+    )
+    _patch_readers(monkeypatch, lambda c, **kw: netbox, lambda c, **kw: unifi)
+
+
+def test_site_mapping_removes_site_updates_and_sets_create_site(tmp_path, monkeypatch):
+    _site_fixture(monkeypatch)
+
+    result = build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UNIFI,
+        include_all_netbox_delete_candidates=False,
+        netbox_site_name="Home",
+    )
+
+    rows = {row.action: row for row in result.rows}
+    assert rows["update"].selected_fields == ""
+    assert "site" in rows["create"].selected_fields
+    assert result.write_plan.issues == ()
+    create = next(d for d in result.difference_preview.devices if d.action == "create")
+    assert next(f for f in create.fields if f.name == "site").source_value == "Home"
+
+
+def test_unknown_unifi_site_without_mapping_is_not_written(tmp_path, monkeypatch):
+    _site_fixture(monkeypatch)
+
+    result = build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UNIFI,
+        include_all_netbox_delete_candidates=False,
+    )
+
+    rows = {row.action: row for row in result.rows}
+    assert rows["update"].selected_fields == ""
+    assert "does not exist in NetBox" in rows["create"].blocked_reason
+    assert [op.operation_type for op in result.write_plan.operations] == [
+        "create_device"
+    ]

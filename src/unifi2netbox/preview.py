@@ -99,7 +99,10 @@ def build_difference_preview(
     netbox_snapshot: InventorySnapshot | None,
     unifi_snapshot: InventorySnapshot | None,
     result: DeduplicationResult,
+    *,
+    netbox_sites: frozenset[str] | None = None,
 ) -> DifferencePreview:
+    """Build the preview; ``netbox_sites`` enables the unknown-site guard."""
     netbox_by_id = _device_index(netbox_snapshot)
     unifi_by_id = _device_index(unifi_snapshot)
 
@@ -110,7 +113,7 @@ def build_difference_preview(
         target = netbox_by_id.get(pair.netbox_observation_id)
         if source is None or target is None:
             continue
-        fields = _field_previews(source, target)
+        fields = _field_previews(source, target, netbox_sites)
         selectable = any(field.selectable for field in fields)
         selected = any(field.selected for field in fields)
         devices.append(
@@ -321,7 +324,9 @@ def _change_dependencies(
 
 
 def _field_previews(
-    source: InventoryDevice, target: InventoryDevice
+    source: InventoryDevice,
+    target: InventoryDevice,
+    netbox_sites: frozenset[str] | None = None,
 ) -> tuple[FieldPreview, ...]:
     previews: list[FieldPreview] = []
     for field_name, category in _FIELD_SPECS:
@@ -330,12 +335,20 @@ def _field_previews(
         changed = source_value != target_value
         writable = field_name in _UPDATE_WRITABLE_FIELDS
         # Empty source values never clear NetBox; non-writable fields stay visible.
-        selectable = changed and writable and bool(source_value)
+        unknown_site = (
+            field_name == "site"
+            and netbox_sites is not None
+            and bool(source_value)
+            and source_value not in netbox_sites
+        )
+        selectable = changed and writable and bool(source_value) and not unknown_site
         provenance = f"UniFi.{field_name} -> NetBox.{field_name}"
         if changed and not writable:
             provenance += " (preview only; updates do not write this field)"
         elif changed and not source_value:
             provenance += " (source empty; NetBox value is kept)"
+        elif changed and unknown_site:
+            provenance += " (site does not exist in NetBox; configure the site mapping)"
         previews.append(
             FieldPreview(
                 name=field_name,
