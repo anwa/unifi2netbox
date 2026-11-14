@@ -33,6 +33,10 @@ workstation with CPython 3.15.1 and PyInstaller 6.22.3 from a clean working tree
 at the tag; the directory is about 132 MB. The native startup/shutdown test passed
 (1 passed). No live API was exercised by the packaged app.
 
+Release v0.10.0 (tag commit e2c5987) was built on 2026-11-14 the same way from
+a clean working tree at the tag (about 132 MB); the native startup/shutdown
+test passed (1 passed). No live API was exercised by the packaged app.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." src/unifi2netbox/__main__.py
