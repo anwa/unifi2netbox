@@ -371,6 +371,21 @@ approval and conflict handling remains effective.
 
 Branch: `feature/access-inventory`; follows M7.
 
+Decision (2026-11-14, user-approved): Access gets its own optional connection
+(`[unifi_access]`: Access API URL with port 12445 and an Access API token with
+device-read permission). Source precedence for the same MAC: Network, then
+Access, then Protect. Live probe: Access runs on the UDM; the UNVR has none.
+
+Slices:
+
+- [x] 1. Optional Access connection: config section, settings page, chip and
+  read-only device check (0.8.1).
+- [ ] 2. Verify the Access device fields live and read hubs, readers and other
+  hardware into an Access snapshot; never users, logs or door control.
+- [ ] 3. Match and preview Access devices (precedence Network, Access,
+  Protect) and record unsupported hardware fields.
+- [ ] 4. Approved NetBox writes for Access devices and live acceptance.
+
 - [ ] Validate Access 4.3.22 API documentation, console placement and token scopes.
 - [ ] Add supported hubs/readers/equipment, never users, access logs or door control.
 - [ ] Record unsupported hardware fields instead of promising complete coverage.

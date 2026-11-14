@@ -6,6 +6,34 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.8.1
+
+### Added
+
+- M8 slice 1: optional UniFi Access connection. A new `[unifi_access]` section
+  stores the Access API URL (console running Access, port 12445), an Access API
+  token and TLS options, edited on a new **UniFi Access** settings page. The
+  check reads `/api/v1/developer/devices` with a Bearer token (GET only, no
+  redirects, no proxy environment), accepts the grouped or flat device list of
+  the `SUCCESS` envelope and reports rejected tokens, missing APIs (HTML or
+  404) and error codes without echoing secrets.
+
+### Changed
+
+- Settings pages and header chips for optional UniFi applications (Protect,
+  Access) share one description; their chips appear only once a service is
+  configured, and unconfigured required connections read "Not set" so four
+  chips fit. A connection without a reported version shows no version text.
+
+### Validation
+
+- Added Access check tests (online with Bearer token, unconfigured without
+  requests, HTTP and envelope failures, timeout, list shapes, URL rule), a
+  config round trip next to Protect and GUI tests for the settings page and
+  chips. Live read-only: the UNVR answers Access paths with HTML; on the UDM
+  the Access proxy answers JSON 404 and port 12445 answers 401 without an
+  Access token, so Access runs on the UDM and needs its own token.
+
 ## v0.8.0
 
 ### Summary

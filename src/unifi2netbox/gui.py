@@ -1,5 +1,6 @@
 import json
-from dataclasses import asdict
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -47,12 +48,14 @@ from PySide6.QtWidgets import (
 
 from unifi2netbox import theme
 from unifi2netbox.config import (
+    AccessConfig,
     BehaviorConfig,
     ConfigError,
     NetBoxConfig,
     ProtectConfig,
     UiConfig,
     UniFiConfig,
+    load_access_config,
     load_behavior_config,
     load_config,
     load_protect_config,
@@ -64,6 +67,7 @@ from unifi2netbox.config import (
 from unifi2netbox.connections import (
     Checker,
     ConnectionRunner,
+    check_access_connection,
     check_protect_connection,
     check_unifi_connection,
 )
@@ -359,6 +363,51 @@ def plain_label(text: str = "", role: str = "") -> QLabel:
     return label
 
 
+@dataclass(frozen=True)
+class OptionalService:
+    """Texts and config type of an optional UniFi application connection."""
+
+    key: str
+    name: str
+    short: str
+    description: str
+    placeholder: str
+    token_label: str
+    details: str
+    config_type: type
+    loader: Callable[[Path], NetBoxConfig]
+
+
+OPTIONAL_SERVICES = {
+    "protect": OptionalService(
+        "protect",
+        "UniFi Protect",
+        "Protect",
+        "Optional. Console running UniFi Protect, for example a UNVR. Use a "
+        "local integration API key created on that console. Protect is only "
+        "read; recordings and streams are never accessed.",
+        "https://unvr.example.lan",
+        "Local API key",
+        "Optional. Set the URL and local API key of the console running UniFi Protect.",
+        ProtectConfig,
+        load_protect_config,
+    ),
+    "access": OptionalService(
+        "access",
+        "UniFi Access",
+        "Access",
+        "Optional. UniFi Access API of the console running Access, with port "
+        "12445. Create an API token in the Access app with device-read "
+        "permission only. Only devices are read; users, logs and doors never.",
+        "https://unifi.example.lan:12445",
+        "API token",
+        "Optional. Set the Access API URL (port 12445) and an Access API token.",
+        AccessConfig,
+        load_access_config,
+    ),
+}
+
+
 class ConnectionSettingsForm(QWidget):
     changed = Signal()
 
@@ -371,12 +420,14 @@ class ConnectionSettingsForm(QWidget):
         *,
         unifi: bool = False,
         protect: bool = False,
+        service: str = "",
         sites: tuple[tuple[str, str], ...] = (),
     ) -> None:
         super().__init__(parent)
-        self.is_unifi = unifi and not protect
-        self.is_protect = protect
-        unifi = unifi or protect
+        self.service = OPTIONAL_SERVICES.get(service or ("protect" if protect else ""))
+        self.is_unifi = unifi and self.service is None
+        self.is_protect = self.service is not None and self.service.key == "protect"
+        unifi = unifi or self.service is not None
         self.state = ConnectionState.UNCONFIGURED
         self.runner = ConnectionRunner(pool, checker, self)
         self.runner.finished.connect(self.test_finished)
@@ -384,16 +435,14 @@ class ConnectionSettingsForm(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
-        heading = "UniFi Protect" if protect else "UniFi Network" if unifi else "NetBox"
+        svc = self.service
+        heading = svc.name if svc else "UniFi Network" if unifi else "NetBox"
         layout.addWidget(plain_label(heading, "heading"))
         layout.addWidget(
             plain_label(
                 (
-                    "Optional. Console running UniFi Protect, for example a UNVR. "
-                    "Use a local integration API key created on that console. "
-                    "Protect is only read; recordings and streams are never "
-                    "accessed."
-                    if protect
+                    svc.description
+                    if svc
                     else "Local console of your UniFi Network application. Use a "
                     "local integration API key; cloud keys do not work."
                     if unifi
@@ -407,15 +456,20 @@ class ConnectionSettingsForm(QWidget):
         form.setVerticalSpacing(10)
         self.url = QLineEdit(config.url)
         self.url.setPlaceholderText(
-            "https://unvr.example.lan"
-            if protect
+            svc.placeholder
+            if svc
             else "https://unifi.example.lan"
             if unifi
             else "https://netbox.example.lan"
         )
         self.token = QLineEdit(config.token)
         self.token.setEchoMode(QLineEdit.EchoMode.Password)
-        self.show_token = QCheckBox("Show API key" if unifi else "Show token")
+        token_label = (
+            svc.token_label if svc else "Local API key" if unifi else "API token"
+        )
+        self.show_token = QCheckBox(
+            "Show API key" if "key" in token_label else "Show token"
+        )
         self.show_token.toggled.connect(
             lambda shown: self.token.setEchoMode(
                 QLineEdit.EchoMode.Normal if shown else QLineEdit.EchoMode.Password
@@ -441,7 +495,7 @@ class ConnectionSettingsForm(QWidget):
         self.timeout.setSuffix(" s")
         self.timeout.setValue(config.timeout)
         form.addRow("Base URL", self.url)
-        form.addRow("Local API key" if unifi else "API token", self.token)
+        form.addRow(token_label, self.token)
         form.addRow("", self.show_token)
         self.site = QComboBox(self)
         self.site.setEditable(True)
@@ -490,8 +544,8 @@ class ConnectionSettingsForm(QWidget):
         )
         if self.is_unifi:
             return UniFiConfig(**asdict(config), site=self.site_value())
-        if self.is_protect:
-            return ProtectConfig(**asdict(config))
+        if self.service is not None:
+            return self.service.config_type(**asdict(config))
         return config
 
     def site_value(self) -> str:
@@ -541,7 +595,13 @@ class ConnectionSettingsForm(QWidget):
 
 
 class SettingsDialog(QDialog):
-    PAGES = ("NetBox", "UniFi Network", "UniFi Protect", "Sync defaults")
+    PAGES = (
+        "NetBox",
+        "UniFi Network",
+        "UniFi Protect",
+        "UniFi Access",
+        "Sync defaults",
+    )
 
     def __init__(
         self,
@@ -556,12 +616,15 @@ class SettingsDialog(QDialog):
         sites: tuple[tuple[str, str], ...] = (),
         protect_config: ProtectConfig | None = None,
         protect_checker: Checker = check_protect_connection,
+        access_config: AccessConfig | None = None,
+        access_checker: Checker = check_access_connection,
     ) -> None:
         super().__init__(parent)
         self.path = path
         self.saved_config: NetBoxConfig | None = None
         self.saved_unifi_config: UniFiConfig | None = None
         self.saved_protect_config: ProtectConfig | None = None
+        self.saved_access_config: AccessConfig | None = None
         self.saved_behavior_config: BehaviorConfig | None = None
         self.close_pending = False
         try:
@@ -587,6 +650,14 @@ class SettingsDialog(QDialog):
                 protect_config = ProtectConfig()
         self.protect = ConnectionSettingsForm(
             protect_config, pool, protect_checker, protect=True
+        )
+        if access_config is None:
+            try:
+                access_config = load_access_config(path)
+            except ConfigError:
+                access_config = AccessConfig()
+        self.access = ConnectionSettingsForm(
+            access_config, pool, access_checker, service="access"
         )
         sync_page = QWidget()
         sync = QVBoxLayout(sync_page)
@@ -641,7 +712,7 @@ class SettingsDialog(QDialog):
         self.nav.setFixedWidth(170)
         self.nav.addItems(list(self.PAGES))
         self.pages = QStackedWidget()
-        for page in (self.netbox, self.unifi, self.protect, sync_page):
+        for page in (self.netbox, self.unifi, self.protect, self.access, sync_page):
             self.pages.addWidget(page)
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.nav.setCurrentRow(0)
@@ -681,6 +752,7 @@ class SettingsDialog(QDialog):
         self.netbox.changed.connect(self.update_activity)
         self.unifi.changed.connect(self.update_activity)
         self.protect.changed.connect(self.update_activity)
+        self.access.changed.connect(self.update_activity)
 
     def show_page(self, name: str) -> None:
         if name in self.PAGES:
@@ -692,6 +764,7 @@ class SettingsDialog(QDialog):
             self.netbox.runner.busy
             or self.unifi.runner.busy
             or self.protect.runner.busy
+            or self.access.runner.busy
         )
 
     def save(self) -> None:
@@ -705,6 +778,9 @@ class SettingsDialog(QDialog):
             protect = self.protect.config_from_fields()
             if not isinstance(protect, ProtectConfig):
                 raise ConfigError("Protect settings are invalid.")
+            access = self.access.config_from_fields()
+            if not isinstance(access, AccessConfig):
+                raise ConfigError("Access settings are invalid.")
             behavior = BehaviorConfig(
                 include_all_netbox_delete_candidates=(
                     self.include_all_netbox_delete_candidates.isChecked()
@@ -712,13 +788,14 @@ class SettingsDialog(QDialog):
                 default_device_role_name=self.default_device_role_name.text().strip(),
                 netbox_site_name=self.netbox_site_name.text().strip(),
             )
-            save_connections(self.path, netbox, unifi, behavior, protect)
+            save_connections(self.path, netbox, unifi, behavior, protect, access)
         except ConfigError as error:
             self.outcome.setText(str(error))
             return
         self.saved_config = netbox
         self.saved_unifi_config = unifi
         self.saved_protect_config = protect
+        self.saved_access_config = access
         self.saved_behavior_config = behavior
         self.accept()
 
@@ -728,6 +805,7 @@ class SettingsDialog(QDialog):
         self.netbox.test_connection()
         self.unifi.test_connection()
         self.protect.test_connection()
+        self.access.test_connection()
         self.update_activity()
 
     def update_activity(self) -> None:
@@ -738,6 +816,7 @@ class SettingsDialog(QDialog):
         self.outcome.setText(
             f"NetBox: {self.netbox.state}\nUniFi Network: {self.unifi.state}"
             f"\nUniFi Protect: {self.protect.state}"
+            f"\nUniFi Access: {self.access.state}"
         )
         if self.close_pending and not busy:
             super().reject()
@@ -772,37 +851,35 @@ class ConnectionPanel(QFrame):
         *,
         unifi: bool = False,
         protect: bool = False,
+        service: str = "",
     ) -> None:
         super().__init__()
         self.path = config_path
         self.pool = pool
         self.checker = checker
-        self.is_unifi = unifi and not protect
-        self.is_protect = protect
+        self.service = OPTIONAL_SERVICES.get(service or ("protect" if protect else ""))
+        self.is_unifi = unifi and self.service is None
+        self.is_protect = self.service is not None and self.service.key == "protect"
         self.closing = False
         self.pending_check = False
         self.site_choices = ()
-        self.name = (
-            "UniFi Protect" if protect else "UniFi Network" if unifi else "NetBox"
-        )
+        svc = self.service
+        self.name = svc.name if svc else "UniFi Network" if unifi else "NetBox"
+
         self.runner = ConnectionRunner(pool, checker, self)
         self.runner.finished.connect(self.connection_finished)
         self.config_error = ""
         try:
             self.config = (
-                load_protect_config(config_path)
-                if protect
+                svc.loader(config_path)
+                if svc
                 else load_unifi_config(config_path)
                 if unifi
                 else load_config(config_path)
             )
         except ConfigError as error:
             self.config = (
-                ProtectConfig()
-                if protect
-                else UniFiConfig()
-                if unifi
-                else NetBoxConfig()
+                svc.config_type() if svc else UniFiConfig() if unifi else NetBoxConfig()
             )
             self.config_error = str(error)
 
@@ -838,9 +915,8 @@ class ConnectionPanel(QFrame):
         grid.setColumnStretch(1, 1)
         layout.addLayout(grid)
         self.details = plain_label(
-            "Optional. Set the URL and local API key of the console running "
-            "UniFi Protect."
-            if protect
+            svc.details
+            if svc
             else "Set a console URL and local API key."
             if unifi
             else "Set a NetBox URL and API token.",
@@ -865,11 +941,20 @@ class ConnectionPanel(QFrame):
 
     def summary(self) -> str:
         """Short chip text, for example 'NetBox 4.7.3' or 'UniFi · Offline'."""
-        short = "Protect" if self.is_protect else "UniFi" if self.is_unifi else "NetBox"
+        short = (
+            self.service.short
+            if self.service
+            else "UniFi"
+            if self.is_unifi
+            else "NetBox"
+        )
         state = self.current_state
-        if self.is_protect and state == ConnectionState.UNCONFIGURED:
-            return "Protect · Off"
+        if state == ConnectionState.UNCONFIGURED:
+            # Short chip text; the panel still shows the full state.
+            return f"{short} · {'Off' if self.service is not None else 'Not set'}"
         version_text = self.server_version.text()
+        if version_text in ("Not available", "Not checked"):
+            version_text = ""
         if state == ConnectionState.ONLINE:
             text = f"{short} {version_text}".strip()
             if self.is_unifi and self.selected_site.text() not in ("", "Not selected"):
@@ -970,6 +1055,8 @@ class ConnectionChip(QToolButton):
         font.setBold(True)
         self.setFont(font)
         self.setText(f"●  {self.panel.summary()}")
+        # Optional services (Protect, Access) only take header space once set.
+        self.setVisible(self.panel.service is None or self.panel.config.configured)
         self.updateGeometry()
         self.adjustSize()
         tip = self.panel.details.text()
@@ -1023,6 +1110,7 @@ class MainWindow(QMainWindow):
         open_first_run: bool = True,
         unifi_checker: Checker = check_unifi_connection,
         protect_checker: Checker = check_protect_connection,
+        access_checker: Checker = check_access_connection,
     ) -> None:
         super().__init__()
         self.path = config_path
@@ -1046,6 +1134,9 @@ class MainWindow(QMainWindow):
         self.netbox = ConnectionPanel(config_path, pool, checker)
         self.unifi = ConnectionPanel(config_path, pool, unifi_checker, unifi=True)
         self.protect = ConnectionPanel(config_path, pool, protect_checker, protect=True)
+        self.access = ConnectionPanel(
+            config_path, pool, access_checker, service="access"
+        )
         self.setWindowTitle(f"unifi2netbox {version('unifi2netbox')}")
         self.resize(1180, 760)
         self.setMinimumSize(860, 560)
@@ -1079,7 +1170,7 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_apply_bar())
         self.setCentralWidget(central)
 
-        for panel in (self.netbox, self.unifi, self.protect):
+        for panel in (self.netbox, self.unifi, self.protect, self.access):
             panel.idle.connect(self.finish_close)
             panel.activity_changed.connect(self.update_check_action)
             panel.status_changed.connect(self.update_empty_state)
@@ -1153,6 +1244,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.netbox_chip)
         layout.addWidget(self.unifi_chip)
         layout.addWidget(self.protect_chip)
+        self.access_chip = ConnectionChip(self.access, header)
+        self.access_chip.setObjectName("accessChip")
+        layout.addWidget(self.access_chip)
         layout.addStretch()
         check = QToolButton()
         check.setDefaultAction(self.check_action)
@@ -1784,6 +1878,8 @@ class MainWindow(QMainWindow):
             sites=self.unifi.site_choices,
             protect_config=self.protect.config,
             protect_checker=self.protect.checker,
+            access_config=self.access.config,
+            access_checker=self.access.checker,
         )
         if page:
             dialog.show_page(page)
@@ -1796,6 +1892,8 @@ class MainWindow(QMainWindow):
             self.unifi.apply_config(dialog.saved_unifi_config)
             if dialog.saved_protect_config is not None:
                 self.protect.apply_config(dialog.saved_protect_config)
+            if dialog.saved_access_config is not None:
+                self.access.apply_config(dialog.saved_access_config)
             if dialog.saved_behavior_config is not None:
                 self.behavior = dialog.saved_behavior_config
                 self.review.behavior = self.behavior
@@ -1809,6 +1907,7 @@ class MainWindow(QMainWindow):
         self.netbox.recheck()
         self.unifi.recheck()
         self.protect.recheck()
+        self.access.recheck()
 
     # -- refresh ---------------------------------------------------------------
 
@@ -2051,6 +2150,7 @@ class MainWindow(QMainWindow):
             self.netbox.runner.busy
             or self.unifi.runner.busy
             or self.protect.runner.busy
+            or self.access.runner.busy
         )
         self.settings_action.setEnabled(not self.closing)
         self.check_action.setEnabled(not self.closing and not connections_busy)
@@ -2072,6 +2172,7 @@ class MainWindow(QMainWindow):
             self.netbox.runner.busy
             or self.unifi.runner.busy
             or self.protect.runner.busy
+            or self.access.runner.busy
             or self.inventory_runner.busy
             or self.write_runner.busy
         ):
@@ -2082,11 +2183,13 @@ class MainWindow(QMainWindow):
         self.netbox.stop_for_close()
         self.unifi.stop_for_close()
         self.protect.stop_for_close()
+        self.access.stop_for_close()
         self.update_check_action()
         if (
             self.netbox.runner.busy
             or self.unifi.runner.busy
             or self.protect.runner.busy
+            or self.access.runner.busy
             or self.inventory_runner.busy
             or self.write_runner.busy
         ):

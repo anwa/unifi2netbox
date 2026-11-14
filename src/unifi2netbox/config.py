@@ -109,6 +109,16 @@ class ProtectConfig(NetBoxConfig):
 
 
 @dataclass(frozen=True)
+class AccessConfig(NetBoxConfig):
+    """UniFi Access developer API (console URL with port 12445); optional."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.url and "/api/" in urlsplit(self.url).path + "/":
+            raise ConfigError("Enter the Access API base URL, without /api.")
+
+
+@dataclass(frozen=True)
 class BehaviorConfig:
     include_all_netbox_delete_candidates: bool = False
     default_device_role_name: str = ""
@@ -159,6 +169,10 @@ def load_protect_config(path: Path) -> ProtectConfig:
 
 def save_protect_config(path: Path, config: ProtectConfig) -> None:
     _save_sections(path, {"unifi_protect": config})
+
+
+def load_access_config(path: Path) -> AccessConfig:
+    return _load_section(path, "unifi_access", AccessConfig)
 
 
 def load_behavior_config(path: Path) -> BehaviorConfig:
@@ -220,12 +234,15 @@ def save_connections(
     unifi: UniFiConfig,
     behavior: BehaviorConfig | None = None,
     protect: ProtectConfig | None = None,
+    access: AccessConfig | None = None,
 ) -> None:
     sections: dict[str, object] = {"netbox": netbox, "unifi_network": unifi}
     if behavior is not None:
         sections["behavior"] = behavior
     if protect is not None:
         sections["unifi_protect"] = protect
+    if access is not None:
+        sections["unifi_access"] = access
     _save_sections(path, sections)
 
 

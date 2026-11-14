@@ -21,6 +21,17 @@ all three succeed with a validated Protect series (7.3). A console without
 Protect answers these paths with its HTML page; this is reported as
 Unsupported. Recordings, snapshots and streams are never requested.
 
+## UniFi Access Configuration
+
+The optional `[unifi_access]` section stores the Access API base URL of the
+console running Access including port 12445 (for example
+`https://unifi.example.lan:12445`), an Access API token, TLS verification,
+private CA path and timeout. Create the token in the Access app with
+device-read permission only; the app reads devices only, even if the token
+allows more. The check sends one GET to `/api/v1/developer/devices` with
+`Authorization: Bearer <token>`; Online means a `SUCCESS` envelope with a
+device list.
+
 The first milestone supports NetBox 4.7.x through pynetbox 7.9.0. It performs
 GET requests only, first to `/api/status/`, then `/api/dcim/devices/?limit=1`.
 The second request checks actual inventory access, including an empty inventory.

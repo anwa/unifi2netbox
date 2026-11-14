@@ -107,6 +107,20 @@ name only; the manufacturer must not be assumed.
 | `/proxy/protect/integration/v1/nvrs` | NVR read access |
 | `/proxy/protect/integration/v1/cameras` | Camera read access |
 
+## UniFi Access Connection Gate (M8)
+
+Read-only probe on 2026-11-14 (assistant-executed, application 0.8.0): the UNVR
+answers `/proxy/access/...` with its HTML page (no Access); the UDM answers
+`/proxy/access/...` with JSON 404 errors and `https://<udm>:12445/api/v1/developer/devices`
+with HTTP 401 when called without an Access token. Access therefore runs on
+the UDM and needs an Access API token created in the Access app; the Network
+key is not accepted. The developer API reports no application version, so the
+user-reported Access 4.3.22 is recorded instead of a version gate.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `https://<console>:12445/api/v1/developer/devices` | Device read access (Bearer token, `SUCCESS` envelope, devices grouped per hub) |
+
 ## Installed-Version Field Capability Matrix
 
 M3 now provides a service-level matrix builder for installed-version capability

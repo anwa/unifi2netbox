@@ -263,7 +263,9 @@ A blank site permits discovery of a single accessible site; multiple sites requi
 explicit selection. UniFi Protect is optional and uses `[unifi_protect]` with the
 `url`, `token` (local API key of the Protect console), `verify_tls`, `ca_bundle`
 and `timeout` of the console running Protect, which may differ from the Network
-console.
+console. UniFi Access is optional too and uses `[unifi_access]` with the Access
+API URL (port 12445 of the console running Access) and an Access API token
+with device-read permission. Optional services show a header chip once set.
 
 - Windows: `%LOCALAPPDATA%\unifi2netbox\config.toml`.
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/unifi2netbox/config.toml`.

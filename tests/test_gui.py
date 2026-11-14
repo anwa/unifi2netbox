@@ -1625,3 +1625,88 @@ def test_role_placeholder_is_shown_when_no_role_is_chosen(qtbot, tmp_path, pool)
     assert window.review.role_by_key[key] == "Switch"
     role.setCurrentIndex(0)
     assert key not in window.review.role_by_key
+
+
+def test_access_settings_page_saves_its_own_section(qtbot, tmp_path, pool):
+    from unifi2netbox.config import AccessConfig, load_access_config
+
+    seen = []
+
+    def access_online(config):
+        seen.append(config)
+        return ConnectionResult(ConnectionState.ONLINE, "Synthetic Access read.")
+
+    path = tmp_path / "config.toml"
+    widget = SettingsDialog(
+        path,
+        NetBoxConfig(),
+        pool,
+        online,
+        unifi_config=UniFiConfig(),
+        unifi_checker=unifi_online,
+        access_checker=access_online,
+    )
+    qtbot.addWidget(widget)
+    widget.show_page("UniFi Access")
+    assert widget.pages.currentWidget() is widget.access
+    assert widget.access.show_token.text() == "Show token"
+    widget.access.url.setText("https://udm.invalid:12445/")
+    widget.access.token.setText("access-synthetic")
+    widget.test_connections()
+    qtbot.waitUntil(lambda: not widget.busy)
+    assert isinstance(seen[0], AccessConfig)
+    assert "UniFi Access: Online" in widget.outcome.text()
+    widget.save()
+
+    assert load_access_config(path) == AccessConfig(
+        "https://udm.invalid:12445", "access-synthetic"
+    )
+
+
+def test_access_chip_is_off_until_configured(qtbot, tmp_path, pool):
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+    )
+    qtbot.addWidget(window)
+
+    assert window.access_chip.text().endswith("Access · Off")
+    assert window.protect_chip.text().endswith("Protect · Off")
+    assert window.access_chip.isHidden() and window.protect_chip.isHidden()
+    assert not window.netbox_chip.isHidden()
+
+
+def test_unconfigured_chips_stay_short(qtbot, tmp_path, pool):
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+    )
+    qtbot.addWidget(window)
+
+    assert window.netbox_chip.text().endswith("NetBox · Not set")
+    assert window.unifi_chip.text().endswith("UniFi · Not set")
+    assert window.netbox.state.text() == "Unconfigured"
+
+
+def test_optional_chip_appears_once_configured(qtbot, tmp_path, pool):
+    from unifi2netbox.config import AccessConfig
+
+    window = MainWindow(
+        tmp_path / "config.toml",
+        pool,
+        open_first_run=False,
+        unifi_checker=unifi_online,
+        access_checker=lambda config: ConnectionResult(
+            ConnectionState.ONLINE, "Synthetic."
+        ),
+    )
+    qtbot.addWidget(window)
+    window.access.apply_config(AccessConfig("https://udm.invalid:12445", "t"))
+    qtbot.waitUntil(lambda: not window.access.runner.busy)
+
+    assert not window.access_chip.isHidden()
+    assert window.access_chip.text().endswith("Access")

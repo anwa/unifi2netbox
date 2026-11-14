@@ -112,3 +112,26 @@ def test_missing_protect_section_is_unconfigured(tmp_path):
     )
 
     assert not load_protect_config(path).configured
+
+
+def test_access_section_round_trips_next_to_protect(tmp_path):
+    from unifi2netbox.config import (
+        AccessConfig,
+        ProtectConfig,
+        load_access_config,
+        load_protect_config,
+    )
+
+    path = tmp_path / "config.toml"
+    protect = ProtectConfig("https://unvr.invalid", "pr")
+    access = AccessConfig("https://udm.invalid:12445", "ac", verify_tls=False)
+    save_connections(
+        path,
+        NetBoxConfig("https://netbox.invalid", "nb"),
+        UniFiConfig("https://udm.invalid", "uf"),
+        protect=protect,
+        access=access,
+    )
+
+    assert load_access_config(path) == access
+    assert load_protect_config(path) == protect

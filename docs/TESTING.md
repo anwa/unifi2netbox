@@ -176,6 +176,10 @@ The focused tests validate that:
 - cable creates re-check UniFi evidence and both interfaces, treat an
 	existing joining cable as done, never replace other cables, look up
 	interrupted creates, read back every cable and write nothing in dry runs,
+- the optional Access connection reads devices with a Bearer token and GET
+	only, never contacts a console while unconfigured, reports rejected tokens,
+	missing APIs and error envelopes, and keeps its own config section;
+	optional chips stay hidden until configured,
 - fresh Protect devices join matching with prefixed IDs and MAC dedup
 	against Network, stale ones never do, the pre-write re-read merges Protect
 	and tolerates its failure, Protect creates never inherit the default role,

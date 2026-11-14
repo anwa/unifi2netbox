@@ -67,8 +67,9 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
 - **Config** (`config.py`): TOML via `tomllib` + `tomlkit` (comment-preserving,
   atomic writes). Sections `[netbox]`, `[unifi_network]`, plus behavior settings.
   Default path from `platformdirs.user_config_path`, outside the repo.
-  Optional `[unifi_protect]` (own console URL and key) for UniFi Protect.
-- **Connection checks** (`netbox.py`, `unifi.py`, `protect.py`,
+  Optional `[unifi_protect]` (own console URL and key) for UniFi Protect and
+  `[unifi_access]` (Access API URL with port 12445 and Access token).
+- **Connection checks** (`netbox.py`, `unifi.py`, `protect.py`, `access.py`,
   `connections.py`): NetBox via pynetbox over a `ReadOnlySession` that only
   permits GET; UniFi Network and Protect via httpx against the official local
   integration APIs (read-only, no proxy env, no redirect or login fallback).
