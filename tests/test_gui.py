@@ -569,6 +569,7 @@ def fake_runner(monkeypatch, window):
         journal_path=None,
         network_plan=None,
         interface_plan=None,
+        cable_plan=None,
     ):
         started.update(
             plan=write_plan,
@@ -581,6 +582,7 @@ def fake_runner(monkeypatch, window):
             journal_path=journal_path,
             network_plan=network_plan,
             interface_plan=interface_plan,
+            cable_plan=cable_plan,
         )
         return True
 
@@ -1477,3 +1479,80 @@ def test_confirm_dialog_lists_interface_writes(qtbot, tmp_path, pool):
     qtbot.addWidget(confirm)
 
     assert "1 interface" in confirm.findChild(QLabel, "confirmSummary").text()
+
+
+def cable_result():
+    from dataclasses import replace
+
+    from unifi2netbox.cables import build_cable_plan
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+    from unifi2netbox.links import LLDP, UPLINK, InventoryLink
+
+    plan = build_cable_plan(
+        (
+            InventoryLink("rps", 1, "udm", 5, UPLINK),
+            InventoryLink("udm", 5, "rps", None, LLDP),
+            InventoryLink("sw", 3, "udm", 4, UPLINK),
+        ),
+        {"udm": "UDM", "rps": "RPS", "sw": "SW"},
+        {"udm": "1", "rps": "2"},
+        (InventoryPort("udm", 5, "RJ45", 1000), InventoryPort("rps", 1, "RJ45", 1000)),
+        (
+            InventoryInterface("15", "1", "port.5", "1000base-t"),
+            InventoryInterface("21", "2", "eth0", "1000base-t"),
+        ),
+    )
+    return replace(preview_result(), cable_plan=plan)
+
+
+def test_cables_filter_shows_suggestions_and_detail(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, cable_result())
+
+    assert window.segments["cables"].text() == "Cables 2"
+    assert window.cards["cables"].count == 1
+    window.set_filter("cables")
+
+    assert window.table_stack.currentWidget() is window.cable_table
+    model = window.cable_model
+    assert model.data(model.index(0, 1)) == "RPS eth0 \u2194 UDM port.5"
+    assert model.data(model.index(0, 2)) == "2 observations"
+    assert model.data(model.index(1, 3)) == "Reference"
+    box = window.detail.findChild(QCheckBox, "cable_create")
+    assert box is not None and box.isChecked()
+
+
+def test_cable_writes_count_and_reach_the_job(qtbot, tmp_path, pool, monkeypatch):
+    window = review_window(qtbot, tmp_path, pool, cable_result())
+    base = len(window.review.plan.operations)
+    assert window.execute_plan_button.text() == f"Apply {base + 1} changes..."
+    assert "1 cables" in window.selection_label.text()
+
+    started = fake_runner(monkeypatch, window)
+    window.execute_plan_button.click()
+    assert started["cable_plan"].operation_count == 1
+
+    window.set_filter("cables")
+    window.detail.findChild(QCheckBox, "cable_create").setChecked(False)
+    assert window.review.cable_operation_count() == 0
+
+
+def test_reference_cable_has_no_checkbox(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, cable_result())
+    window.set_filter("cables")
+    window.show_detail(window.cable_model.key_at(1))
+
+    assert window.detail.findChild(QCheckBox, "cable_create") is None
+
+
+def test_confirm_dialog_lists_cables(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, cable_result())
+
+    confirm = ConfirmDialog(
+        window.review,
+        window.review.plan,
+        dry_run=False,
+        cable_plan=window.review.cable_plan,
+    )
+    qtbot.addWidget(confirm)
+
+    assert "1 cable" in confirm.findChild(QLabel, "confirmSummary").text()

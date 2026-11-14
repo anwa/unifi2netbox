@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 
+from unifi2netbox.cables import CablePlan, CablePlanRow, select_cable
 from unifi2netbox.config import BehaviorConfig
 from unifi2netbox.interface_plan import (
     InterfacePlan,
@@ -51,6 +52,7 @@ NETBOX_ONLY = "netbox_only"
 ATTENTION = "attention"
 NETWORKS = "networks"
 INTERFACES = "interfaces"
+CABLES = "cables"
 ALL = "all"
 
 CATEGORY_LABELS = {
@@ -62,6 +64,7 @@ CATEGORY_LABELS = {
     NETBOX_ONLY: "NetBox only",
     NETWORKS: "Networks",
     INTERFACES: "Interfaces",
+    CABLES: "Cables",
 }
 
 FIELD_LABELS = {
@@ -137,6 +140,7 @@ class ReviewState:
         self.interface_plan: InterfacePlan | None = (
             result.interface_plan if result else None
         )
+        self.cable_plan: CablePlan | None = result.cable_plan if result else None
         self.outcomes: dict[str, WriteOutcome] = {}
         self.last_report: WriteExecutionReport | None = None
         self._suggestions = {
@@ -274,6 +278,7 @@ class ReviewState:
             counts[ATTENTION] += int(item.attention)
         counts[NETWORKS] = len(self.network_rows())
         counts[INTERFACES] = len(self.interface_rows())
+        counts[CABLES] = len(self.cable_rows())
         return counts
 
     # -- networks -----------------------------------------------------------
@@ -334,6 +339,27 @@ class ReviewState:
             self.interface_plan = select_interface(
                 self.interface_plan, key, field, selected
             )
+
+    # -- cables -------------------------------------------------------------
+
+    def cable_rows(self, text: str = "") -> tuple[CablePlanRow, ...]:
+        if self.cable_plan is None:
+            return ()
+        needle = text.strip().lower()
+        return tuple(row for row in self.cable_plan.rows if needle in row.label.lower())
+
+    def cable_row(self, key: str) -> CablePlanRow | None:
+        return next((row for row in self.cable_rows() if row.key == key), None)
+
+    def cable_changes(self) -> int:
+        return sum(1 for row in self.cable_rows() if row.selectable)
+
+    def cable_operation_count(self) -> int:
+        return self.cable_plan.operation_count if self.cable_plan else 0
+
+    def set_cable_selected(self, key: str, selected: bool) -> None:
+        if self.cable_plan is not None:
+            self.cable_plan = select_cable(self.cable_plan, key, selected)
 
     def selected_count(self) -> int:
         return sum(

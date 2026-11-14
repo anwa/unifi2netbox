@@ -171,6 +171,8 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- the Cables view lists links with evidence and change, offers a checkbox
+	only for creatable cables and passes selected cables to the run,
 - cable creates re-check UniFi evidence and both interfaces, treat an
 	existing joining cable as done, never replace other cables, look up
 	interrupted creates, read back every cable and write nothing in dry runs,

@@ -35,6 +35,11 @@ from PySide6.QtWidgets import (
 )
 
 from unifi2netbox import theme
+from unifi2netbox.cables import CONFLICT as CABLE_CONFLICT
+from unifi2netbox.cables import CREATE as CABLE_CREATE
+from unifi2netbox.cables import IN_SYNC as CABLE_IN_SYNC
+from unifi2netbox.cables import REFERENCE as CABLE_REFERENCE
+from unifi2netbox.cables import CablePlan, CablePlanRow
 from unifi2netbox.interface_plan import FIELD_LABELS as IF_FIELD_LABELS
 from unifi2netbox.interface_plan import InterfacePlan, InterfacePlanRow
 from unifi2netbox.journal_store import StoredRun
@@ -462,6 +467,56 @@ class DetailPanel(QScrollArea):
         )
         self.layout_.addStretch()
 
+    def show_cable(self, state: ReviewState, key: str) -> None:
+        self.state = state
+        row = state.cable_row(key)
+        if row is None:
+            self.show_placeholder("Select a link to see details.")
+            return
+        self.key = key
+        self._clear()
+        title = label(row.label, "heading")
+        title.setObjectName("detailTitle")
+        self.layout_.addWidget(title)
+        self.layout_.addWidget(
+            label("UniFi evidence: " + "; ".join(row.sources), "secondary")
+        )
+        outcome = state.outcomes.get(key)
+        if outcome is not None:
+            text = f"{outcome.status}: {outcome.message}"
+            if outcome.verification:
+                text += f" (read-back {outcome.verification})"
+            tone = {"success": "success", "failed": "danger"}.get(
+                outcome.status, "warning"
+            )
+            self.layout_.addWidget(banner(text, tone))
+        if row.notes:
+            tone = "danger" if row.action == CABLE_CONFLICT else "neutral"
+            self.layout_.addWidget(banner("\n".join(row.notes), tone))
+        self.layout_.addWidget(label("NetBox", "subheading"))
+        if row.selectable:
+            box = QCheckBox(f"Create cable {row.label}")
+            box.setObjectName("cable_create")
+            box.setChecked(row.selected)
+            box.toggled.connect(self._toggle_cable)
+            self.layout_.addWidget(box)
+        else:
+            self.layout_.addWidget(
+                label(CABLE_ACTION_TEXT.get(row.action, ""), "secondary")
+            )
+        self.layout_.addWidget(
+            label(
+                "Cables are only created between two interfaces without a cable. "
+                "Existing cables are never changed or deleted.",
+                "caption",
+            )
+        )
+        self.layout_.addStretch()
+
+    def _toggle_cable(self, checked: bool) -> None:
+        self.state.set_cable_selected(self.key, checked)
+        self.changed.emit()
+
     def _toggle_interface(self, field: str, checked: bool) -> None:
         self.state.set_interface_selected(self.key, field, checked)
         # Dependent fields may change too (VLAN fields follow the mode).
@@ -731,6 +786,7 @@ class ConfirmDialog(QDialog):
         parent=None,
         network_plan: NetworkPlan | None = None,
         interface_plan: InterfacePlan | None = None,
+        cable_plan: CablePlan | None = None,
     ) -> None:
         super().__init__(parent)
         creates = sum(
@@ -739,7 +795,8 @@ class ConfirmDialog(QDialog):
         updates = len(plan.operations) - creates
         group_ops, vlan_ops, prefix_ops = network_actions(network_plan)
         interface_ops = interface_plan.operation_count if interface_plan else 0
-        network_ops = group_ops + vlan_ops + prefix_ops + interface_ops
+        cable_ops = cable_plan.operation_count if cable_plan else 0
+        network_ops = group_ops + vlan_ops + prefix_ops + interface_ops + cable_ops
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
         layout = QVBoxLayout(self)
@@ -764,6 +821,8 @@ class ConfirmDialog(QDialog):
             parts.append(
                 f"{interface_ops} interface{'s' if interface_ops != 1 else ''}"
             )
+        if cable_ops:
+            parts.append(f"{cable_ops} cable{'s' if cable_ops != 1 else ''}")
         summary = label(", ".join(parts) or "No changes", "subheading")
         summary.setObjectName("confirmSummary")
         layout.addWidget(summary)
@@ -1277,6 +1336,147 @@ class InterfaceTableModel(QAbstractTableModel):
             return False
         checked = Qt.CheckState(value) == Qt.CheckState.Checked
         self.state.set_interface_selected(row.key, "all", checked)
+        self.refresh_rows()
+        self.selection_changed.emit()
+        return True
+
+
+CABLE_HEADERS = ("", "Link", "Evidence", "Change", "Status")
+CABLE_CHANGE_LABELS = {
+    CABLE_CREATE: ("New cable", "accent"),
+    CABLE_IN_SYNC: ("In sync", "success"),
+    CABLE_CONFLICT: ("Conflict", "danger"),
+    CABLE_REFERENCE: ("Reference", "neutral"),
+}
+CABLE_ACTION_TEXT = {
+    CABLE_IN_SYNC: "NetBox already connects both interfaces.",
+    CABLE_CONFLICT: "Not written; see the notes above.",
+    CABLE_REFERENCE: "Shown for reference; both ends must be NetBox interfaces.",
+}
+
+
+def cable_status(state: ReviewState, row: CablePlanRow) -> tuple[str, str]:
+    outcome = state.outcomes.get(row.key)
+    if outcome is not None:
+        if outcome.status == "failed" or outcome.verification == "mismatch":
+            return "Failed", "danger"
+        if outcome.status == "success":
+            return ("Verified" if outcome.verification == "verified" else "Done"), (
+                "success"
+            )
+        return "Skipped", "warning"
+    if row.selectable:
+        return ("Ready", "success") if row.selected else ("Not selected", "neutral")
+    return "", "neutral"
+
+
+class CableTableModel(QAbstractTableModel):
+    selection_changed = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.state = ReviewState()
+        self.search = ""
+        self.items: tuple[CablePlanRow, ...] = ()
+
+    def set_state(self, state: ReviewState) -> None:
+        self.state = state
+        self.reload()
+
+    def set_filter(self, search: str) -> None:
+        self.search = search
+        self.reload()
+
+    def reload(self) -> None:
+        self.beginResetModel()
+        self.items = self.state.cable_rows(self.search)
+        self.endResetModel()
+
+    def refresh_rows(self) -> None:
+        keys = [row.key for row in self.items]
+        fresh = {row.key: row for row in self.state.cable_rows()}
+        self.items = tuple(fresh[key] for key in keys if key in fresh)
+        if self.items:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self.items) - 1, len(CABLE_HEADERS) - 1),
+            )
+
+    def key_at(self, row: int) -> str:
+        return self.items[row].key if 0 <= row < len(self.items) else ""
+
+    def row_of(self, key: str) -> int:
+        return next((i for i, row in enumerate(self.items) if row.key == key), -1)
+
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(self.items)
+
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(CABLE_HEADERS)
+
+    def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
+            return CABLE_HEADERS[section]
+        return None
+
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        row = self.items[index.row()] if 0 <= index.row() < len(self.items) else None
+        if index.column() == 0 and row is not None and row.selectable:
+            base |= Qt.ItemFlag.ItemIsUserCheckable
+        return base
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
+        if not index.isValid():
+            return None
+        row = self.items[index.row()]
+        column = index.column()
+        if role == KEY_ROLE:
+            return row.key
+        if column == 0 and role == Qt.ItemDataRole.CheckStateRole:
+            if not row.selectable:
+                return None
+            return Qt.CheckState.Checked if row.selected else Qt.CheckState.Unchecked
+        if role == Qt.ItemDataRole.DisplayRole:
+            if column == 1:
+                return row.label
+            if column == 2:
+                return f"{len(row.sources)} observation" + (
+                    "s" if len(row.sources) != 1 else ""
+                )
+            if column == 3:
+                return CABLE_CHANGE_LABELS[row.action][0]
+            if column == 4:
+                return cable_status(self.state, row)[0]
+        if role == TONE_ROLE:
+            if column == 3:
+                return CABLE_CHANGE_LABELS[row.action][1]
+            if column == 4:
+                return cable_status(self.state, row)[1]
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return "\n".join(row.sources + row.notes) or None
+        return None
+
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value,
+        role=Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        if index.column() != 0 or role != Qt.ItemDataRole.CheckStateRole:
+            return False
+        row = self.items[index.row()]
+        if not row.selectable:
+            return False
+        checked = Qt.CheckState(value) == Qt.CheckState.Checked
+        self.state.set_cable_selected(row.key, checked)
         self.refresh_rows()
         self.selection_changed.emit()
         return True

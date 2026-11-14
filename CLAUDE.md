@@ -89,6 +89,10 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   plan (enabled, mode, untagged/tagged VLANs from the site VLAN group) for
   paired ports of matched devices, written by PATCH between network and device
   writes with drift checks and read-back; LAG stays display-only.
+- **Cables** (`links.py`, `cables.py`, `cable_execute.py`): link evidence
+  from internal uplink/LLDP data; cables are suggested only from agreeing,
+  unclaimed evidence between interfaces of matched devices and only created,
+  never replaced or deleted.
 - **Ports** (`ports.py`): pairs UniFi ports with NetBox interfaces of a
   matched device by connector kind, then family, in numbering order; link
   state and speed are operational and display-only.

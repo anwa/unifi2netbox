@@ -68,6 +68,7 @@ from unifi2netbox.gui_review import (
     COL_SELECT,
     COL_STATUS,
     BadgeDelegate,
+    CableTableModel,
     ConfirmDialog,
     DetailPanel,
     HistoryDialog,
@@ -89,6 +90,7 @@ from unifi2netbox.preview import DifferencePreview
 from unifi2netbox.review import (
     ALL,
     ATTENTION,
+    CABLES,
     CATEGORY_LABELS,
     CREATE,
     IN_SYNC,
@@ -185,12 +187,14 @@ class WriteExecutionJob(QRunnable):
         journal_path: Path | None = None,
         network_plan=None,
         interface_plan=None,
+        cable_plan=None,
     ) -> None:
         super().__init__()
         self.unifi_config = unifi_config
         self.journal_path = journal_path
         self.network_plan = network_plan
         self.interface_plan = interface_plan
+        self.cable_plan = cable_plan
         self.netbox_config = netbox_config
         self.behavior = behavior
         self.difference_preview = difference_preview
@@ -219,6 +223,7 @@ class WriteExecutionJob(QRunnable):
                 journal_path=self.journal_path,
                 network_plan=self.network_plan,
                 interface_plan=self.interface_plan,
+                cable_plan=self.cable_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -257,6 +262,7 @@ class WriteExecutionRunner(QObject):
         journal_path: Path | None = None,
         network_plan=None,
         interface_plan=None,
+        cable_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -274,6 +280,7 @@ class WriteExecutionRunner(QObject):
             journal_path=journal_path,
             network_plan=network_plan,
             interface_plan=interface_plan,
+            cable_plan=cable_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1194,6 +1201,7 @@ class MainWindow(QMainWindow):
             (NETBOX_ONLY, "only in NetBox"),
             (NETWORKS, "network changes"),
             (INTERFACES, "interface changes"),
+            (CABLES, "cable suggestions"),
         ):
             card = SummaryCard(category, caption)
             card.setObjectName(f"card_{category}")
@@ -1214,6 +1222,7 @@ class MainWindow(QMainWindow):
             NETBOX_ONLY,
             NETWORKS,
             INTERFACES,
+            CABLES,
         ):
             button = QPushButton(CATEGORY_LABELS[category])
             button.setObjectName(f"filter_{category}")
@@ -1334,10 +1343,43 @@ class MainWindow(QMainWindow):
                 self.interface_model.key_at(current.row())
             )
         )
+        self.cable_model = CableTableModel(self)
+        self.cable_model.selection_changed.connect(self.on_selection_changed)
+        self.cable_table = QTableView()
+        self.cable_table.setObjectName("cableTable")
+        self.cable_table.setModel(self.cable_model)
+        self.cable_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.cable_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.cable_table.setShowGrid(False)
+        self.cable_table.setWordWrap(False)
+        self.cable_table.verticalHeader().hide()
+        self.cable_table.verticalHeader().setDefaultSectionSize(38)
+        self.cable_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        cable_badge = BadgeDelegate(self.cable_table)
+        self.cable_table.setItemDelegateForColumn(3, cable_badge)
+        self.cable_table.setItemDelegateForColumn(4, cable_badge)
+        cable_header = self.cable_table.horizontalHeader()
+        cable_header.setHighlightSections(False)
+        cable_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        cable_header.resizeSection(0, 36)
+        cable_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        cable_header.resizeSection(2, 120)
+        cable_header.resizeSection(3, 110)
+        cable_header.resizeSection(4, 120)
+        self.cable_table.selectionModel().currentRowChanged.connect(
+            lambda current, _previous: self.show_detail(
+                self.cable_model.key_at(current.row())
+            )
+        )
         self.table_stack = QStackedWidget()
         self.table_stack.addWidget(self.table)
         self.table_stack.addWidget(self.network_table)
         self.table_stack.addWidget(self.interface_table)
+        self.table_stack.addWidget(self.cable_table)
 
         self.detail = DetailPanel()
         self.detail.setObjectName("detailPanel")
@@ -1463,10 +1505,12 @@ class MainWindow(QMainWindow):
             self.review.rows()
             or self.review.network_rows()
             or self.review.interface_rows()
+            or self.review.cable_rows()
         )
         self.pages.setCurrentIndex(1 if has_rows else 0)
         self.network_model.set_state(self.review)
         self.interface_model.set_state(self.review)
+        self.cable_model.set_state(self.review)
         self.update_counts_only()
         self.apply_filter(keep_key)
 
@@ -1482,10 +1526,28 @@ class MainWindow(QMainWindow):
         )
 
     def apply_filter(self, keep_key: str = "") -> None:
-        if self.current_filter() in (NETWORKS, INTERFACES):
-            networks = self.current_filter() == NETWORKS
-            table = self.network_table if networks else self.interface_table
-            model = self.network_model if networks else self.interface_model
+        views = {
+            NETWORKS: (
+                self.network_table,
+                self.network_model,
+                self.review.network_plan,
+                "UniFi reports no networks.",
+            ),
+            INTERFACES: (
+                self.interface_table,
+                self.interface_model,
+                self.review.interface_plan,
+                "No matched device has paired ports with configuration.",
+            ),
+            CABLES: (
+                self.cable_table,
+                self.cable_model,
+                self.review.cable_plan,
+                "UniFi reported no links between devices.",
+            ),
+        }
+        if self.current_filter() in views:
+            table, model, plan, empty = views[self.current_filter()]
             self.table_stack.setCurrentWidget(table)
             model.set_filter(self.search.text())
             key = keep_key or self.detail.key
@@ -1500,14 +1562,6 @@ class MainWindow(QMainWindow):
                 )
                 self.show_detail(model.key_at(row))
             else:
-                plan = (
-                    self.review.network_plan if networks else self.review.interface_plan
-                )
-                empty = (
-                    "UniFi reports no networks."
-                    if networks
-                    else "No matched device has paired ports with configuration."
-                )
                 self.detail.show_placeholder(
                     plan.blocker if plan is not None and plan.blocker else empty
                 )
@@ -1533,6 +1587,8 @@ class MainWindow(QMainWindow):
             self.detail.show_network(self.review, key)
         elif key.startswith("interface:"):
             self.detail.show_interface(self.review, key)
+        elif key.startswith("cable:"):
+            self.detail.show_cable(self.review, key)
         elif key:
             self.detail.show_device(self.review, key)
         else:
@@ -1547,6 +1603,7 @@ class MainWindow(QMainWindow):
         self.table_model.refresh_rows()
         self.network_model.refresh_rows()
         self.interface_model.refresh_rows()
+        self.cable_model.refresh_rows()
         self.update_counts_only()
 
     def update_counts_only(self) -> None:
@@ -1557,6 +1614,8 @@ class MainWindow(QMainWindow):
                 if category == NETWORKS
                 else self.review.interface_changes()
                 if category == INTERFACES
+                else self.review.cable_changes()
+                if category == CABLES
                 else counts[category]
             )
         for category, button in self.segments.items():
@@ -1568,10 +1627,12 @@ class MainWindow(QMainWindow):
         plan = self.review.plan
         network_ops = self.review.network_operation_count()
         interface_ops = self.review.interface_operation_count()
+        cable_ops = self.review.cable_operation_count()
         operations = (
             (len(plan.operations) if plan is not None else 0)
             + network_ops
             + interface_ops
+            + cable_ops
         )
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
@@ -1582,6 +1643,8 @@ class MainWindow(QMainWindow):
             parts.append(f"{network_ops} network writes")
         if interface_ops:
             parts.append(f"{interface_ops} interface writes")
+        if cable_ops:
+            parts.append(f"{cable_ops} cables")
         self.selection_label.setText(", ".join(parts))
         for button in (self.select_all_button, self.select_none_button):
             button.setVisible(
@@ -1589,6 +1652,7 @@ class MainWindow(QMainWindow):
                     selectable
                     or self.review.network_rows()
                     or self.review.interface_rows()
+                    or self.review.cable_rows()
                 )
             )
         noun = "change" if operations == 1 else "changes"
@@ -1611,6 +1675,12 @@ class MainWindow(QMainWindow):
             for row in self.interface_model.items:
                 self.review.set_interface_selected(row.key, "all", selected)
             self.interface_model.refresh_rows()
+            self.on_selection_changed()
+            return
+        if self.current_filter() == CABLES:
+            for row in self.cable_model.items:
+                self.review.set_cable_selected(row.key, selected)
+            self.cable_model.refresh_rows()
             self.on_selection_changed()
             return
         keys = tuple(
@@ -1714,7 +1784,9 @@ class MainWindow(QMainWindow):
         network_plan = self.review.network_plan if device_key is None else None
         interface_plan = self.review.interface_plan if device_key is None else None
         network_ops = network_plan.operation_count if network_plan else 0
+        cable_plan = self.review.cable_plan if device_key is None else None
         network_ops += interface_plan.operation_count if interface_plan else 0
+        network_ops += cable_plan.operation_count if cable_plan else 0
         if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
@@ -1731,6 +1803,7 @@ class MainWindow(QMainWindow):
             parent=self,
             network_plan=network_plan,
             interface_plan=interface_plan,
+            cable_plan=cable_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -1753,6 +1826,7 @@ class MainWindow(QMainWindow):
             journal_path=self.journal_path,
             network_plan=network_plan,
             interface_plan=interface_plan,
+            cable_plan=cable_plan,
         )
         self.update_check_action()
 
@@ -1761,6 +1835,7 @@ class MainWindow(QMainWindow):
         self.table_model.refresh_rows()
         self.network_model.refresh_rows()
         self.interface_model.refresh_rows()
+        self.cable_model.refresh_rows()
         failed = sum(o.status == "failed" for o in result.outcomes)
         skipped = sum(o.status == "skipped" for o in result.outcomes)
         if result.status == "Error":
@@ -1818,6 +1893,7 @@ class MainWindow(QMainWindow):
             f"Only in NetBox: {counts[NETBOX_ONLY]}",
             f"Network changes: {self.review.network_changes()}",
             f"Interface changes: {self.review.interface_changes()}",
+            f"Cable suggestions: {self.review.cable_changes()}",
             *self.last_result.detail_lines,
         ]
         QApplication.clipboard().setText("\n".join(lines))

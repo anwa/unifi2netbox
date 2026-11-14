@@ -6,6 +6,23 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.13
+
+### Added
+
+- M6 slice 5, review window: a **Cables** filter and summary card list every
+  link UniFi reports between devices with its evidence, change type (new
+  cable, in sync, conflict, reference) and status. The detail panel shows the
+  observations, notes and a checkbox for creatable cables. Selected cables
+  count in the apply bar, appear in the confirmation dialog and run with the
+  other writes.
+
+### Validation
+
+- Added GUI tests for the cables table, preselection, reference rows without
+  a checkbox, apply counts and the confirmation summary; offscreen render with
+  live data reviewed.
+
 ## v0.6.12
 
 ### Added

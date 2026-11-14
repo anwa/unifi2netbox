@@ -69,6 +69,11 @@ history.
   from the site's "UniFi <site>" VLAN group, so write the networks first and
   refresh. Interfaces are only updated, never created or deleted; LAGs and
   cables are not changed, and a second apply after a refresh writes nothing.
+- The **Cables** filter lists links that UniFi reports between devices
+  (wired uplinks and LLDP). A NetBox cable is suggested only when the evidence
+  agrees on both ports, both ends are interfaces of matched devices and neither
+  has a cable; suggestions seen twice are preselected. Existing cables are
+  never changed or deleted.
 - For matched switches, the detail panel lists each UniFi port with its
   NetBox interface (paired by connector kind and number), connector and speed,
   live link state and PoE, plus notes for speed or PoE differences and
