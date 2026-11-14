@@ -76,10 +76,20 @@ class InventoryPreviewResult:
 
 
 @dataclass(frozen=True)
+class WriteOutcome:
+    device_key: str
+    status: str
+    message: str
+    netbox_object_id: str = ""
+
+
+@dataclass(frozen=True)
 class WriteExecutionReport:
     status: str
     details: str
     detail_lines: tuple[str, ...] = ()
+    outcomes: tuple[WriteOutcome, ...] = ()
+    dry_run: bool = False
 
 
 def build_inventory_preview(
@@ -231,6 +241,16 @@ def run_write_execution(
         status="Dry run" if dry_run else "Applied",
         details=details,
         detail_lines=lines or (details,),
+        outcomes=tuple(
+            WriteOutcome(
+                device_key=outcome.device_key,
+                status=str(outcome.status),
+                message=outcome.message,
+                netbox_object_id=outcome.netbox_object_id,
+            )
+            for outcome in result.journal.outcomes
+        ),
+        dry_run=dry_run,
     )
 
 

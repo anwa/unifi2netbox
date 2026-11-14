@@ -56,27 +56,38 @@ history. Approved writes (M5) are still being completed.
 
 ### Main window
 
-- **Refresh Inventory Preview** shows counts and clickable highlight lines
-  (matches, conflicts, planned operations, fallback explanations), with a
-  detail field and **Copy selected** / **Copy all**.
-- **Show all rows** lists every preview row with action and executable-only
-  filters, a `Reason` for blocked rows and `Suggested Device Types`. Create rows
-  offer `Device role`, `Device site`, `Device status` and `Device type`
-  dropdowns fed from the NetBox catalogs; the chosen values (including the exact
-  device-type ID) are used for the create.
-- **Export UniFi API dump** saves the raw UniFi API responses and device rows
-  of the current preview as JSON; **Show all rows** can also export the raw
-  UniFi payload of one selected row. Dumps contain unsanitized inventory data;
-  never commit or share them unreviewed.
+The window follows the system light or dark mode and is organized around one
+workflow: connect, refresh, review, apply.
+
+- The header shows a status chip per connection (green online, amber online
+  with a security warning, red on errors). Click a chip for endpoint, version,
+  last check and **Check again**. **Refresh** (F5) reads both inventories;
+  **Settings** and a **More** menu (UniFi API dump, copy summary) sit next to it.
+- Summary cards count new devices, devices with changes, devices in sync,
+  devices that need attention and NetBox-only devices; clicking a card filters
+  the table. Filter chips and a name/model search narrow the list further.
+- The review table lists one device per row with a checkbox, the change type,
+  the UniFi model, the NetBox match or chosen device type and a status
+  (Ready, Needs attention, Not selected, Written, Skipped, Failed).
+- The detail panel for the selected device shows its fields side by side. For
+  changed devices, a checkbox per writable field selects what is written. For
+  new devices, it offers NetBox device type, role, site and status; unambiguous
+  type suggestions are preselected. It also offers **Apply this device**,
+  **Export UniFi data** and **Copy details**.
+- The apply bar shows the selection, **Select all** / **Select none**,
+  **Dry run (no changes)** and **Apply N changes**. Results appear in the table
+  and in a banner, with **Refresh now** after real writes.
+- UniFi dumps contain unsanitized inventory data; never commit or share them
+  unreviewed.
 
 ### Approved NetBox writes
 
 - Selected previews become an ordered write plan (creates before updates) with
   preflight blockers and one summary confirmation. Creates need a default
   NetBox device role in Settings or a per-row role.
-- **Execute write plan** asks once, then writes; **Dry run only** records the
-  outcomes without changing NetBox. A single executable row can also be run from
-  **Show all rows** when other rows block the full plan.
+- **Apply N changes** asks once, then writes; **Dry run (no changes)** records
+  the outcomes without changing NetBox. **Apply this device** in the detail
+  panel runs a single device, for example when other rows block the full plan.
 - Before each write, NetBox is re-read: an update is skipped if the target
   device was deleted or a selected field changed since the preview, and a
   create is skipped if a device with the same name or serial appeared
@@ -167,30 +178,30 @@ an explicit local TOML file. `python -m unifi2netbox --version` prints the insta
 version. Reinstall requirements after checking out a new commit so package metadata
 and the displayed version stay current.
 
-First start opens **Settings**, containing **NetBox** and **UniFi Network** tabs.
-Enter each service's URL and token/key and choose its independent TLS/CA options.
-**Check Connections** tests both tabs' current unsaved values; it does not save.
-**Save** validates both tabs and atomically writes both sections together, then
-rechecks both saved connections. If validation or saving fails, neither section
-is written. **Cancel** discards changes in both tabs. Tokens remain masked by default.
+First start opens **Settings** with three pages: **NetBox**, **UniFi Network**
+and **Sync defaults**. Enter each service's URL and token/key and choose its
+independent TLS/CA options. **Check connections** tests both pages' current
+unsaved values; it does not save. **Save** validates both connections and
+atomically writes all sections together, then rechecks both saved connections.
+If validation or saving fails, nothing is written. **Cancel** discards all
+changes. Tokens remain masked by default.
 
-The main window displays separate NetBox and UniFi Network status, endpoint,
-version, last check and security warnings. The toolbar has one **Check Connections**
-action and one **Settings** action (identified by tooltips). **File > Settings**
-opens the same dialog. A shared check runs both services independently; the action
-is disabled until both finish. One failing service does not hide the other's result.
+On the **UniFi Network** page, enter the console base URL and a local
+integration API key. If the key exposes one site, Automatic selects it.
+Otherwise, choose a discovered site from the editable Site menu or enter its
+unique ID/name/internal reference, then test again and Save. Selecting a
+discovered entry saves its ID, not its display label. Device inventory read
+access is required for Online; a reachable console, an offline switch or an
+invalid key are different conditions.
 
-Open **File > Settings > UniFi Network**, enter the console base URL and a local
-integration API key, and select independent TLS/CA options. Use **Check Connections**
-without saving. If the key exposes one site, Automatic selects it. Otherwise,
-choose a discovered site from the editable Site menu or enter its unique ID/name/
-internal reference, then test again and Save. Selecting a discovered entry saves
-its ID, not its display label. Device inventory read access is required for Online;
-a reachable console, an offline switch or an invalid key are different conditions.
+**Sync defaults** holds the NetBox site for UniFi devices, the default device
+role for new devices and whether NetBox-only devices from all sites are listed.
 
-Both saved connections are checked independently at startup. No button writes
-inventory. A close request waits asynchronously for all active checks to finish;
-the window remains responsive and each request still has its configured timeout.
+Both saved connections are checked independently at startup and shown as
+header chips. One failing service does not hide the other's result. Only
+**Apply** writes to NetBox. A close request waits asynchronously for all active
+checks to finish; the window stays responsive and each request keeps its
+configured timeout.
 
 ## Configuration and Security
 

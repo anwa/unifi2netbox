@@ -194,17 +194,19 @@ Branch: `feature/gui-redesign`; depends on M4. Added on 2026-11-14 at the
 user's request before continuing M5; later milestones shift by one minor
 version.
 
-- [ ] Modern look: Fusion-based theme that follows the system light/dark mode,
+- [x] Modern look: Fusion-based theme that follows the system light/dark mode,
   status colors and native Windows icons where available.
-- [ ] Review-centric main window: connection chips, summary cards, filterable
+- [x] Review-centric main window: connection chips, summary cards, filterable
   review table with device selection, a detail panel with per-device choices
   and field-level selection, and an apply bar. Replaces the `Show all rows`
   dialog and the highlight list.
-- [ ] Apply flow: one confirmation summary, optional dry run first, per-row
+- [x] Apply flow: one confirmation summary, optional dry run first, per-row
   results in the table.
-- [ ] Settings dialog grouped into NetBox, UniFi Network and sync defaults.
-- [ ] Keep every existing capability (exports, single-row execution, copy of
-  details) reachable; update GUI tests and documentation.
+- [x] Settings dialog grouped into NetBox, UniFi Network and sync defaults.
+- [x] Keep every existing capability (exports, single-row execution, copy of
+  details) reachable; update GUI tests and documentation (0.4.1, 2026-11-14;
+  offscreen light/dark screenshots reviewed, Windows desktop rendering pending
+  user review).
 
 Acceptance: the workflow connect -> refresh -> review -> apply works in one
 window without extra dialogs except confirmation and settings; light and dark

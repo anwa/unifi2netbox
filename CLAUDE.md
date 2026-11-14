@@ -95,9 +95,16 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   runs refresh → match → delete scoping → preview → plan and returns an
   `InventoryPreviewResult`; `run_write_execution` executes a plan and returns a
   `WriteExecutionReport`. Test end-to-end behavior here, not through the GUI.
-- **GUI** (`gui.py`): settings dialog with NetBox/UniFi tabs, connection panels,
-  Inventory Preview section, the `Show all rows` dialog with per-row overrides.
-  Its worker jobs only call the pipeline functions and catch unexpected errors.
+- **Review state** (`review.py`): Qt-free state behind the review window
+  (device/field selection, per-row create choices, write outcomes); rebuilds
+  the change preview and write plan on every selection change.
+- **GUI** (`gui.py`, `gui_review.py`, `theme.py`): review-centric main window
+  (connection chips, summary cards, review table, detail panel, apply bar),
+  settings dialog with NetBox/UniFi/sync pages, and a Fusion theme that follows
+  the system light/dark mode. Worker jobs only call pipeline functions. Widgets
+  opt into styles via dynamic properties (`variant`, `chip`, `badge`, `banner`,
+  `role`); use `theme.set_variant` when changing them at runtime. Render the
+  GUI offscreen for screenshots with `QT_QPA_FONTDIR=C:/Windows/Fonts`.
 - **Diagnostics** (`capabilities.py`, `reporting.py`): installed-version field
   capability matrix and opt-in sanitized (pseudonymized) fixture/report export.
 

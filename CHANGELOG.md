@@ -6,6 +6,35 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.4.1
+
+### Changed
+
+- Redesigned GUI (M4.5): Fusion-based theme that follows the system light or
+	dark mode, connection status chips in a header, summary cards, filter chips
+	and search, a review table with per-device checkboxes and badges, a detail
+	panel with field-level selection and create choices, and an apply bar with
+	dry run. The `Show all rows` dialog and the highlight list are replaced.
+- Settings dialog with NetBox, UniFi Network and Sync defaults pages.
+- One confirmation dialog summarizes the selected writes, groups warnings and
+	disables applying while blockers (for example a missing device role) exist.
+- Write results appear per device in the table and in a banner, with
+	**Refresh now** after real writes.
+
+### Added
+
+- Qt-free `review` module holding device and field selection, create choices
+	and write outcomes; `WriteExecutionReport` now carries per-device outcomes.
+- `theme` module with light/dark palettes, semantic tones and native theme
+	icons (Segoe Fluent on Windows 11) with style fallbacks.
+
+### Validation
+
+- Rewrote the GUI preview tests for the review window and added review-state
+	and theme tests; settings and connection tests are unchanged.
+- Light and dark screenshots rendered offscreen with synthetic data were
+	reviewed; the real Windows desktop rendering was not inspected here.
+
 ## v0.4.0
 
 ### Summary
