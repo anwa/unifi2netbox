@@ -135,9 +135,7 @@ Acceptance: NetBox and Network independently display authenticated connectivity.
 
 Branch: `feature/inventory-snapshots`; depends on M2.
 
-Status: all planned M3 implementation slices are completed on the feature
-branch, with offline validation gates passing on 2026-10-28. A separate merge
-decision remains open. No v0.3.0 release or M3 merge is authorized yet.
+Status: completed for release v0.3.0 (merge commit 17f5fc3, tag v0.3.0).
 
 - [x] Read paginated inventories into normalized, timestamped domain models
   (initial internal NetBox/UniFi readers plus offline contract tests on
@@ -152,9 +150,9 @@ decision remains open. No v0.3.0 release or M3 merge is authorized yet.
 - [x] Build an installed-version field capability matrix for ports, profiles,
   overrides, VLANs, PoE, speed/duplex, LAG and LLDP (service-level matrix
   builder and offline contract tests on 2026-10-28).
-- [ ] Obtain explicit merge approval; complete version-only release preparation
+- [x] Obtain explicit merge approval; complete version-only release preparation
   for 0.3.0 on main.
-- [ ] Complete the approved main merge and tag its resulting commit v0.3.0.
+- [x] Complete the approved main merge and tag its resulting commit v0.3.0.
 
 Acceptance: complete reads are repeatable; failures preserve a good baseline;
 exports contain no credentials/personal data and remain useful as test fixtures.
