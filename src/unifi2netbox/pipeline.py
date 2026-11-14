@@ -34,6 +34,7 @@ from unifi2netbox.matching import (
     deduplicate_inventory,
     suggest_device_types_for_unmatched,
 )
+from unifi2netbox.networks import NetworkPlan, build_network_plan
 from unifi2netbox.preview import (
     ChangePreview,
     DifferencePreview,
@@ -84,6 +85,7 @@ class InventoryPreviewResult:
     unifi_raw_devices: tuple[dict[str, object], ...] = ()
     unifi_ports: tuple[InventoryPort, ...] = ()
     netbox_interfaces: tuple[InventoryInterface, ...] = ()
+    network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
     netbox_sites: tuple[str, ...] = ()
@@ -208,6 +210,15 @@ def build_inventory_preview(
         unifi_raw_devices=unifi_snapshot.unifi_raw_devices,
         unifi_ports=unifi_snapshot.ports,
         netbox_interfaces=netbox_snapshot.interfaces,
+        network_plan=build_network_plan(
+            unifi_snapshot.networks,
+            netbox_snapshot.sites,
+            netbox_snapshot.vlan_groups,
+            netbox_snapshot.vlans,
+            netbox_snapshot.prefixes,
+            site_name=netbox_site_name.strip(),
+            ipam_error=netbox_snapshot.ipam_error,
+        ),
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),

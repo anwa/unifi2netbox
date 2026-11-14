@@ -171,6 +171,8 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- the network plan creates a site-scoped VLAN group, VLANs and prefixes,
+	completes existing ones and never selects conflicts or disabled networks,
 - UniFi networks carry VLAN ID and IPv4 subnet; NetBox VLAN groups, VLANs and
 	prefixes are read, and missing IPAM rights are recorded instead of failing,
 - UniFi ports pair with NetBox interfaces by exact connector kind, then by

@@ -6,6 +6,28 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.3
+
+### Added
+
+- M6 slice 2, planning: the new `networks` module compares UniFi networks with
+	NetBox IPAM for the configured NetBox site. It plans one site-scoped VLAN
+	group ("UniFi <site>"), a VLAN per enabled network and a site-scoped prefix
+	per subnet linked to its VLAN. Existing VLAN names are aligned and missing
+	prefix VLANs filled in; prefixes pointing at another VLAN, duplicate
+	prefixes and duplicate UniFi VLAN IDs are conflicts and never selected.
+	Disabled networks are reference-only. The plan is part of the preview
+	result; without a NetBox site setting or IPAM access, planning is blocked
+	with the reason.
+
+### Validation
+
+- Added planner tests (create, in-sync, completion, conflicts, disabled
+	networks, blockers, selection) and a pipeline test.
+- Live read-only check: 16 networks planned against the empty NetBox IPAM
+	(VLAN group plus 15 VLANs and 15 prefixes selected, 31 operations; the
+	disabled network is reference-only).
+
 ## v0.6.2
 
 ### Added

@@ -319,3 +319,31 @@ def test_preview_result_carries_ports_and_interfaces(tmp_path, monkeypatch):
 
     assert [p.idx for p in result.unifi_ports] == [1]
     assert [i.name for i in result.netbox_interfaces] == ["Port 1"]
+
+
+def test_preview_result_carries_network_plan(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryNetwork
+
+    netbox = _snapshot(
+        InventorySource.NETBOX,
+        [],
+        sites=(InventorySite(source_id="7", name="Home"),),
+    )
+    unifi = replace(
+        _snapshot(InventorySource.UNIFI_NETWORK, []),
+        networks=(InventoryNetwork("n1", "IoT", 20, True, "10.0.20.0/24"),),
+    )
+    _patch_readers(monkeypatch, lambda c, **kw: netbox, lambda c, **kw: unifi)
+
+    result = build_inventory_preview(
+        tmp_path / "config.toml",
+        NETBOX,
+        UNIFI,
+        include_all_netbox_delete_candidates=False,
+        netbox_site_name="Home",
+    )
+
+    assert result.network_plan.group.name == "UniFi Home"
+    assert [row.name for row in result.network_plan.rows] == ["IoT"]
