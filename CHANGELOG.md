@@ -6,6 +6,23 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.12
+
+### Added
+
+- M6 slice 5, execution: selected cable suggestions are created in NetBox
+  after interface writes and before device writes. UniFi must still report the
+  link; both interfaces are re-read, a cable that already joins them counts as
+  done and any other cable skips the row (never replaced). Interrupted creates
+  are looked up on the interface instead of retried; every cable is read back.
+  Dry runs run all checks. Cables are never changed or deleted.
+
+### Validation
+
+- Added executor tests (create and verify, existing cable, other cable, dry
+  run, vanished evidence, unreadable UniFi, interrupted create found or lost,
+  transport failure) and pipeline ordering.
+
 ## v0.6.11
 
 ### Added
