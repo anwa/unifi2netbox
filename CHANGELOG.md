@@ -6,6 +6,12 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Validation
+
+- M8 slice 4 live write test (0.8.3, commit 81235c8): an approved create of
+  the UniFi Access hub against the NetBox developer instance passed 7/7
+  checks; test role, device type and device were removed afterwards.
+
 ## v0.8.3
 
 ### Added

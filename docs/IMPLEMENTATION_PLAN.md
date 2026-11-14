@@ -384,11 +384,12 @@ Slices:
   hardware into an Access snapshot; never users, logs or door control (0.8.2).
 - [x] 3. Match and preview Access devices (precedence Network, Access,
   Protect) and record unsupported hardware fields (0.8.3).
-- [ ] 4. Approved NetBox writes for Access devices and live acceptance.
+- [x] 4. Approved NetBox writes for Access devices and live acceptance
+  (0.8.3, live write test 7/7).
 
-- [ ] Validate Access 4.3.22 API documentation, console placement and token scopes.
-- [ ] Add supported hubs/readers/equipment, never users, access logs or door control.
-- [ ] Record unsupported hardware fields instead of promising complete coverage.
+- [x] Validate Access 4.3.22 API documentation, console placement and token scopes.
+- [x] Add supported hubs/readers/equipment, never users, access logs or door control.
+- [x] Record unsupported hardware fields instead of promising complete coverage.
 
 Acceptance: version-specific fixtures and target-PC read verification; source is
 read-only even when the API token itself has broader permissions.
