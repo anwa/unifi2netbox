@@ -291,9 +291,11 @@ Slices, in this order:
   (0.6.5, 2026-11-14: offline tests, live dry run of 31 operations and an
   approved live write of one network: group, VLAN and prefix verified, second
   apply a no-op, test objects removed.)
-- [ ] 3. Read internal port configuration: names, configured enable state,
+- [x] 3. Read internal port configuration: names, configured enable state,
   profiles plus overrides resolved to effective native/tagged VLANs (all-VLAN
   trunks stay explicit `tagged-all`, never expanded), LAG membership.
+  (0.6.7, 2026-11-14: offline tests and live read-only check, 195 of 195 ports
+  resolved without notes; no LAG configured live, so LAG is offline-tested.)
 - [ ] 4. Write interface configuration (enabled, mode, untagged/tagged VLANs,
   LAG) with field-level preview and approval; a second apply is a no-op.
 - [ ] 5. Suggest cables only from unambiguous LLDP/uplink evidence, with

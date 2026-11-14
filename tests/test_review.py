@@ -317,3 +317,21 @@ def test_network_outcomes_are_grouped_per_network():
 
     assert len(state.network_outcomes["network:n1"]) == 2
     assert "network:n1" not in state.outcomes
+
+
+def test_port_configs_for_returns_the_device_ports_by_index():
+    from dataclasses import replace
+
+    from unifi2netbox.port_config import InventoryPortConfig
+
+    result = replace(
+        make_result(),
+        unifi_port_configs=(
+            InventoryPortConfig("a", 2, "Two"),
+            InventoryPortConfig("other", 1, "Elsewhere"),
+        ),
+    )
+    state = ReviewState(result, BehaviorConfig())
+    key = next(row.key for row in state.rows() if "unifi_network:a" in row.key)
+
+    assert {idx: c.name for idx, c in state.port_configs_for(key).items()} == {2: "Two"}

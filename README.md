@@ -59,6 +59,10 @@ history.
   linked to another VLAN, duplicate prefixes or VLAN IDs) are shown but never
   written. Disabled networks are reference-only. Network writes use the same
   re-read, read-back and history safeguards as device writes.
+- With UniFi Network 11.0 the port list also shows each port's name and
+  effective configuration (mode, native and tagged VLANs, profile, LAG), read
+  from internal Network endpoints with GET only. All-VLAN trunks stay
+  `tagged-all`; unknown profiles or networks are reported, never guessed.
 - For matched switches, the detail panel lists each UniFi port with its
   NetBox interface (paired by connector kind and number), connector and speed,
   live link state and PoE, plus notes for speed or PoE differences and

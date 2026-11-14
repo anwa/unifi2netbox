@@ -6,6 +6,22 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.7
+
+### Added
+
+- M6 slice 3, review window: the port list in the detail panel shows the UniFi
+  port name and the effective configuration per port (for example `access 20`,
+  `tagged-all, native 1`, `disabled`, `off`, `LAG 7`); the port profile and
+  resolution notes appear as tooltips and in the notes list. When the internal
+  endpoints were not read, the reason is shown above the list.
+
+### Validation
+
+- Added review and GUI tests for per-device port configuration, profile
+  tooltips, notes and the missing-configuration message; offscreen render
+  with live data reviewed (UDM Pro Max, 11 ports).
+
 ## v0.6.6
 
 ### Added

@@ -1321,3 +1321,56 @@ def test_confirm_dialog_lists_network_writes(qtbot, tmp_path, pool):
     summary = confirm.findChild(QLabel, "confirmSummary").text()
     assert "1 VLAN" in summary and "1 prefix" in summary and "1 VLAN group" in summary
     assert confirm.confirm_button.text() == "Apply 6 changes"
+
+
+def test_detail_panel_shows_port_configuration(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryInterface, InventoryPort
+    from unifi2netbox.port_config import InventoryPortConfig
+
+    result = replace(
+        preview_result(),
+        unifi_ports=(
+            InventoryPort("a", 1, "RJ45", 1000, "UP", 1000),
+            InventoryPort("a", 2, "RJ45", 1000, "DOWN", 0),
+        ),
+        netbox_interfaces=(
+            InventoryInterface("10", "1", "Port 1", "1000base-t"),
+            InventoryInterface("11", "1", "Port 2", "1000base-t"),
+        ),
+        unifi_port_configs=(
+            InventoryPortConfig("a", 1, "Uplink", True, "tagged-all", 1, (), "", 1),
+            InventoryPortConfig(
+                "a", 2, "Cam", True, "access", 30, (), "Cams", None, ("note x",)
+            ),
+        ),
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    select_row(window, "sw-a")
+
+    first = window.detail.findChild(QLabel, "portConfig1")
+    second = window.detail.findChild(QLabel, "portConfig2")
+    assert first.text() == "tagged-all, native 1, LAG 1"
+    assert second.text() == "access 30"
+    assert "Port profile: Cams" in second.toolTip()
+    assert "Port 2: note x" in window.detail.findChild(QLabel, "portNotes").text()
+    summary = window.detail.findChild(QLabel, "portsSummary").text()
+    assert "internal UniFi API" in summary
+
+
+def test_detail_panel_explains_missing_port_configuration(qtbot, tmp_path, pool):
+    from dataclasses import replace
+
+    from unifi2netbox.inventory import InventoryPort
+
+    result = replace(
+        preview_result(),
+        unifi_ports=(InventoryPort("a", 1, "RJ45", 1000, "UP", 1000),),
+        port_config_error="Port configuration unavailable: permission denied.",
+    )
+    window = review_window(qtbot, tmp_path, pool, result)
+    select_row(window, "sw-a")
+
+    summary = window.detail.findChild(QLabel, "portsSummary").text()
+    assert "permission denied" in summary

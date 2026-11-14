@@ -20,6 +20,7 @@ from unifi2netbox.pipeline import (
     WriteOutcome,
     preview_rows,
 )
+from unifi2netbox.port_config import InventoryPortConfig
 from unifi2netbox.ports import PortMatch, match_ports
 from unifi2netbox.preview import (
     ChangePreview,
@@ -122,6 +123,8 @@ class ReviewState:
         self.status_by_key: dict[str, str] = {}
         self.unifi_ports = result.unifi_ports if result else ()
         self.netbox_interfaces = result.netbox_interfaces if result else ()
+        self.unifi_port_configs = result.unifi_port_configs if result else ()
+        self.port_config_error = result.port_config_error if result else ""
         self.network_plan: NetworkPlan | None = result.network_plan if result else None
         self.network_outcomes: dict[str, list[WriteOutcome]] = {}
         self.outcomes: dict[str, WriteOutcome] = {}
@@ -320,6 +323,15 @@ class ReviewState:
                 PortMatch(port, None) for port in sorted(ports, key=lambda p: p.idx)
             )
         return match_ports(ports, interfaces)
+
+    def port_configs_for(self, key: str) -> dict[int, InventoryPortConfig]:
+        """Effective UniFi port configuration of one device, by port index."""
+        unifi_id, _ = _device_ids(key)
+        return {
+            config.idx: config
+            for config in self.unifi_port_configs
+            if unifi_id and config.device_id == unifi_id
+        }
 
     # -- user actions --------------------------------------------------------
 

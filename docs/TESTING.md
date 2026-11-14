@@ -171,6 +171,8 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- the detail panel shows port name and effective configuration per port,
+	the profile as tooltip, resolution notes and why configuration is missing,
 - internal port configuration resolves profiles before overrides, keeps
 	all-VLAN trunks as explicit `tagged-all`, separates disabled from down,
 	reports unknown profiles, networks and rules, groups LAG members, is only

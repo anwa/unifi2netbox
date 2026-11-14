@@ -81,6 +81,10 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   site-scoped VLAN group, VLANs and prefixes from UniFi networks with the same
   re-read, reconciliation and read-back safeguards as device writes; network
   writes run before device writes in one run.
+- **Port configuration** (`port_config.py`): resolves the effective UniFi
+  port configuration (name, enable, profile, mode, native/tagged VLANs, LAG)
+  from allow-listed fields of internal Network endpoints, read GET-only and
+  only for UniFi Network 11.0; all-VLAN trunks stay `tagged-all`.
 - **Ports** (`ports.py`): pairs UniFi ports with NetBox interfaces of a
   matched device by connector kind, then family, in numbering order; link
   state and speed are operational and display-only.

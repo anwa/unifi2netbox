@@ -586,33 +586,48 @@ class DetailPanel(QScrollArea):
         summary += " and never written."
         if item.category == CREATE:
             summary += " NetBox adds interfaces from the device type on create."
-        self.layout_.addWidget(label(summary, "caption"))
+        configs = self.state.port_configs_for(item.key)
+        if configs:
+            summary += " Configuration is read from the internal UniFi API."
+        elif self.state.port_config_error:
+            summary += f" {self.state.port_config_error}"
+        caption = label(summary, "caption")
+        caption.setObjectName("portsSummary")
+        self.layout_.addWidget(caption)
         grid = QGridLayout()
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(3)
-        titles = ("Port", "NetBox", "Type", "Link", "PoE")
+        titles = ("Port", "Name", "NetBox", "Type", "Config", "Link", "PoE")
         for column, text in enumerate(titles):
             grid.addWidget(label(text, "caption"), 0, column)
         notes: list[str] = []
         for row, match in enumerate(matches, start=1):
             port, interface = match.port, match.interface
-            name = str(port.idx) if port else "-"
+            config = configs.get(port.idx) if port else None
+            match_notes = list(match.notes) + list(config.notes if config else ())
             values = (
-                name,
+                str(port.idx) if port else "-",
+                config.name if config else "",
                 interface.name if interface else "-",
                 _port_type(port) if port else (interface.type if interface else ""),
+                _port_config(config),
                 _port_link(port) if port else "",
                 _port_poe(port) if port else "",
             )
             for column, value in enumerate(values):
-                cell = label(value, "secondary" if column == 3 else "")
-                if match.notes:
-                    cell.setToolTip("\n".join(match.notes))
+                cell = label(value, "secondary" if column == 5 else "")
+                if column == 4 and config is not None:
+                    cell.setObjectName(f"portConfig{config.idx}")
+                tips = list(match_notes)
+                if column == 4 and config is not None and config.profile:
+                    tips.insert(0, f"Port profile: {config.profile}")
+                if tips:
+                    cell.setToolTip("\n".join(tips))
                 grid.addWidget(cell, row, column)
-            for note in match.notes:
+            for note in match_notes:
                 prefix = f"Port {port.idx}" if port else interface.name
                 notes.append(f"{prefix}: {note}")
-        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(4, 1)
         self.layout_.addLayout(grid)
         if notes and item.category != CREATE:
             shown = notes[:8]
@@ -742,6 +757,18 @@ def _short_speed(mbps: int) -> str:
 def _port_type(port) -> str:
     connector = _CONNECTOR_NAMES.get(port.connector, port.connector)
     return f"{connector} {_short_speed(port.max_speed_mbps)}".strip()
+
+
+def _port_config(config) -> str:
+    """Configured mode and VLANs, e.g. 'access 20' or 'tagged-all, native 1'."""
+    if config is None:
+        return ""
+    text = config.summary()
+    if config.enabled is False and config.mode != "disabled":
+        text = f"off, {text}"
+    if config.lag_id is not None:
+        text += f", LAG {config.lag_id}"
+    return text
 
 
 def _port_link(port) -> str:
