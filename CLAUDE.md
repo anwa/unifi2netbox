@@ -50,6 +50,8 @@ with `QT_QPA_PLATFORM=offscreen`. `tests/conftest.py` autouse-blocks all socket
 connects, so tests must use synthetic transports (`httpx.MockTransport` for UniFi,
 a fake requests transport for pynetbox/NetBox). `tests/test_package.py` is skipped
 unless `UNIFI2NETBOX_EXE` points at a PyInstaller build (see `docs/DEPLOYMENT.md`).
+`tools/build_windows.ps1` builds the exe plus the per-user Inno Setup installer
+(`packaging/windows/unifi2netbox.iss`) from a clean tree.
 
 (*) No `integration` tests exist yet, and the conftest socket block currently
 applies to them too. Adding the first live test means exempting that marker in

@@ -216,10 +216,12 @@ python -m pip install -r requirements.txt
 ```
 
 Install the matching venv package if required. Never replace system Python or use
-`--break-system-packages`. A native Windows standalone smoke build is verified;
-final installers and Linux packages remain later milestones. See
-[deployment instructions](docs/DEPLOYMENT.md). Distribute the entire standalone
-directory, not only the executable; real settings/tokens are never bundled.
+`--break-system-packages`. On Windows the app can also be installed per user
+with the installer built by `tools/build_windows.ps1`
+(`unifi2netbox-<version>-setup.exe`, no administrator rights); upgrades and
+uninstall keep your settings in `%LOCALAPPDATA%\unifi2netbox`. Linux packages
+remain part of M10. See [deployment instructions](docs/DEPLOYMENT.md); real
+settings/tokens are never bundled.
 
 ## Start
 

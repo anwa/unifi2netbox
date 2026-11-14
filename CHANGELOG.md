@@ -6,6 +6,37 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.10.3
+
+### Fixed
+
+- The Windows build script finds `ISCC.exe` under PowerShell strict mode.
+
+### Validation
+
+- `tools/build_windows.ps1` built the exe and
+  `unifi2netbox-0.10.3-setup.exe` (43.5 MB) from a clean tree; bundle
+  hygiene and the native smoke test passed. A silent per-user install into a
+  test folder, a reinstall over it (stale files of the old build removed),
+  the smoke test of the installed exe and a silent uninstall passed; the
+  per-user configuration folder was unchanged throughout.
+
+## v0.10.2
+
+### Added
+
+- M10 slice 1: per-user Windows installer (`packaging/windows/unifi2netbox.iss`,
+  Inno Setup 6): installs without administrator rights to
+  `%LOCALAPPDATA%\Programs\unifi2netbox`, Start menu entry (optional desktop
+  icon), app icon, license page, English or German wizard, in-place upgrades
+  by a fixed AppId that remove files of the previous build, and an
+  uninstaller that keeps `%LOCALAPPDATA%\unifi2netbox` (settings, tokens,
+  snapshots, write history).
+- `tools/build_windows.ps1`: one command for exe and installer; refuses a
+  dirty tree, reads the version from `pyproject.toml`, checks that no
+  configuration, cache, journal or capture file is bundled and that the
+  license notices are, and runs the native smoke test before compiling.
+
 ## v0.10.1
 
 ### Added

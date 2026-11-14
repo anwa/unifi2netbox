@@ -460,10 +460,11 @@ installed on the developer workstation.
 
 Slices:
 
-- [ ] 1. Windows installer: Inno Setup script (per-user install under
+- [x] 1. Windows installer: Inno Setup script (per-user install under
   `%LOCALAPPDATA%\Programs\unifi2netbox`, Start menu shortcut, icon, license,
   upgrade by AppId, uninstall keeps `%LOCALAPPDATA%\unifi2netbox`) and one
-  build script for exe plus installer.
+  build script for exe plus installer (0.10.2/0.10.3; silent install,
+  upgrade and uninstall tested on the workstation).
 - [ ] 2. Linux packaging: PyInstaller standalone build and `.deb` (`/opt`,
   launcher, `.desktop` entry, icons) built by a GitHub Actions workflow with
   an offscreen smoke test; artifacts only, no public release without approval.
