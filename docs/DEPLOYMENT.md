@@ -37,6 +37,14 @@ Release v0.10.0 (tag commit e2c5987) was built on 2026-11-14 the same way from
 a clean working tree at the tag (about 132 MB); the native startup/shutdown
 test passed (1 passed). No live API was exercised by the packaged app.
 
+Release v1.0.0 (tag commit 1b7f429) was built on 2026-11-14 with
+`tools/build_windows.ps1` from a clean working tree at the tag: bundle check
+and native smoke test passed, installer `unifi2netbox-1.0.0-setup.exe`
+(43.5 MB). The Packages workflow built `unifi2netbox_1.0.0_amd64.deb` and the
+Linux tarball from the same tag and passed its offscreen smoke tests. All
+three files and `SHA256SUMS.txt` are attached to the public GitHub release
+v1.0.0 (approved by the user). The Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
