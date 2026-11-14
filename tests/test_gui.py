@@ -565,6 +565,7 @@ def fake_runner(monkeypatch, window):
         device_type_overrides,
         *,
         dry_run,
+        unifi_config=None,
     ):
         started.update(
             plan=write_plan,
@@ -573,6 +574,7 @@ def fake_runner(monkeypatch, window):
             site=site_overrides,
             status=status_overrides,
             type=device_type_overrides,
+            unifi_config=unifi_config,
         )
         return True
 
@@ -695,6 +697,7 @@ def test_apply_runs_selected_plan_with_create_choices(
     assert len(started["plan"].operations) == 3
     assert set(started["type"].values()) == {"101", "102"}
     assert set(started["role"].values()) == {"Access Point"}
+    assert started["unifi_config"] == window.unifi.config
     assert "Running dry run" in window.banner_text()
 
 

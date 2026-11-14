@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
 import requests
 
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig
-from unifi2netbox.inventory import normalize_netbox_device
+from unifi2netbox.inventory import InventoryDevice, normalize_netbox_device
 from unifi2netbox.preview import DevicePreview, DifferencePreview
 from unifi2netbox.write_journal import (
     OperationOutcomeStatus,
@@ -75,7 +76,15 @@ def execute_write_plan(
     status_overrides: dict[str, str] | None = None,
     device_type_overrides: dict[str, str] | None = None,
     backend: NetBoxWriteBackend | None = None,
+    source_devices: Mapping[str, InventoryDevice] | None = None,
+    source_error: str = "",
 ) -> WriteExecutionResult:
+    """Execute the plan; ``source_devices`` enables the UniFi re-read check.
+
+    ``source_devices`` maps UniFi observation IDs to freshly read devices (with
+    the same site mapping as the preview). ``source_error`` means UniFi could
+    not be re-read, so nothing is written.
+    """
     journal = initialize_journal(write_plan, run_id=run_id, started_at=started_at)
     if not write_plan.executable:
         return WriteExecutionResult(
@@ -100,6 +109,27 @@ def execute_write_plan(
                 "Missing preview device for write operation.",
             )
             continue
+
+        if source_error:
+            journal = record_operation_result(
+                journal,
+                operation.sequence,
+                OperationOutcomeStatus.SKIPPED,
+                f"UniFi could not be re-read before writing ({source_error}); "
+                "nothing was written.",
+            )
+            continue
+        if source_devices is not None:
+            try:
+                _verify_source_unchanged(operation, device, source_devices)
+            except StalePreviewError as error:
+                journal = record_operation_result(
+                    journal,
+                    operation.sequence,
+                    OperationOutcomeStatus.SKIPPED,
+                    str(error),
+                )
+                continue
 
         try:
             _verify_target_unchanged(operation, device, resolved_backend)
@@ -257,6 +287,42 @@ def _fail(journal: WriteJournal, operation: WriteOperation, message: str):
     return record_operation_result(
         journal, operation.sequence, OperationOutcomeStatus.FAILED, message
     )
+
+
+def source_observation_id(device_key: str) -> str:
+    """UniFi observation ID inside a preview device key, or ''."""
+    key = device_key.strip()
+    if key.startswith("create:"):
+        return key.split(":", maxsplit=1)[1]
+    if "->" in key:
+        return key.split("->", maxsplit=1)[0]
+    return ""
+
+
+def _verify_source_unchanged(
+    operation: WriteOperation,
+    device: DevicePreview,
+    source_devices: Mapping[str, InventoryDevice],
+) -> None:
+    """Refuse operations whose UniFi values changed after the preview."""
+    current = source_devices.get(source_observation_id(operation.device_key))
+    if current is None:
+        raise StalePreviewError(
+            "UniFi no longer reports this device; refresh the preview before writing."
+        )
+    changed = sorted(
+        field.name
+        for field in device.fields
+        if field.name in operation.selected_fields
+        and field.supported
+        and str(getattr(current, field.name, "")).strip() != field.source_value
+    )
+    if changed:
+        raise StalePreviewError(
+            "UniFi values changed since the preview ("
+            + ", ".join(changed)
+            + "); refresh and review before writing."
+        )
 
 
 def _verify_target_unchanged(

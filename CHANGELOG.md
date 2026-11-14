@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.5.3
+
+### Added
+
+- UniFi is re-read right before writing (with the configured NetBox site
+	mapping). Operations whose selected UniFi values changed since the preview,
+	or whose device UniFi no longer reports, are skipped with the reason; if
+	UniFi cannot be read, nothing is written. Dry runs run the same check.
+
+### Validation
+
+- Added executor tests for unchanged, changed, missing and unreadable UniFi
+	sources, pipeline tests for the re-read and its site mapping, and a GUI test
+	that the UniFi settings reach the write job.
+
 ## v0.5.2
 
 ### Added

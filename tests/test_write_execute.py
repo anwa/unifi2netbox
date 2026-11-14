@@ -793,3 +793,81 @@ def test_requests_backend_flags_ambiguous_create_answers(response, ambiguous):
         backend.create_device({"name": "x"})
 
     assert isinstance(caught.value, AmbiguousWriteError) is ambiguous
+
+
+def _run_with_sources(plan, diff, backend, sources, error="", behavior=None):
+    return execute_write_plan(
+        plan,
+        diff,
+        NetBoxConfig("https://netbox.invalid", "token"),
+        behavior or BehaviorConfig(),
+        run_id="run-source",
+        started_at="2026-11-14T16:00:00+00:00",
+        finished_at="2026-11-14T16:01:00+00:00",
+        backend=backend,
+        source_devices=sources,
+        source_error=error,
+    )
+
+
+def test_update_runs_when_unifi_source_is_unchanged():
+    netbox, diff, plan = _update_plan_fixture()
+    sources = {
+        "unifi_network:a": InventoryDevice(
+            source_id="a", name="switch-a", serial="NEW", site="HQ"
+        )
+    }
+    backend = FakeBackend(netbox)
+
+    outcome = _run_with_sources(plan, diff, backend, sources).journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.SUCCESS
+
+
+def test_update_skipped_when_unifi_value_changed_since_preview():
+    netbox, diff, plan = _update_plan_fixture()
+    sources = {
+        "unifi_network:a": InventoryDevice(
+            source_id="a", name="switch-a", serial="NEWER", site="HQ"
+        )
+    }
+    backend = FakeBackend(netbox)
+
+    outcome = _run_with_sources(plan, diff, backend, sources).journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.SKIPPED
+    assert "UniFi values changed since the preview (serial)" in outcome.message
+    assert backend.updated_payloads == []
+
+
+def test_create_skipped_when_unifi_no_longer_reports_device():
+    netbox, diff, plan = _create_plan_fixture()
+    backend = FakeBackend(netbox)
+
+    outcome = _run_with_sources(plan, diff, backend, {}, behavior=ROLE)
+    outcome = outcome.journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.SKIPPED
+    assert "UniFi no longer reports this device" in outcome.message
+    assert backend.created_payloads == []
+
+
+def test_nothing_is_written_when_unifi_cannot_be_reread():
+    netbox, diff, plan = _update_plan_fixture()
+    backend = FakeBackend(netbox)
+
+    outcome = _run_with_sources(
+        plan, diff, backend, None, error="UniFi request timed out."
+    ).journal.outcomes[0]
+
+    assert outcome.status == OperationOutcomeStatus.SKIPPED
+    assert "UniFi could not be re-read before writing" in outcome.message
+    assert backend.updated_payloads == []
+
+
+def test_source_observation_id_from_device_keys():
+    from unifi2netbox.write_execute import source_observation_id
+
+    assert source_observation_id("create:unifi_network:c") == "unifi_network:c"
+    assert source_observation_id("unifi_network:a->netbox:1") == "unifi_network:a"
+    assert source_observation_id("target-only:netbox:3") == ""

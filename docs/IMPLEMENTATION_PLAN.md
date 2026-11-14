@@ -241,14 +241,15 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
 - [x] Re-read NetBox targets before each write and skip operations whose preview
   baseline changed (deleted/changed update targets, newly appeared create
   duplicates by name/serial; offline contract tests and approved live write
-  test against the NetBox developer instance on 2026-11-14). Source-side
-  UniFi re-read before writes remains open.
+  test against the NetBox developer instance on 2026-11-14). The source-side
+  UniFi re-read followed in 0.5.3.
 
 - [x] Read back successful writes and mark them verified, mismatch or
   unverified, without automatic rewrites (offline tests, 0.5.1, 2026-11-14).
 - [x] Reconcile timed-out creates against NetBox before reporting failure
   (offline tests, 0.5.2, 2026-11-14).
-- [ ] Re-read affected UniFi source devices before writes.
+- [x] Re-read affected UniFi source devices before writes (offline tests,
+  0.5.3, 2026-11-14).
 - [ ] Persist write journals in SQLite and show recent runs.
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are

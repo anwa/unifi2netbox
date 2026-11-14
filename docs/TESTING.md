@@ -318,6 +318,8 @@ The focused tests validate that:
 - create execution succeeds with resolvable site/role/device-type references,
 - dry-run execution records skipped outcomes without backend writes,
 - mixed create/update runs continue and record partial failures per operation,
+- UniFi is re-read before writing; changed or vanished source devices are
+	skipped and an unreadable UniFi blocks all writes,
 - interrupted creates are looked up by name instead of retried: one match is
 	created, none is safe to retry, several or a failed lookup need review,
 - successful writes are read back and marked verified, mismatch or unverified;

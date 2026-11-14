@@ -11,7 +11,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
-from unifi2netbox.inventory import InventoryDevice, InventorySnapshot, InventorySource
+from unifi2netbox.inventory import (
+    InventoryDevice,
+    InventoryError,
+    InventorySnapshot,
+    InventorySource,
+    read_unifi_inventory,
+)
 from unifi2netbox.matching import (
     DeduplicationResult,
     DeviceTypeSuggestion,
@@ -211,9 +217,19 @@ def run_write_execution(
     status_overrides: dict[str, str],
     device_type_overrides: dict[str, str],
     dry_run: bool,
+    unifi_config: UniFiConfig | None = None,
 ) -> WriteExecutionReport:
-    """Execute an approved write plan and summarize the journal for display."""
+    """Execute an approved write plan and summarize the journal for display.
+
+    With ``unifi_config`` the UniFi inventory is re-read first, and operations
+    whose UniFi values changed since the preview are skipped.
+    """
     started = _now()
+    source_devices, source_error = (
+        reread_unifi_sources(unifi_config, behavior.netbox_site_name)
+        if unifi_config is not None
+        else (None, "")
+    )
     result = execute_write_plan(
         write_plan,
         difference_preview,
@@ -227,6 +243,8 @@ def run_write_execution(
         site_overrides=site_overrides,
         status_overrides=status_overrides,
         device_type_overrides=device_type_overrides,
+        source_devices=source_devices,
+        source_error=source_error,
     )
     summary = summarize_journal(result.journal)
     verified = sum(
@@ -266,6 +284,20 @@ def run_write_execution(
         ),
         dry_run=dry_run,
     )
+
+
+def reread_unifi_sources(
+    unifi_config: UniFiConfig, netbox_site_name: str
+) -> tuple[dict[str, InventoryDevice] | None, str]:
+    """Fresh UniFi devices by observation ID, or (None, error text)."""
+    try:
+        snapshot = map_unifi_site(read_unifi_inventory(unifi_config), netbox_site_name)
+    except InventoryError as error:
+        return None, str(error) or "UniFi read failed"
+    return {
+        _snapshot_observation_id(snapshot.source, device): device
+        for device in snapshot.devices
+    }, ""
 
 
 def preview_detail_lines(

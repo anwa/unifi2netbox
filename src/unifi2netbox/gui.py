@@ -175,8 +175,10 @@ class WriteExecutionJob(QRunnable):
         device_type_overrides: dict[str, str],
         *,
         dry_run: bool,
+        unifi_config: UniFiConfig | None = None,
     ) -> None:
         super().__init__()
+        self.unifi_config = unifi_config
         self.netbox_config = netbox_config
         self.behavior = behavior
         self.difference_preview = difference_preview
@@ -201,6 +203,7 @@ class WriteExecutionJob(QRunnable):
                 status_overrides=self.status_overrides,
                 device_type_overrides=self.device_type_overrides,
                 dry_run=self.dry_run,
+                unifi_config=self.unifi_config,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -235,6 +238,7 @@ class WriteExecutionRunner(QObject):
         device_type_overrides: dict[str, str],
         *,
         dry_run: bool,
+        unifi_config: UniFiConfig | None = None,
     ) -> bool:
         if self.busy:
             return False
@@ -248,6 +252,7 @@ class WriteExecutionRunner(QObject):
             status_overrides,
             device_type_overrides,
             dry_run=dry_run,
+            unifi_config=unifi_config,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1558,6 +1563,7 @@ class MainWindow(QMainWindow):
             overrides["status"],
             overrides["type"],
             dry_run=dry_run,
+            unifi_config=self.unifi.config,
         )
         self.update_check_action()
 

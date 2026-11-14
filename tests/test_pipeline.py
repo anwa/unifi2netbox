@@ -152,3 +152,71 @@ def test_netbox_device_type_part_number_is_normalized():
 
     assert item is not None
     assert item.part_number == "USW-Pro-24"
+
+
+def test_reread_unifi_sources_applies_site_mapping(monkeypatch):
+    from unifi2netbox.pipeline import reread_unifi_sources
+
+    unifi = _snapshot(
+        InventorySource.UNIFI_NETWORK,
+        [InventoryDevice(source_id="a", name="switch-a", site="Default")],
+    )
+    monkeypatch.setattr(
+        "unifi2netbox.pipeline.read_unifi_inventory", lambda config: unifi
+    )
+
+    sources, error = reread_unifi_sources(UNIFI, "Home")
+
+    assert error == ""
+    assert sources["unifi_network:a"].site == "Home"
+
+
+def test_reread_unifi_sources_reports_errors(monkeypatch):
+    from unifi2netbox.pipeline import reread_unifi_sources
+
+    def failing(config):
+        raise InventoryError("UniFi request timed out.")
+
+    monkeypatch.setattr("unifi2netbox.pipeline.read_unifi_inventory", failing)
+
+    assert reread_unifi_sources(UNIFI, "") == (None, "UniFi request timed out.")
+
+
+def test_run_write_execution_passes_fresh_sources(monkeypatch):
+    from unifi2netbox import pipeline
+    from unifi2netbox.config import BehaviorConfig
+    from unifi2netbox.write_execute import WriteExecutionResult
+    from unifi2netbox.write_journal import initialize_journal
+    from unifi2netbox.write_plan import WritePlan, WritePlanSummary
+
+    captured = {}
+    plan = WritePlan((), (), False, WritePlanSummary(0, 0, 0, 0, 0, (), False, ""))
+
+    def fake_execute(*args, **kwargs):
+        captured.update(kwargs)
+        return WriteExecutionResult(
+            journal=initialize_journal(plan, run_id="r", started_at="s")
+        )
+
+    monkeypatch.setattr(pipeline, "execute_write_plan", fake_execute)
+    monkeypatch.setattr(
+        pipeline,
+        "reread_unifi_sources",
+        lambda config, site: ({"unifi_network:a": "fresh"}, ""),
+    )
+
+    pipeline.run_write_execution(
+        NETBOX,
+        BehaviorConfig(),
+        None,
+        plan,
+        role_overrides={},
+        site_overrides={},
+        status_overrides={},
+        device_type_overrides={},
+        dry_run=True,
+        unifi_config=UNIFI,
+    )
+
+    assert captured["source_devices"] == {"unifi_network:a": "fresh"}
+    assert captured["source_error"] == ""

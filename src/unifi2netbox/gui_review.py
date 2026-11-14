@@ -544,11 +544,11 @@ class ConfirmDialog(QDialog):
         layout.addWidget(
             label(
                 (
-                    "Nothing is written. Each operation re-reads NetBox and reports "
-                    "what would happen."
+                    "Nothing is written. UniFi and NetBox are re-read and each "
+                    "operation reports what would happen."
                     if dry_run
-                    else "NetBox is re-read before every write; changed or missing "
-                    "targets are skipped. UniFi is never modified."
+                    else "UniFi and NetBox are re-read before writing; devices that "
+                    "changed since the preview are skipped. UniFi is never modified."
                 ),
                 "caption",
             )

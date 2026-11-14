@@ -90,6 +90,9 @@ system**. The choice is saved as `[ui] theme` (`system`, `light` or `dark`).
 - **Apply N changes** asks once, then writes; **Dry run (no changes)** records
   the outcomes without changing NetBox. **Apply this device** in the detail
   panel runs a single device, for example when other rows block the full plan.
+- Right before writing, UniFi is re-read: a device whose selected UniFi
+  values changed since the preview, or that UniFi no longer reports, is
+  skipped. If UniFi cannot be read, nothing is written.
 - Before each write, NetBox is re-read: an update is skipped if the target
   device was deleted or a selected field changed since the preview, and a
   create is skipped if a device with the same name or serial appeared
