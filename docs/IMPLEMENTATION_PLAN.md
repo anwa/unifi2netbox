@@ -252,6 +252,9 @@ Branch: `feature/approved-netbox-writes`; depends on M4.
   0.5.3, 2026-11-14).
 - [x] Persist write journals in SQLite and show recent runs (offline tests,
   0.5.4, 2026-11-14).
+- [x] Live acceptance of read-back, UniFi re-read and write history on the
+  developer workstation (read-only checks plus an approved NetBox developer-
+  instance write test, 6/6, 2026-11-14).
 
 Acceptance: exactly the confirmed changes are attempted; dependent failures are
 visible; live write tests require explicit narrow test scope and separate opt-in.

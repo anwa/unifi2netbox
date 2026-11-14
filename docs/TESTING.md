@@ -529,3 +529,15 @@ for all 11 UniFi models in this installation (15 of 15 create rows): one by
 exact model, seven by part number and three by alias. 203 of 210 Ubiquiti
 device types in this NetBox carry a part number.
 
+On 2026-11-14 the assistant checked the M5 additions live on the developer
+workstation (commit 4a5b07d, application 0.5.4). Read-only first: the UniFi
+re-read took 0.04 s and found all 15 planned devices; a real dry run of all 15
+creates passed the UniFi and NetBox re-read checks and was saved to a scratch
+write journal. Then, with the user's explicit approval, an approved write test
+against the NetBox developer instance passed 6/6 checks: a create through the
+real pipeline was written and read back as verified, a site update via a
+temporary test site was written and verified, both runs appeared in the write
+history, and the test device and test site were removed afterwards (NetBox
+again held 4 devices and 1 site). Interrupted creates and changed UniFi values
+cannot be produced safely on live systems and remain covered by offline tests.
+
