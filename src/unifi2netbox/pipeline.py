@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
+from unifi2netbox.cables import CablePlan, build_cable_plan
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig, UniFiConfig
 from unifi2netbox.interface_execute import execute_interface_plan
 from unifi2netbox.interface_plan import (
@@ -99,6 +100,7 @@ class InventoryPreviewResult:
     unifi_port_configs: tuple[InventoryPortConfig, ...] = ()
     port_config_error: str = ""
     interface_plan: InterfacePlan | None = None
+    cable_plan: CablePlan | None = None
     network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
@@ -239,6 +241,7 @@ def build_inventory_preview(
         interface_plan=_interface_plan(
             dedup.pairs, netbox_snapshot, mapped_unifi, network_plan, netbox_site_name
         ),
+        cable_plan=_cable_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),
@@ -284,6 +287,25 @@ def _interface_plan(
         netbox_snapshot.vlans,
         vlan_group_id=group_id,
         vlan_group_name=group_name,
+        port_config_error=unifi_snapshot.port_config_error,
+    )
+
+
+def _cable_plan(
+    pairs, netbox_snapshot: InventorySnapshot, unifi_snapshot: InventorySnapshot
+) -> CablePlan:
+    """Cable suggestions between matched devices from UniFi link evidence."""
+    return build_cable_plan(
+        unifi_snapshot.links,
+        {device.source_id: device.name for device in unifi_snapshot.devices},
+        {
+            pair.unifi_observation_id.split(":", 1)[-1]: (
+                pair.netbox_observation_id.split(":", 1)[-1]
+            )
+            for pair in pairs
+        },
+        unifi_snapshot.ports,
+        netbox_snapshot.interfaces,
         port_config_error=unifi_snapshot.port_config_error,
     )
 

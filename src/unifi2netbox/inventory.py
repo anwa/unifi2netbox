@@ -8,6 +8,7 @@ import httpx
 import requests
 
 from unifi2netbox.config import NetBoxConfig, UniFiConfig
+from unifi2netbox.links import InventoryLink, read_links
 from unifi2netbox.netbox import ReadOnlySession, RedirectError
 from unifi2netbox.port_config import (
     InventoryPortConfig,
@@ -103,6 +104,8 @@ class InventoryInterface:
     untagged_vlan_id: str = ""
     tagged_vlan_ids: tuple[str, ...] = ()
     lag_id: str = ""
+    cable_id: str = ""
+    link_peer_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -169,6 +172,7 @@ class InventorySnapshot:
     ipam_error: str = ""
     port_configs: tuple[InventoryPortConfig, ...] = ()
     port_config_error: str = ""
+    links: tuple[InventoryLink, ...] = ()
 
 
 def _text(value: object) -> str:
@@ -296,7 +300,17 @@ def _normalize_netbox_interface(row: dict[str, object]) -> InventoryInterface | 
             )
         ),
         lag_id=_related_id(row.get("lag")),
+        cable_id=_related_id(row.get("cable")),
+        link_peer_ids=_interface_peers(row),
     )
+
+
+def _interface_peers(row: dict[str, object]) -> tuple[str, ...]:
+    """IDs of cabled peer interfaces; other peer types are not interfaces."""
+    peers = row.get("link_peers")
+    if row.get("link_peers_type") != "dcim.interface" or not isinstance(peers, list):
+        return ()
+    return tuple(peer_id for item in peers if (peer_id := _related_id(item)))
 
 
 def _numeric_key(value: str) -> tuple[int, str]:
@@ -653,18 +667,25 @@ def _read_port_configs(
     version: str,
     reference: str,
     raw_devices: list[dict[str, object]],
-) -> tuple[tuple[InventoryPortConfig, ...], str]:
-    """Port configuration from internal endpoints, or an explanation.
+) -> tuple[tuple[InventoryPortConfig, ...], tuple[InventoryLink, ...], str]:
+    """Port configuration and link evidence from internal endpoints.
+
+    Returns (configs, links, error); on failure both tuples are empty and the
+    error explains why.
 
     Read-only and tolerant: any failure leaves the official data untouched.
     Raw internal payloads are reduced to allow-listed fields right here and
     never stored, so network secrets do not leave this function.
     """
     if not version.startswith(INTERNAL_API_SERIES):
-        return (), (
-            "Port configuration is only read for validated UniFi Network "
-            f"{', '.join(s.rstrip('.') for s in INTERNAL_API_SERIES)}; "
-            f"installed {version or 'unknown'}."
+        return (
+            (),
+            (),
+            (
+                "Port configuration is only read for validated UniFi Network "
+                f"{', '.join(s.rstrip('.') for s in INTERNAL_API_SERIES)}; "
+                f"installed {version or 'unknown'}."
+            ),
         )
     base = f"{config.url.rstrip('/')}/proxy/network/api/s/{reference}/"
     try:
@@ -672,15 +693,19 @@ def _read_port_configs(
         profiles = allowed_profiles(_internal_rows(client, base + "rest/portconf"))
         networks = allowed_networks(_internal_rows(client, base + "rest/networkconf"))
     except InventoryError as error:
-        return (), f"Port configuration unavailable: {error}"
+        return (), (), f"Port configuration unavailable: {error}"
     except httpx.HTTPError, OSError, ValueError, TypeError:
-        return (), "Port configuration unavailable due to transport errors."
+        return (), (), "Port configuration unavailable due to transport errors."
     by_mac = {
         mac: _text(row.get("id"))
         for row in raw_devices
         if (mac := _normalize_mac(row.get("macAddress")).replace(":", "").lower())
     }
-    return resolve_port_configs(devices, profiles, networks, by_mac), ""
+    return (
+        resolve_port_configs(devices, profiles, networks, by_mac),
+        read_links(devices, by_mac),
+        "",
+    )
 
 
 def _internal_rows(client: httpx.Client, url: str) -> list[object]:
@@ -979,7 +1004,7 @@ def read_unifi_inventory(
                 if network is not None:
                     networks.append(network)
 
-            port_configs, port_config_error = _read_port_configs(
+            port_configs, links, port_config_error = _read_port_configs(
                 client, config, version, site["internalReference"], raw_devices
             )
     except InventoryError:
@@ -1001,4 +1026,5 @@ def read_unifi_inventory(
         networks=tuple(networks),
         port_configs=port_configs,
         port_config_error=port_config_error,
+        links=links,
     )

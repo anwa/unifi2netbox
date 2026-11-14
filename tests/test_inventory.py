@@ -649,7 +649,7 @@ def test_port_config_failure_keeps_the_official_inventory():
         return httpx.Response(403, json={"secret": "synthetic-secret"})
 
     with httpx.Client(transport=httpx.MockTransport(handle)) as client:
-        configs, error = _read_port_configs(
+        configs, links, error = _read_port_configs(
             client,
             UniFiConfig("https://console.invalid", "synthetic-key"),
             "11.0.99",
@@ -657,7 +657,7 @@ def test_port_config_failure_keeps_the_official_inventory():
             [],
         )
 
-    assert configs == ()
+    assert configs == () and links == ()
     assert error == "Port configuration unavailable: permission denied."
 
 
@@ -680,3 +680,31 @@ def test_netbox_interfaces_carry_vlan_assignments_and_lag():
     assert (interface.mode, interface.untagged_vlan_id) == ("tagged", "5")
     assert interface.tagged_vlan_ids == ("7", "11")
     assert interface.lag_id == "12"
+
+
+def test_netbox_interfaces_carry_their_cable_and_interface_peers():
+    from unifi2netbox.inventory import _normalize_netbox_interface
+
+    cabled = _normalize_netbox_interface(
+        {
+            "id": 10,
+            "device": {"id": 1},
+            "name": "Port 1",
+            "cable": {"id": 4},
+            "link_peers_type": "dcim.interface",
+            "link_peers": [{"id": 22}],
+        }
+    )
+    to_port = _normalize_netbox_interface(
+        {
+            "id": 11,
+            "device": {"id": 1},
+            "name": "Port 2",
+            "cable": {"id": 5},
+            "link_peers_type": "dcim.frontport",
+            "link_peers": [{"id": 3}],
+        }
+    )
+
+    assert (cabled.cable_id, cabled.link_peer_ids) == ("4", ("22",))
+    assert (to_port.cable_id, to_port.link_peer_ids) == ("5", ())

@@ -171,6 +171,10 @@ against existing NetBox manufacturer/model combinations and remain read-only.
 
 The focused tests validate that:
 
+- link evidence comes from wired uplinks and LLDP of known UniFi devices;
+	the cable plan suggests only agreeing, unclaimed, fully mapped links,
+	preselects two-source evidence, never replaces cables and keeps unmatched
+	devices reference-only,
 - the Interfaces view lists paired ports with field checkboxes, keeps VLAN
 	fields tied to the mode, counts interface writes and passes them to the run,
 - interface writes patch only selected fields, skip on NetBox or UniFi drift,

@@ -6,6 +6,28 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.6.11
+
+### Added
+
+- M6 slice 5, planning: link evidence between UniFi devices is read from the
+  internal `stat/device` payload (wired `uplink` and `lldp_table`), resolved
+  from MAC to device IDs without storing MACs. NetBox interfaces carry their
+  cable and interface link peers. A cable plan groups the evidence per device
+  pair and suggests a cable only when all observations agree on the ports, no
+  port is claimed by another neighbor, both devices are matched and both ports
+  map to NetBox interfaces (port pairing, or the only physical interface of a
+  device without port data), and neither interface has another cable.
+  Two or more observations preselect a suggestion; single observations stay
+  unchecked. Existing cables are never replaced.
+
+### Validation
+
+- Added link reader, cable planner, interface cable and snapshot tests. Live
+  read-only: 53 observations (35 LLDP, 18 uplink) on 18 device pairs without
+  disagreement; one cable suggested (UDM port.5 to RPS, LLDP and uplink), 17
+  pairs reference-only because a device is not in NetBox.
+
 ## v0.6.10
 
 ### Added

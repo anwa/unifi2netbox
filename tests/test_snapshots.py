@@ -229,3 +229,28 @@ def test_interface_vlans_round_trip(tmp_path):
     store.save_current(snapshot)
 
     assert store.load_current(InventorySource.NETBOX).interfaces == (interface,)
+
+
+def test_links_and_interface_cables_round_trip(tmp_path):
+    from unifi2netbox.inventory import (
+        InventoryInterface,
+        InventorySnapshot,
+        InventorySource,
+    )
+    from unifi2netbox.links import InventoryLink
+
+    link = InventoryLink("a", 5, "b", None, "lldp")
+    interface = InventoryInterface(
+        "10", "1", "Port 1", "1000base-t", cable_id="4", link_peer_ids=("22",)
+    )
+    snapshot = InventorySnapshot(
+        InventorySource.UNIFI_NETWORK,
+        "2026-11-14T00:00:00+00:00",
+        interfaces=(interface,),
+        links=(link,),
+    )
+    store = SnapshotStore(tmp_path / "snapshots.sqlite3")
+    store.save_current(snapshot)
+
+    loaded = store.load_current(InventorySource.UNIFI_NETWORK)
+    assert loaded.links == (link,) and loaded.interfaces == (interface,)
