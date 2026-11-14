@@ -6,6 +6,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v0.3.35
+
+### Changed
+
+- Apply `ruff format` to modules with merged implicit string concatenations
+	and trailing whitespace so the CI format check passes again. No behavior
+	change.
+
 ## v0.3.34
 
 ### Added

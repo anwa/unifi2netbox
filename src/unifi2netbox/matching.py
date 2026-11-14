@@ -105,7 +105,7 @@ def deduplicate_inventory(
                     reason=ConflictReason.DUPLICATE_CONFIRMED_TARGET,
                     observation_ids=(unifi_id, target.observation_id),
                     message=(
-                        "Multiple confirmed mappings target the same " "NetBox device."
+                        "Multiple confirmed mappings target the same NetBox device."
                     ),
                 )
             )

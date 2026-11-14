@@ -1137,10 +1137,7 @@ def test_single_main_check_action_checks_both_services(qtbot, tmp_path, pool):
 
 def test_unifi_source_id_is_extracted_from_preview_device_keys():
     assert _unifi_source_id_from_device_key("create:unifi_network:dev-1") == "dev-1"
-    assert (
-        _unifi_source_id_from_device_key("unifi_network:dev-2->netbox:42")
-        == "dev-2"
-    )
+    assert _unifi_source_id_from_device_key("unifi_network:dev-2->netbox:42") == "dev-2"
     assert _unifi_source_id_from_device_key("target-only:netbox:42") == ""
 
 

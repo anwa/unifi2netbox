@@ -1759,7 +1759,7 @@ class MainWindow(QMainWindow):
 
         execute_selected.clicked.connect(run_selected_row)
         layout.addWidget(execute_selected)
-        
+
         def export_selected_row_dump() -> None:
             row_index = table.currentRow()
             if row_index < 0:
@@ -1893,9 +1893,7 @@ class MainWindow(QMainWindow):
         if not self.unifi_api_feedback:
             self.statusBar().showMessage("No UniFi API feedback available to export.")
             return
-        default_name = (
-            f"unifi-api-dump-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-        )
+        default_name = f"unifi-api-dump-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
         filename, _ = QFileDialog.getSaveFileName(
             self,
             "Save UniFi API dump",
@@ -1926,9 +1924,7 @@ class MainWindow(QMainWindow):
             return
         raw_row = _find_unifi_raw_device(self.unifi_raw_devices, source_id)
         if raw_row is None:
-            self.statusBar().showMessage(
-                "No UniFi raw payload found for selected row."
-            )
+            self.statusBar().showMessage("No UniFi raw payload found for selected row.")
             return
         safe_id = "".join(ch for ch in source_id if ch.isalnum() or ch in "-_")
         default_name = (

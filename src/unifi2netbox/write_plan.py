@@ -72,7 +72,7 @@ def build_write_plan(
                     severity=IssueSeverity.BLOCKER,
                     code="missing_device_preview",
                     message=(
-                        "Change references a device that is absent in preview " "data."
+                        "Change references a device that is absent in preview data."
                     ),
                 )
             )

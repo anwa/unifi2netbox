@@ -110,8 +110,7 @@ class BehaviorConfig:
             ord(character) < 32 for character in self.default_device_role_name
         ):
             raise ConfigError(
-                "Default device role name must be a string without control "
-                "characters."
+                "Default device role name must be a string without control characters."
             )
 
 
