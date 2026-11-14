@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=unifi2netbox
+GenericName=UniFi inventory review for NetBox
+Comment=Review UniFi inventory differences and apply approved changes to NetBox
+Exec=unifi2netbox
+Icon=unifi2netbox
+Terminal=false
+Categories=Network;System;Utility;
+Keywords=UniFi;NetBox;Inventory;Network;
+StartupWMClass=unifi2netbox

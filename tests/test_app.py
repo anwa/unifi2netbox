@@ -36,3 +36,30 @@ assert QLocale().name() == "en_GB"
         timeout=15,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_smoke_test_flag_shows_the_window_and_exits_cleanly(tmp_path):
+    from importlib.metadata import version
+
+    path = tmp_path / "config.toml"
+    script = """
+import socket
+import sys
+from unifi2netbox.app import main
+
+def blocked(*args, **kwargs):
+    raise AssertionError("Live network is disabled.")
+
+socket.socket.connect = blocked
+socket.socket.connect_ex = blocked
+sys.exit(main(["--config", sys.argv[1], "--smoke-test"]))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"smoke-test ok: unifi2netbox {version('unifi2netbox')}" in result.stdout

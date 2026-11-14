@@ -10,9 +10,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="UniFi inventory review for NetBox")
     parser.add_argument("--version", action="version", version=version("unifi2netbox"))
     parser.add_argument("--config", type=Path, default=default_config_path())
+    # Packaging check: show the main window, print its title, exit with 0.
+    parser.add_argument("--smoke-test", action="store_true", help=argparse.SUPPRESS)
     arguments = parser.parse_args(argv)
 
-    from PySide6.QtCore import QLocale, QThreadPool
+    from PySide6.QtCore import QLocale, QThreadPool, QTimer
     from PySide6.QtWidgets import QApplication
 
     from unifi2netbox.config import ConfigError, load_ui_config
@@ -32,6 +34,14 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationVersion(version("unifi2netbox"))
     pool = QThreadPool(app)
     pool.setMaxThreadCount(2)
-    window = MainWindow(arguments.config, pool)
+    window = MainWindow(arguments.config, pool, open_first_run=not arguments.smoke_test)
     window.show()
+    if arguments.smoke_test:
+
+        def finish() -> None:
+            if sys.stdout is not None:  # windowed Windows builds have no console
+                print(f"smoke-test ok: {window.windowTitle()}", flush=True)
+            window.close()
+
+        QTimer.singleShot(500, finish)
     return app.exec()
