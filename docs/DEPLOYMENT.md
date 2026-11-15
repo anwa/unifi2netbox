@@ -73,6 +73,17 @@ attached to the public GitHub release v1.1.1 (requested by the user). Not
 verified: installer upgrade/uninstall for this version and opening the
 manual window in the packaged app. The Windows build is not code-signed.
 
+Release v1.1.2 (tag v1.1.2 on merge commit 5b980f5, fix release for the
+title bar of reopened windows) was built on 2026-11-15 the same way from a
+clean detached worktree at the tag: bundle check and native smoke test
+passed (1 passed, 1 skipped), the exe reports `1.1.2`, and the installer
+`unifi2netbox-1.1.2-setup.exe` is 45.4 MB (SHA-256
+`3EB27CC8CAE2F83A83103C1A6FC6FEAE13CA79FA5A7D9083B7C6C5773EC64DEE`). The
+Offline Tests and Packages workflows passed for main and the tag. All three
+files and `SHA256SUMS.txt` are attached to the public GitHub release v1.1.2
+(requested by the user). Not verified: installer upgrade/uninstall for this
+version. The Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
