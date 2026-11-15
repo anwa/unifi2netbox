@@ -820,3 +820,14 @@ items; 19 got the NetBox manufacturer Ubiquiti (vendors `UBNT` and
 `Ubiquiti Inc.`), 4 `H3C-OEM` modules none, because NetBox has no matching
 manufacturer. The dry run passed the UniFi and NetBox re-read checks for all
 23 and wrote nothing.
+
+Then, with the user's explicit approval, the assistant ran the slice 5 write
+test against the NetBox developer instance (commit 5cbc35b, application
+1.0.5) through the real pipeline for exactly one module; UniFi was only
+read. Results, all passed (5/5): the item `Transceiver SFP+ 7` of
+`NG-DG-R1-SW11` was created with part ID `UF-MM-10G`, its serial, the
+description "10G BASE-SR", manufacturer Ubiquiti and a link to the
+interface `SFP+ 7`, read back as verified; a refreshed preview showed
+exactly one item of that name, in sync, the other 22 modules still pending,
+and a second apply had nothing to write. The run is in the write history;
+the item stays in NetBox as approved.
