@@ -55,6 +55,10 @@ is 43.6 MB (SHA-256
 Offline Tests workflow passed for main and the tag. Installer install,
 upgrade and uninstall were not repeated for this version, and the packaged
 app was not run against the live APIs. The Windows build is not code-signed.
+The Packages workflow built `unifi2netbox_1.1.0_amd64.deb` and the Linux
+tarball from the same tag and passed its offscreen smoke tests. All three
+files and `SHA256SUMS.txt` are attached to the public GitHub release v1.1.0
+(approved by the user on 2026-11-15).
 
 ```powershell
 python -m pip install -r requirements-build.txt
