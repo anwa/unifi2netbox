@@ -6,6 +6,15 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.1.1
+
+### Summary
+
+- Patch release with the user manual: a **Manual** button (F1) opens the
+	manual inside the app, with the chapter tree on the left and the page on
+	the right, starting at the overview. No change to what the app reads or
+	writes.
+
 ### Added
 
 - User manual in `manual/` (Markdown pages in chapter folders with
@@ -28,6 +37,15 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	every filter label stays readable at the default window width.
 - The UniFi Drive settings text now says that the drive bays are read with
 	the key.
+
+### Validation
+
+- Offline gate: 613 passed, 2 skipped; Ruff lint and format pass; GitHub
+	Actions Offline Tests and Packages workflows run for main and the tag.
+- The manual tests check structure, titles, every link and image, and drive
+	the manual window offscreen. Screenshots come from fictional demo data.
+- The manual window was not checked in a packaged build beyond the bundle
+	check (the build scripts fail without `manual/index.md`).
 
 ## v1.1.0
 
