@@ -45,6 +45,17 @@ Linux tarball from the same tag and passed its offscreen smoke tests. All
 three files and `SHA256SUMS.txt` are attached to the public GitHub release
 v1.0.0 (approved by the user). The Windows build is not code-signed.
 
+Release v1.1.0 (tag v1.1.0 on merge commit 1adddc4) was built on 2026-11-15
+with `tools/build_windows.ps1` from a clean detached worktree at the tag
+(the main checkout held an untracked user file): bundle check and native
+smoke test passed (1 passed, 1 skipped), the exe reports `1.1.0`, the
+directory is about 132 MB and the installer `unifi2netbox-1.1.0-setup.exe`
+is 43.6 MB (SHA-256
+`000DEA447FA66B29F4B3985B7A683A62D152F1EDFDC41D19E3D0473E6C2FB9E5`). The
+Offline Tests workflow passed for main and the tag. Installer install,
+upgrade and uninstall were not repeated for this version, and the packaged
+app was not run against the live APIs. The Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
