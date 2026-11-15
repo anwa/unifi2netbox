@@ -4,7 +4,7 @@ name: Packages
 # offscreen and keeps them as workflow artifacts. Nothing is published.
 on:
   push:
-    branches: [main, "feature/deployment"]
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
