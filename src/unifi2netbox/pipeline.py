@@ -22,6 +22,11 @@ from unifi2netbox.config import (
     ProtectConfig,
     UniFiConfig,
 )
+from unifi2netbox.custom_fields import (
+    CustomFieldPlan,
+    build_custom_field_plan,
+    execute_custom_field_plan,
+)
 from unifi2netbox.details import InventorySfp
 from unifi2netbox.disk_execute import execute_disk_plan
 from unifi2netbox.disks import DiskPlan, build_disk_plan
@@ -134,6 +139,7 @@ class InventoryPreviewResult:
     unifi_device_records: tuple[InventoryDevice, ...] = ()
     netbox_device_records: tuple[InventoryDevice, ...] = ()
     unifi_sfps: tuple[InventorySfp, ...] = ()
+    custom_field_plan: CustomFieldPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -271,8 +277,15 @@ def build_inventory_preview(
     suggestions = suggest_device_types_for_unmatched(
         dedup, netbox_snapshot, mapped_unifi
     )
+    custom_field_plan = build_custom_field_plan(
+        netbox_snapshot.custom_fields, netbox_snapshot.custom_field_error
+    )
     diff = build_difference_preview(
-        netbox_snapshot, mapped_unifi, dedup, netbox_sites=site_catalog
+        netbox_snapshot,
+        mapped_unifi,
+        dedup,
+        netbox_sites=site_catalog,
+        firmware_writable=custom_field_plan.firmware_writable,
     )
     change = build_change_preview(diff)
     plan = build_write_plan(diff, change, netbox_sites=site_catalog)
@@ -345,6 +358,7 @@ def build_inventory_preview(
         unifi_device_records=mapped_unifi.devices,
         netbox_device_records=netbox_snapshot.devices,
         unifi_sfps=unifi_snapshot.sfps,
+        custom_field_plan=custom_field_plan,
     )
 
 
@@ -481,14 +495,16 @@ def run_write_execution(
     access_config: AccessConfig | None = None,
     drive_config: DriveConfig | None = None,
     disk_plan: DiskPlan | None = None,
+    custom_field_plan: CustomFieldPlan | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
     With ``unifi_config`` the UniFi inventory is re-read once first; devices and
-    networks whose UniFi values changed since the preview are skipped. Network
-    writes (VLAN group, VLANs, prefixes) run first, then interface
-    configuration and cables of matched devices, then device writes, then
-    drive inventory items of matched UNAS devices.
+    networks whose UniFi values changed since the preview are skipped. The
+    Custom Field ``firmware`` is created first when selected, then network
+    writes (VLAN group, VLANs, prefixes), then interface configuration and
+    cables of matched devices, then device writes (firmware only when the
+    field is available), then drive inventory items of matched UNAS devices.
     """
     started = _now()
     snapshot, source_error = (
@@ -519,8 +535,12 @@ def run_write_execution(
         else None
     )
     backend = RequestsNetBoxWriteBackend(netbox_config)
+    field_outcomes, firmware_writable = execute_custom_field_plan(
+        custom_field_plan, backend, dry_run=dry_run
+    )
     network_outcomes = (
-        execute_network_plan(
+        field_outcomes
+        + execute_network_plan(
             network_plan,
             backend,
             dry_run=dry_run,
@@ -557,6 +577,7 @@ def run_write_execution(
         device_type_overrides=device_type_overrides,
         source_devices=source_devices,
         source_error=source_error,
+        firmware_writable=firmware_writable,
     )
     network_outcomes += execute_disk_plan(
         disk_plan,

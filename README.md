@@ -94,11 +94,15 @@ history.
   unpaired ports or interfaces. Link state and speed are never written.
   Plugged SFP modules (part number, tooltip with vendor and serial) and
   configured fixed speeds are shown as well.
-- The detail panel also shows the management IP and firmware version that
-  UniFi reports next to the NetBox primary IPv4 and `firmware` Custom Field.
-  UniFi DHCP ranges, wireless LANs (never their passphrases) and fixed-IP
-  reservations are read and counted in the preview summary. Writing these
-  details to NetBox is being added in milestone M11.
+- Firmware is a device field: the version UniFi reports is written into the
+  NetBox Custom Field `firmware`. If NetBox has no such field, the detail panel
+  offers "Create the NetBox Custom Field 'firmware'" (preselected, created once
+  before any device write); unchecking it also unchecks firmware. An existing
+  field of another type is never changed and blocks firmware writes.
+- The detail panel also shows the management IP that UniFi reports next to
+  the NetBox primary IPv4. UniFi DHCP ranges, wireless LANs (never their
+  passphrases) and fixed-IP reservations are read and counted in the preview
+  summary. Writing these details to NetBox is being added in milestone M11.
 - NetBox-only devices (delete proposals) are limited to the active UniFi site
   by default; a setting includes all NetBox devices. Nothing is deleted.
 

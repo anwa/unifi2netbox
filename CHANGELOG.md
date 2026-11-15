@@ -18,6 +18,15 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	The device detail panel shows management IP and firmware, the port list
 	shows SFP modules and fixed speeds, and the preview summary counts the new
 	details. Diagnostic exports only count the new lists.
+- M11 slice 2: firmware is a device field written into the NetBox Custom
+	Field `firmware`. When the field is missing, the app plans its creation
+	(text, devices) as a visible, selectable first operation: the detail panel
+	shows a checkbox, the apply bar and confirmation count it, unchecking it
+	also unchecks every firmware value, and selecting a firmware value selects
+	it again. A field with another type or object type is never changed and
+	blocks firmware. Creation never duplicates the field, reconciles an
+	interrupted create by name and is read back; firmware updates PATCH only
+	the Custom Field, are drift-checked and read back.
 
 ## v1.0.0
 

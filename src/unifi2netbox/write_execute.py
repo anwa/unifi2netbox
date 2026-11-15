@@ -8,7 +8,7 @@ import requests
 
 from unifi2netbox.config import BehaviorConfig, NetBoxConfig
 from unifi2netbox.inventory import InventoryDevice, normalize_netbox_device
-from unifi2netbox.preview import DevicePreview, DifferencePreview
+from unifi2netbox.preview import FIRMWARE, DevicePreview, DifferencePreview
 from unifi2netbox.write_journal import (
     OperationOutcomeStatus,
     WriteJournal,
@@ -78,8 +78,12 @@ def execute_write_plan(
     backend: NetBoxWriteBackend | None = None,
     source_devices: Mapping[str, InventoryDevice] | None = None,
     source_error: str = "",
+    firmware_writable: bool = False,
 ) -> WriteExecutionResult:
     """Execute the plan; ``source_devices`` enables the UniFi re-read check.
+
+    ``firmware_writable`` says whether the Custom Field ``firmware`` exists (or
+    was created in this run); a selected firmware value fails otherwise.
 
     ``source_devices`` maps UniFi observation IDs to freshly read devices (with
     the same site mapping as the preview). ``source_error`` means UniFi could
@@ -168,6 +172,7 @@ def execute_write_plan(
                 device_type_id_override=resolved_device_type_overrides.get(
                     operation.device_key, ""
                 ),
+                firmware_writable=firmware_writable,
             )
         except WriteExecutionError as error:
             journal = record_operation_result(
@@ -386,12 +391,20 @@ def _build_payload(
     site_name_override: str = "",
     status_value_override: str = "",
     device_type_id_override: str = "",
+    firmware_writable: bool = False,
 ) -> dict[str, object]:
     source_values = {
         field.name: field.source_value.strip()
         for field in device.fields
         if field.name in operation.selected_fields
     }
+
+    firmware = source_values.get(FIRMWARE, "")
+    if FIRMWARE in source_values and not firmware_writable:
+        raise WriteExecutionError(
+            "The NetBox Custom Field 'firmware' is not available in this run; "
+            "select its creation or deselect firmware."
+        )
 
     if operation.operation_type == OperationType.UPDATE_DEVICE:
         payload: dict[str, object] = {}
@@ -401,8 +414,12 @@ def _build_payload(
             payload["serial"] = source_values["serial"]
         if source_values.get("site"):
             payload["site"] = backend.resolve_site_id(source_values["site"])
+        if firmware:
+            payload["custom_fields"] = {FIRMWARE: firmware}
         unsupported = {
-            key for key in source_values if key not in {"name", "serial", "site"}
+            key
+            for key in source_values
+            if key not in {"name", "serial", "site", FIRMWARE}
         }
         if unsupported:
             raise WriteExecutionError(
@@ -453,6 +470,8 @@ def _build_payload(
             payload["status"] = status_value
         if "serial" in source_values and source_values["serial"]:
             payload["serial"] = source_values["serial"]
+        if firmware:
+            payload["custom_fields"] = {FIRMWARE: firmware}
         return payload
 
     raise WriteExecutionError("Unsupported operation type.")

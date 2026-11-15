@@ -125,9 +125,9 @@ def verify_readback(
             )
             continue
         mismatches = [
-            f"{key}: expected {value!s}, NetBox has {_row_value(row, key) or '-'}"
-            for key, value in expected.items()
-            if _row_value(row, key) != str(value).strip()
+            f"{key}: expected {value!s}, NetBox has {actual or '-'}"
+            for key, value in _flatten(expected).items()
+            if (actual := _row_value(row, key)) != str(value).strip()
         ]
         journal = record_verification(
             journal,
@@ -138,7 +138,24 @@ def verify_readback(
     return journal
 
 
+def _flatten(expected: Mapping[str, object]) -> dict[str, object]:
+    """Custom Field values become ``custom_fields.<name>`` keys."""
+    flat: dict[str, object] = {}
+    for key, value in expected.items():
+        if key == "custom_fields" and isinstance(value, Mapping):
+            flat.update({f"custom_fields.{name}": item for name, item in value.items()})
+        else:
+            flat[key] = value
+    return flat
+
+
 def _row_value(row: Mapping[str, object], key: str) -> str:
+    if key.startswith("custom_fields."):
+        fields = row.get("custom_fields")
+        value = (
+            fields.get(key.split(".", 1)[1]) if isinstance(fields, Mapping) else None
+        )
+        return "" if value is None else str(value).strip()
     value = row.get(key)
     if isinstance(value, Mapping):
         nested = value.get("value") if key == "status" else value.get("id")

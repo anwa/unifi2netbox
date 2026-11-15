@@ -754,3 +754,10 @@ reservations; no secrets (`x_passphrase`, `x_password`, `x_authkey`) in the
 models. NetBox 4.7.3: 26 devices without primary IPv4 or firmware, 3
 manufacturers, 0 IP addresses, 0 IP ranges, 0 wireless LANs, 0 Custom Fields;
 all optional reads succeeded. No writes were made.
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 2 (application
+1.0.2 working tree on top of commit b4fe839) with snapshots in a scratch
+folder and no write history: the plan proposed creating the Custom Field
+`firmware` (NetBox had none) and 19 firmware-only updates of matched devices;
+the dry run re-read UniFi and NetBox, passed every check and wrote nothing
+(20 operations skipped as dry run).

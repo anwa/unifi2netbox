@@ -13,6 +13,7 @@ from datetime import datetime
 
 from unifi2netbox.cables import CablePlan, CablePlanRow, select_cable
 from unifi2netbox.config import BehaviorConfig
+from unifi2netbox.custom_fields import CustomFieldPlan, select_custom_field
 from unifi2netbox.details import InventorySfp
 from unifi2netbox.disks import DiskPlan, DiskPlanRow, select_disk
 from unifi2netbox.interface_plan import (
@@ -32,6 +33,7 @@ from unifi2netbox.pipeline import (
 from unifi2netbox.port_config import InventoryPortConfig
 from unifi2netbox.ports import PortMatch, match_ports
 from unifi2netbox.preview import (
+    FIRMWARE,
     ChangePreview,
     DeviceAction,
     DevicePreview,
@@ -77,6 +79,7 @@ FIELD_LABELS = {
     "serial": "Serial number",
     "site": "Site",
     "mac_address": "MAC address",
+    "firmware": "Firmware",
 }
 
 
@@ -145,6 +148,9 @@ class ReviewState:
         )
         self.cable_plan: CablePlan | None = result.cable_plan if result else None
         self.disk_plan: DiskPlan | None = result.disk_plan if result else None
+        self.custom_field_plan: CustomFieldPlan | None = (
+            result.custom_field_plan if result else None
+        )
         self.protect_kinds: dict[str, str] = {
             device.source_id: device.kind
             for device in (result.protect_devices if result else ())
@@ -191,6 +197,15 @@ class ReviewState:
             )
             self._rows = tuple(self.result.rows) if self.result else ()
             return
+        plan = self.custom_field_plan
+        if (
+            plan is not None
+            and plan.selectable
+            and not plan.selected
+            and self.firmware_selected_count()
+        ):
+            # Selected firmware values need the Custom Field create.
+            self.custom_field_plan = select_custom_field(plan, True)
         catalog = self.netbox_sites or None
         self.change = build_change_preview(self.diff)
         self.plan = build_write_plan(self.diff, self.change, netbox_sites=catalog)
@@ -521,7 +536,10 @@ class ReviewState:
         }
 
     def details_for(self, key: str) -> tuple[tuple[str, str, str], ...]:
-        """(label, NetBox value, UniFi value) of management IP and firmware."""
+        """(label, NetBox value, UniFi value) of the management IP.
+
+        Firmware is a regular device field since M11 slice 2.
+        """
         unifi_id, netbox_id = _device_ids(key)
         result = self.result
         unifi = next(
@@ -541,7 +559,7 @@ class ReviewState:
             None,
         )
         rows = []
-        for title, name in (("Management IP", "ip_address"), ("Firmware", "firmware")):
+        for title, name in (("Management IP", "ip_address"),):
             target = getattr(netbox, name, "") if netbox else ""
             source = getattr(unifi, name, "") if unifi else ""
             if target or source:
@@ -568,6 +586,41 @@ class ReviewState:
             return
         self.diff = select_field(self.diff, key, field_name, selected)
         self._recompute()
+
+    # -- custom field --------------------------------------------------------
+
+    def custom_field_operation_count(self) -> int:
+        plan = self.custom_field_plan
+        return plan.operation_count if plan is not None else 0
+
+    def set_custom_field_selected(self, selected: bool) -> None:
+        """Toggle the planned Custom Field create.
+
+        Without the field no firmware can be written, so deselecting it also
+        deselects every selected firmware value.
+        """
+        plan = self.custom_field_plan
+        if plan is None or not plan.selectable:
+            return
+        self.custom_field_plan = select_custom_field(plan, selected)
+        if not selected and self.diff is not None:
+            for device in self.diff.devices:
+                field = next((f for f in device.fields if f.name == FIRMWARE), None)
+                if field is not None and field.selected:
+                    self.diff = select_field(
+                        self.diff, device.device_key, FIRMWARE, False
+                    )
+        self._recompute()
+
+    def firmware_selected_count(self) -> int:
+        if self.diff is None:
+            return 0
+        return sum(
+            1
+            for device in self.diff.devices
+            for field in device.fields
+            if field.name == FIRMWARE and field.selectable and field.selected
+        )
 
     def set_choice(self, kind: str, key: str, value: str) -> None:
         target = {

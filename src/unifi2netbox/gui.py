@@ -80,6 +80,7 @@ from unifi2netbox.connections import (
     check_protect_connection,
     check_unifi_connection,
 )
+from unifi2netbox.custom_fields import select_custom_field
 from unifi2netbox.gui_review import (
     COL_CHANGE,
     COL_DEVICE,
@@ -106,7 +107,7 @@ from unifi2netbox.pipeline import (
     build_inventory_preview,
     run_write_execution,
 )
-from unifi2netbox.preview import DifferencePreview
+from unifi2netbox.preview import FIRMWARE, DifferencePreview
 from unifi2netbox.review import (
     ALL,
     ATTENTION,
@@ -222,8 +223,10 @@ class WriteExecutionJob(QRunnable):
         access_config=None,
         drive_config=None,
         disk_plan=None,
+        custom_field_plan=None,
     ) -> None:
         super().__init__()
+        self.custom_field_plan = custom_field_plan
         self.access_config = access_config
         self.drive_config = drive_config
         self.disk_plan = disk_plan
@@ -266,6 +269,7 @@ class WriteExecutionJob(QRunnable):
                 access_config=self.access_config,
                 drive_config=self.drive_config,
                 disk_plan=self.disk_plan,
+                custom_field_plan=self.custom_field_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -309,6 +313,7 @@ class WriteExecutionRunner(QObject):
         access_config=None,
         drive_config=None,
         disk_plan=None,
+        custom_field_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -331,6 +336,7 @@ class WriteExecutionRunner(QObject):
             access_config=access_config,
             drive_config=drive_config,
             disk_plan=disk_plan,
+            custom_field_plan=custom_field_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1893,16 +1899,20 @@ class MainWindow(QMainWindow):
         interface_ops = self.review.interface_operation_count()
         cable_ops = self.review.cable_operation_count()
         disk_ops = self.review.disk_operation_count()
+        field_ops = self.review.custom_field_operation_count()
         operations = (
             (len(plan.operations) if plan is not None else 0)
             + network_ops
             + interface_ops
             + cable_ops
             + disk_ops
+            + field_ops
         )
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
         parts = []
+        if field_ops:
+            parts.append("1 Custom Field")
         if selectable:
             parts.append(f"{selected} of {selectable} devices selected")
         if network_ops:
@@ -2073,6 +2083,16 @@ class MainWindow(QMainWindow):
         network_ops += cable_plan.operation_count if cable_plan else 0
         disk_plan = self.review.disk_plan if device_key is None else None
         network_ops += disk_plan.operation_count if disk_plan else 0
+        custom_field_plan = self.review.custom_field_plan
+        if (
+            custom_field_plan is not None
+            and device_key is not None
+            and plan is not None
+            and not any(FIRMWARE in op.selected_fields for op in plan.operations)
+        ):
+            # A single device without firmware must not create the field.
+            custom_field_plan = select_custom_field(custom_field_plan, False)
+        network_ops += custom_field_plan.operation_count if custom_field_plan else 0
         if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
@@ -2091,6 +2111,7 @@ class MainWindow(QMainWindow):
             interface_plan=interface_plan,
             cable_plan=cable_plan,
             disk_plan=disk_plan,
+            custom_field_plan=custom_field_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -2118,6 +2139,7 @@ class MainWindow(QMainWindow):
             access_config=self.access.config,
             drive_config=self.drive.config,
             disk_plan=disk_plan,
+            custom_field_plan=custom_field_plan,
         )
         self.update_check_action()
 

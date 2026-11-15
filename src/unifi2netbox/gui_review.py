@@ -40,6 +40,7 @@ from unifi2netbox.cables import CREATE as CABLE_CREATE
 from unifi2netbox.cables import IN_SYNC as CABLE_IN_SYNC
 from unifi2netbox.cables import REFERENCE as CABLE_REFERENCE
 from unifi2netbox.cables import CablePlan, CablePlanRow
+from unifi2netbox.custom_fields import CONFLICT as CONFLICT_FIELD
 from unifi2netbox.interface_plan import FIELD_LABELS as IF_FIELD_LABELS
 from unifi2netbox.interface_plan import InterfacePlan, InterfacePlanRow
 from unifi2netbox.journal_store import StoredRun
@@ -795,6 +796,7 @@ class DetailPanel(QScrollArea):
         grid.setColumnStretch(2, 1)
         grid.setColumnStretch(3 if item.category != CREATE else 2, 1)
         self.layout_.addLayout(grid)
+        self._add_custom_field(item)
         if item.category == UPDATE:
             self.layout_.addWidget(
                 label(
@@ -803,6 +805,30 @@ class DetailPanel(QScrollArea):
                     "caption",
                 )
             )
+
+    def _add_custom_field(self, item: ReviewRow) -> None:
+        """The firmware Custom Field: planned create, conflict or missing access."""
+        plan = self.state.custom_field_plan
+        if plan is None or not item.source_value("firmware"):
+            return
+        if item.category not in (CREATE, UPDATE) and plan.action != CONFLICT_FIELD:
+            return
+        if plan.selectable:
+            box = QCheckBox("Create the NetBox Custom Field 'firmware' (text, devices)")
+            box.setObjectName("customFieldCreate")
+            box.setChecked(plan.selected)
+            box.setToolTip(
+                "Created once before any device write. Without it no firmware "
+                "value is written; unchecking it also unchecks firmware."
+            )
+            box.toggled.connect(self._toggle_custom_field)
+            self.layout_.addWidget(box)
+        elif plan.action != "present":
+            self.layout_.addWidget(label(plan.message, "caption"))
+
+    def _toggle_custom_field(self, checked: bool) -> None:
+        self.state.set_custom_field_selected(checked)
+        self.changed.emit()
 
     def _add_ports(self, item: ReviewRow) -> None:
         matches = self.state.ports_for(item.key)
@@ -908,8 +934,10 @@ class ConfirmDialog(QDialog):
         interface_plan: InterfacePlan | None = None,
         cable_plan: CablePlan | None = None,
         disk_plan=None,
+        custom_field_plan=None,
     ) -> None:
         super().__init__(parent)
+        field_ops = custom_field_plan.operation_count if custom_field_plan else 0
         creates = sum(
             op.operation_type == OperationType.CREATE_DEVICE for op in plan.operations
         )
@@ -919,7 +947,13 @@ class ConfirmDialog(QDialog):
         cable_ops = cable_plan.operation_count if cable_plan else 0
         disk_ops = disk_plan.operation_count if disk_plan else 0
         network_ops = (
-            group_ops + vlan_ops + prefix_ops + interface_ops + cable_ops + disk_ops
+            group_ops
+            + vlan_ops
+            + prefix_ops
+            + interface_ops
+            + cable_ops
+            + disk_ops
+            + field_ops
         )
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
@@ -931,6 +965,8 @@ class ConfirmDialog(QDialog):
         )
         layout.addWidget(label(heading, "heading"))
         parts = []
+        if field_ops:
+            parts.append("1 Custom Field (firmware)")
         if creates:
             parts.append(f"{creates} new device{'s' if creates != 1 else ''}")
         if updates:
