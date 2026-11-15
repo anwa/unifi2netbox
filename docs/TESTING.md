@@ -851,6 +851,15 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-15 the assistant checked the reopened-window title bar fix
+(application 1.1.2 working tree on top of v1.1.1) natively on the developer
+workstation (Windows 11, Qt windows platform): opening the manual window,
+closing it and opening it again showed, before the fix, that the second
+opening gets a new native window while `QWidget.winId()` still returned the
+destroyed one (`IsWindow` 0), so no theme was applied. With the fix the
+DWM dark-mode attribute read back as 1 (dark theme) and 0 (light theme) on
+both openings.
+
 On 2026-11-15 the assistant added the user manual (application 1.1.1
 working tree on top of v1.1.0): `tests/test_manual.py` checks the chapter
 structure, that every page has a title, that every link and image resolves

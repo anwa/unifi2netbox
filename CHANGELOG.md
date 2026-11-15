@@ -6,6 +6,12 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Fixed
+
+- A window that is closed and opened again (for example the manual) keeps
+	the themed title bar on Windows. The second opening used a stale native
+	handle, so the title bar fell back to the default Windows colors.
+
 ## v1.1.1
 
 ### Summary
