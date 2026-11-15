@@ -1,24 +1,25 @@
 # unifi2netbox
 
-Latest main release: **v1.0.0**, the first stable release (M10: deployment and
-platform acceptance). Download the Windows installer or the Ubuntu `.deb` from
-the [GitHub releases](https://github.com/anwa/unifi2netbox/releases).
+Latest main release: **v1.1.0** (M11: extended UniFi details). Download the
+Windows installer or the Ubuntu `.deb` from the
+[GitHub releases](https://github.com/anwa/unifi2netbox/releases).
 
-Release **v1.0.0** compares UniFi Network inventory with NetBox in a modern
+Release **v1.1.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
 history. Beyond devices it covers VLANs and prefixes, switch port
 configuration on NetBox interfaces, cable suggestions from LLDP and,
 optionally, the NVR and cameras of UniFi Protect, the hubs, readers and
-intercoms of UniFi Access and a UNAS with its drives (UniFi Drive). UniFi
-stays read-only.
+intercoms of UniFi Access and a UNAS with its drives (UniFi Drive), plus
+firmware (Custom Field `firmware`), management IPs, port details, SFP
+modules, wireless LANs, DHCP ranges and reservations. UniFi stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v1.0.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v1.1.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities

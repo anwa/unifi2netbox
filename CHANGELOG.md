@@ -6,6 +6,18 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.1.0
+
+### Summary
+
+- Milestone M11 (extended UniFi details): firmware, management IPs, port
+	details, SFP modules, wireless LANs, DHCP ranges and DHCP reservations
+	from UniFi are previewed and, when selected, written to NetBox with the
+	same re-read, drift, read-back and journal safeguards as device writes.
+	The app may create one Custom Field, `firmware`, as a visible and
+	selectable operation; it never creates other Custom Fields or
+	manufacturers and never deletes anything.
+
 ### Added
 
 - M11 slice 1 (read and show only, nothing is written yet): the management IP
@@ -71,6 +83,17 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	instead of NetBox IDs, select all/none for the visible list, and counts
 	in the apply bar and the confirmation. Wireless LANs, ranges and
 	reservations are written on a full apply only.
+
+### Validation
+
+- Offline gate: 606 passed, 2 skipped; Ruff lint and format pass.
+- Live on the developer workstation (UniFi Network 11.0.99, NetBox 4.7.3,
+	2026-11-15): read-only probes and dry runs for every slice, and approved
+	write tests for one object of each kind (Custom Field and firmware,
+	management IP, interface details, SFP item, wireless LAN, IP range,
+	reserved IP), each read back as verified with a no-op second apply. The
+	written objects stay in NetBox as real data.
+- Linux and the packaged builds of this version are not verified yet.
 
 ## v1.0.0
 
