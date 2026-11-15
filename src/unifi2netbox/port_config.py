@@ -27,7 +27,7 @@ credentials are never copied into models, snapshots or exports.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 DISABLED = "disabled"
 ACCESS = "access"
@@ -57,6 +57,10 @@ class InventoryPortConfig:
     profile: str = ""
     lag_id: int | None = None
     notes: tuple[str, ...] = ()
+    # Configured fixed link speed (Mbit/s) and duplex; None means
+    # auto-negotiation or unknown. Never the operational link speed.
+    speed_mbps: int | None = None
+    full_duplex: bool | None = None
 
     def summary(self) -> str:
         """Short text such as 'access 20' or 'tagged-all, native 1'."""
@@ -110,9 +114,9 @@ def allowed_profiles(rows: Iterable[object]) -> dict[str, dict[str, object]]:
             continue
         profile_id = row.get("_id")
         if isinstance(profile_id, str) and profile_id:
-            profiles[profile_id] = {key: row.get(key) for key in _VLAN_FIELDS} | {
-                "name": row.get("name") if isinstance(row.get("name"), str) else ""
-            }
+            profiles[profile_id] = {
+                key: row.get(key) for key in (*_VLAN_FIELDS, *_SPEED_FIELDS)
+            } | {"name": row.get("name") if isinstance(row.get("name"), str) else ""}
     return profiles
 
 
@@ -122,6 +126,26 @@ _VLAN_FIELDS = (
     "tagged_vlan_mgmt",
     "excluded_networkconf_ids",
 )
+_SPEED_FIELDS = ("autoneg", "speed", "full_duplex")
+
+
+def _fixed_speed(
+    override: Mapping[str, object] | None, profile: Mapping[str, object] | None
+) -> tuple[int | None, bool | None]:
+    """Configured speed and duplex when auto-negotiation is switched off.
+
+    A per-port override wins over the assigned profile; with
+    auto-negotiation on (or unknown) nothing is returned.
+    """
+    for source in (override, profile):
+        if source is None or "autoneg" not in source:
+            continue
+        speed = source.get("speed")
+        if source.get("autoneg") is False and type(speed) is int and speed > 0:
+            duplex = source.get("full_duplex")
+            return speed, duplex if isinstance(duplex, bool) else None
+        return None, None
+    return None, None
 
 
 def resolve_port_configs(
@@ -143,23 +167,33 @@ def resolve_port_configs(
         if not device_id or not isinstance(table, list):
             continue
         entries = [p for p in table if isinstance(p, Mapping) and _idx(p) is not None]
+        raw_overrides = device.get("port_overrides")
+        overrides = {
+            _idx(item): item
+            for item in (raw_overrides if isinstance(raw_overrides, list) else ())
+            if isinstance(item, Mapping) and _idx(item) is not None
+        }
         masters = {
             value
             for p in entries
             if type(value := p.get("aggregated_by")) is int and value > 0
         }
         for port in entries:
-            configs.append(
-                _resolve(
-                    device_id,
-                    port,
-                    profiles,
-                    networks,
-                    default_vid,
-                    taggable,
-                    masters,
-                )
+            config = _resolve(
+                device_id,
+                port,
+                profiles,
+                networks,
+                default_vid,
+                taggable,
+                masters,
             )
+            profile_id = port.get("portconf_id")
+            speed, duplex = _fixed_speed(
+                overrides.get(config.idx),
+                profiles.get(profile_id) if isinstance(profile_id, str) else None,
+            )
+            configs.append(replace(config, speed_mbps=speed, full_duplex=duplex))
     return tuple(sorted(configs, key=lambda item: (item.device_id, item.idx)))
 
 

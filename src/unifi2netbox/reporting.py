@@ -73,6 +73,17 @@ def _sanitize_snapshot(snapshot: InventorySnapshot | None) -> dict[str, Any] | N
         "scope": _mask(snapshot.scope, "scope"),
         "device_count": len(snapshot.devices),
         "devices": [_sanitize_device(device) for device in snapshot.devices],
+        # Details are counted only: client names, MACs, IPs, DNS names and
+        # SSIDs are never exported.
+        "detail_counts": {
+            "sfps": len(snapshot.sfps),
+            "dhcp_ranges": len(snapshot.dhcp_ranges),
+            "wlans": len(snapshot.wlans),
+            "reservations": len(snapshot.reservations),
+            "ip_addresses": len(snapshot.ip_addresses),
+            "ip_ranges": len(snapshot.ip_ranges),
+            "wireless_lans": len(snapshot.wireless_lans),
+        },
     }
 
 
@@ -85,6 +96,8 @@ def _sanitize_device(device: InventoryDevice) -> dict[str, str]:
         "manufacturer": device.manufacturer,
         "mac_address": _mask(device.mac_address, "mac"),
         "site": _mask(device.site, "site"),
+        "ip_address": _mask(device.ip_address, "ip"),
+        "firmware": device.firmware,
     }
 
 

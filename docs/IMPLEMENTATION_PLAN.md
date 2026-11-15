@@ -526,11 +526,15 @@ Decisions (2026-11-15, user):
 
 Slices:
 
-- [ ] 1. Read and show: device IP and firmware (official API); SFP, configured
-  speed/duplex and PoE per port, DHCP ranges, wireless LANs (no secrets) and
+- [x] 1. Read and show: device IP and firmware (official API); SFP, configured
+  speed/duplex per port, DHCP ranges, wireless LANs (no secrets) and
   fixed-IP reservations (internal API); NetBox primary IPv4, firmware Custom
   Field, interface description/duplex, IP addresses, IP ranges, wireless LANs
-  and manufacturers. Snapshot fields with defaults; pseudonymized export.
+  and manufacturers. Snapshot fields with defaults; export counts only.
+  PoE capability comes from the official `poe.standard` (the internal
+  `poe_caps` bit mask is undocumented).
+  (1.0.1, 2026-11-15: offline tests and live read-only check, see
+  `TESTING.md`.)
 - [ ] 2. Firmware: plan and create the `firmware` Custom Field when missing;
   firmware as a device field for updates and creates.
 - [ ] 3. Management IP: IP address on the management interface (create the

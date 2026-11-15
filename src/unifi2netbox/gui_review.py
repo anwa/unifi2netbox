@@ -562,6 +562,7 @@ class DetailPanel(QScrollArea):
         if item.category == CREATE:
             self._add_create_choices(item)
         self._add_fields(item)
+        self._add_details(key)
 
         self._add_ports(item)
         self._add_disks(key)
@@ -593,6 +594,30 @@ class DetailPanel(QScrollArea):
         actions.addStretch()
         self.layout_.addLayout(actions)
         self.layout_.addStretch()
+
+    def _add_details(self, key: str) -> None:
+        """Management IP and firmware, display only (written in later slices)."""
+        rows = self.state.details_for(key)
+        if not rows:
+            return
+        self.layout_.addWidget(label("Device details", "subheading"))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(6)
+        for column, text in enumerate(("Field", "NetBox", "UniFi")):
+            grid.addWidget(label(text, "caption"), 0, column)
+        for row_index, (title, target, source) in enumerate(rows, start=1):
+            grid.addWidget(label(title), row_index, 0)
+            grid.addWidget(label(target or "-", "secondary"), row_index, 1)
+            value = label(source or "-")
+            value.setObjectName(f"detail_{title.replace(' ', '_').lower()}")
+            grid.addWidget(value, row_index, 2)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        self.layout_.addLayout(grid)
+        self.layout_.addWidget(
+            label("Shown for reference; not written yet.", "caption")
+        )
 
     def _add_disks(self, key: str) -> None:
         """Drive bays of a UNAS, display only."""
@@ -793,6 +818,7 @@ class DetailPanel(QScrollArea):
         if item.category == CREATE:
             summary += " NetBox adds interfaces from the device type on create."
         configs = self.state.port_configs_for(item.key)
+        sfps = self.state.sfps_for(item.key)
         if configs:
             summary += " Configuration is read from the internal UniFi API."
         elif self.state.port_config_error:
@@ -810,12 +836,18 @@ class DetailPanel(QScrollArea):
         for row, match in enumerate(matches, start=1):
             port, interface = match.port, match.interface
             config = configs.get(port.idx) if port else None
+            sfp = sfps.get(port.idx) if port else None
             match_notes = list(match.notes) + list(config.notes if config else ())
+            port_type = (
+                _port_type(port) if port else (interface.type if interface else "")
+            )
+            if sfp is not None and sfp.part:
+                port_type += f" \N{MIDDLE DOT} {sfp.part}"
             values = (
                 str(port.idx) if port else "-",
                 config.name if config else "",
                 interface.name if interface else "-",
-                _port_type(port) if port else (interface.type if interface else ""),
+                port_type,
                 _port_config(config),
                 _port_link(port) if port else "",
                 _port_poe(port) if port else "",
@@ -827,6 +859,8 @@ class DetailPanel(QScrollArea):
                 tips = list(match_notes)
                 if column == 4 and config is not None and config.profile:
                     tips.insert(0, f"Port profile: {config.profile}")
+                if column == 3 and sfp is not None:
+                    tips.insert(0, _sfp_text(sfp))
                 if tips:
                     cell.setToolTip("\n".join(tips))
                 grid.addWidget(cell, row, column)
@@ -990,6 +1024,20 @@ def _port_config(config) -> str:
         text = f"off, {text}"
     if config.lag_id is not None:
         text += f", LAG {config.lag_id}"
+    if config.speed_mbps is not None:
+        duplex = " half" if config.full_duplex is False else ""
+        text += f", fixed {_short_speed(config.speed_mbps)}{duplex}"
+    return text
+
+
+def _sfp_text(sfp) -> str:
+    """Module description for a tooltip, e.g. 'SFP module UBNT UF-MM-10G'."""
+    parts = [sfp.vendor, sfp.part]
+    text = "SFP module " + " ".join(p for p in parts if p)
+    if sfp.compliance:
+        text += f" ({sfp.compliance})"
+    if sfp.serial:
+        text += f", serial {sfp.serial}"
     return text
 
 

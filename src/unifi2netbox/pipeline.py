@@ -22,6 +22,7 @@ from unifi2netbox.config import (
     ProtectConfig,
     UniFiConfig,
 )
+from unifi2netbox.details import InventorySfp
 from unifi2netbox.disk_execute import execute_disk_plan
 from unifi2netbox.disks import DiskPlan, build_disk_plan
 from unifi2netbox.interface_execute import execute_interface_plan
@@ -129,6 +130,10 @@ class InventoryPreviewResult:
     netbox_device_statuses: tuple[str, ...] = ()
     difference_preview: DifferencePreview | None = None
     write_plan: WritePlan | None = None
+    # M11 details (display in slice 1; planning in later slices).
+    unifi_device_records: tuple[InventoryDevice, ...] = ()
+    netbox_device_records: tuple[InventoryDevice, ...] = ()
+    unifi_sfps: tuple[InventorySfp, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -301,7 +306,8 @@ def build_inventory_preview(
             netbox_device_count=len(netbox_snapshot.devices),
             unifi_device_count=len(unifi_snapshot.devices),
         )
-        + tuple(note for note in (protect_note, access_note, drive_note) if note),
+        + tuple(note for note in (protect_note, access_note, drive_note) if note)
+        + detail_summary_lines(unifi_snapshot, netbox_snapshot),
         rows=preview_rows(diff, change, plan, suggestions=suggestions),
         unifi_captured_at=unifi_snapshot.captured_at,
         unifi_scope=unifi_snapshot.scope,
@@ -336,7 +342,35 @@ def build_inventory_preview(
         ),
         difference_preview=diff,
         write_plan=plan,
+        unifi_device_records=mapped_unifi.devices,
+        netbox_device_records=netbox_snapshot.devices,
+        unifi_sfps=unifi_snapshot.sfps,
     )
+
+
+def detail_summary_lines(
+    unifi: InventorySnapshot, netbox: InventorySnapshot
+) -> tuple[str, ...]:
+    """Counts of the UniFi details and why any of them are missing."""
+    with_ip = sum(1 for d in unifi.devices if d.ip_address)
+    with_firmware = sum(1 for d in unifi.devices if d.firmware)
+    lines = [
+        f"UniFi details: {with_ip} management IPs, {with_firmware} firmware "
+        f"versions, {len(unifi.sfps)} SFP modules, {len(unifi.dhcp_ranges)} DHCP "
+        f"ranges, {len(unifi.wlans)} wireless LANs, {len(unifi.reservations)} "
+        "reservations."
+    ]
+    lines.extend(
+        error
+        for error in (
+            unifi.client_error if unifi.client_error != unifi.port_config_error else "",
+            netbox.address_error,
+            netbox.wireless_error,
+            netbox.custom_field_error,
+        )
+        if error
+    )
+    return tuple(lines)
 
 
 def _interface_plan(

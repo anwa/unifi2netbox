@@ -122,6 +122,8 @@ def netbox_transport(monkeypatch):
         (200, {"count": 0, "next": None, "previous": None, "results": []}),
         # inventory items
         (200, {"count": 0, "next": None, "previous": None, "results": []}),
+        # manufacturers, IP addresses, IP ranges, wireless LANs, custom fields
+        *[(200, {"count": 0, "next": None, "previous": None, "results": []})] * 5,
         (
             200,
             {
@@ -474,20 +476,72 @@ def test_unifi_inventory_reads_ports_from_device_details():
             {
                 "mac": "AA:BB:CC:00:00:01",
                 "port_table": [
-                    {"port_idx": 1, "name": "Uplink", "enable": True, "forward": "all"},
+                    {
+                        "port_idx": 1,
+                        "name": "Uplink",
+                        "enable": True,
+                        "forward": "all",
+                        "sfp_found": True,
+                        "sfp_vendor": "UBNT",
+                        "sfp_part": "UF-MM-10G",
+                        "sfp_serial": "SYNTH-SFP-1",
+                        "sfp_compliance": "10GBase-SR",
+                    },
                     {
                         "port_idx": 2,
                         "name": "Port 2",
                         "enable": False,
                         "forward": "disabled",
+                        "sfp_found": False,
+                        "sfp_part": "stale",
                     },
+                ],
+                "port_overrides": [
+                    {
+                        "port_idx": 1,
+                        "autoneg": False,
+                        "speed": 10000,
+                        "full_duplex": True,
+                    }
                 ],
             }
         ],
         "rest/portconf": [],
         "rest/networkconf": [
-            {"_id": "lan", "purpose": "corporate", "vlan_enabled": False},
+            {
+                "_id": "lan",
+                "name": "Default",
+                "purpose": "corporate",
+                "vlan_enabled": False,
+                "dhcpd_enabled": True,
+                "dhcpd_start": "192.0.2.100",
+                "dhcpd_stop": "192.0.2.200",
+            },
             {"_id": "wan", "purpose": "wan", "x_password": "synthetic-secret"},
+        ],
+        "rest/wlanconf": [
+            {
+                "_id": "w1",
+                "name": "Synthetic WLAN",
+                "enabled": True,
+                "security": "wpapsk",
+                "wpa_mode": "wpa2",
+                "wpa_enc": "ccmp",
+                "networkconf_id": "lan",
+                "x_passphrase": "synthetic-passphrase",
+            }
+        ],
+        "rest/user": [
+            {
+                "mac": "aa:bb:cc:00:00:99",
+                "use_fixedip": True,
+                "fixed_ip": "192.0.2.50",
+                "name": "Printer",
+                "note": "synthetic-note",
+                "local_dns_record_enabled": True,
+                "local_dns_record": "printer.home.arpa",
+            },
+            {"mac": "aa:bb:cc:00:00:98", "use_fixedip": False, "name": "Phone"},
         ],
     }
     requested = []
@@ -516,7 +570,30 @@ def test_unifi_inventory_reads_ports_from_device_details():
         "tagged-all, native 1",
     )
     assert (disabled.enabled, disabled.summary()) == (False, "disabled")
+    assert (uplink.speed_mbps, uplink.full_duplex) == (10000, True)
+    assert disabled.speed_mbps is None
     assert "synthetic-secret" not in repr(snapshot)
+    assert "synthetic-passphrase" not in repr(snapshot)
+    assert "synthetic-note" not in repr(snapshot)
+    (sfp,) = snapshot.sfps
+    assert (sfp.device_id, sfp.port_idx, sfp.part, sfp.serial) == (
+        "sw",
+        1,
+        "UF-MM-10G",
+        "SYNTH-SFP-1",
+    )
+    (pool,) = snapshot.dhcp_ranges
+    assert (pool.vlan_id, pool.start, pool.end) == (1, "192.0.2.100", "192.0.2.200")
+    (wlan,) = snapshot.wlans
+    assert (wlan.ssid, wlan.security, wlan.vlan_id) == ("Synthetic WLAN", "wpapsk", 1)
+    (reservation,) = snapshot.reservations
+    assert (reservation.ip_address, reservation.name, reservation.dns_name) == (
+        "192.0.2.50",
+        "Printer",
+        "printer.home.arpa",
+    )
+    assert reservation.mac_address == "AA:BB:CC:00:00:99"
+    assert snapshot.client_error == ""
     first, second = snapshot.ports
     assert (first.device_id, first.idx, first.connector) == ("sw", 1, "RJ45")
     assert (first.link_state, first.speed_mbps) == ("UP", 100)
@@ -651,7 +728,7 @@ def test_port_config_failure_keeps_the_official_inventory():
         return httpx.Response(403, json={"secret": "synthetic-secret"})
 
     with httpx.Client(transport=httpx.MockTransport(handle)) as client:
-        configs, links, error = _read_port_configs(
+        details = _read_port_configs(
             client,
             UniFiConfig("https://console.invalid", "synthetic-key"),
             "11.0.99",
@@ -659,8 +736,34 @@ def test_port_config_failure_keeps_the_official_inventory():
             [],
         )
 
-    assert configs == () and links == ()
-    assert error == "Port configuration unavailable: permission denied."
+    assert details.port_configs == () and details.links == ()
+    assert details.sfps == () and details.wlans == ()
+    assert details.error == "Port configuration unavailable: permission denied."
+
+
+def test_client_read_failure_keeps_port_configuration():
+    from unifi2netbox.inventory import _read_port_configs
+
+    def handle(request):
+        path = request.url.path.split("/api/s/d/", 1)[1]
+        if path in {"rest/wlanconf", "rest/user"}:
+            return httpx.Response(403, json={})
+        return httpx.Response(200, json={"data": []})
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        details = _read_port_configs(
+            client,
+            UniFiConfig("https://console.invalid", "synthetic-key"),
+            "11.0.99",
+            "d",
+            [],
+        )
+
+    assert details.error == ""
+    assert details.wlans == () and details.reservations == ()
+    assert details.client_error == (
+        "Wireless LANs and reservations unavailable: permission denied."
+    )
 
 
 def test_netbox_interfaces_carry_vlan_assignments_and_lag():

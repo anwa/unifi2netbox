@@ -743,3 +743,14 @@ exist" because the real configuration has no NetBox site mapping (Sync
 defaults); this is configuration, not a defect. On the real screen the UniFi
 chip overlapped the Protect chip; fixed in 0.10.5 and rechecked on screen.
 Linux was verified only by the GitHub Actions Packages workflow (offscreen).
+
+On 2026-11-15 the assistant checked M11 slice 1 read-only on the developer
+workstation (application 1.0.1 on top of commit f2de96f, CPython 3.15.1,
+Windows 11 10.0.26200), calling the inventory readers directly so the snapshot
+database was not changed; only counts were printed. UniFi Network 11.0.99: 19
+devices, all with management IP and firmware; 195 port configurations, 18 with
+a fixed speed; 23 SFP modules; 15 DHCP ranges; 6 wireless LANs; 139
+reservations; no secrets (`x_passphrase`, `x_password`, `x_authkey`) in the
+models. NetBox 4.7.3: 26 devices without primary IPv4 or firmware, 3
+manufacturers, 0 IP addresses, 0 IP ranges, 0 wireless LANs, 0 Custom Fields;
+all optional reads succeeded. No writes were made.

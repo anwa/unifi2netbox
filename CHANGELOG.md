@@ -6,6 +6,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Added
+
+- M11 slice 1 (read and show only, nothing is written yet): the management IP
+	and firmware version of UniFi devices (official API); SFP modules,
+	configured fixed port speed and duplex, DHCP ranges, wireless LANs and
+	fixed-IP reservations (internal Network API, allow-listed fields only,
+	never passphrases or other secrets); NetBox primary IPv4, the `firmware`
+	Custom Field, interface description and duplex, IP addresses, IP ranges,
+	wireless LANs, manufacturers and Custom Field definitions (each optional).
+	The device detail panel shows management IP and firmware, the port list
+	shows SFP modules and fixed speeds, and the preview summary counts the new
+	details. Diagnostic exports only count the new lists.
+
 ## v1.0.0
 
 ### Summary

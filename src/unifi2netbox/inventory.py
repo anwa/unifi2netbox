@@ -1,6 +1,6 @@
 import ipaddress
 import ssl
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 
@@ -8,6 +8,17 @@ import httpx
 import requests
 
 from unifi2netbox.config import NetBoxConfig, UniFiConfig
+from unifi2netbox.details import (
+    InventoryDhcpRange,
+    InventoryReservation,
+    InventorySfp,
+    InventoryWlan,
+    network_vlans,
+    read_dhcp_ranges,
+    read_reservations,
+    read_sfps,
+    read_wlans,
+)
 from unifi2netbox.links import InventoryLink, read_links
 from unifi2netbox.netbox import ReadOnlySession, RedirectError
 from unifi2netbox.port_config import (
@@ -19,6 +30,8 @@ from unifi2netbox.port_config import (
 
 # Internal Network endpoints are only read for validated versions.
 INTERNAL_API_SERIES = ("11.0.",)
+# The one NetBox Custom Field the app may create (visibly, on selection).
+FIRMWARE_FIELD = "firmware"
 
 
 class InventorySource(StrEnum):
@@ -44,6 +57,12 @@ class InventoryDevice:
     site: str = ""
     kind: str = ""
     state: str = ""
+    # Management IPv4 address without prefix length (UniFi: reported IP;
+    # NetBox: primary IPv4) and the firmware version (UniFi: reported;
+    # NetBox: Custom Field "firmware").
+    ip_address: str = ""
+    firmware: str = ""
+    primary_ip_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -111,6 +130,55 @@ class InventoryInterface:
     lag_id: str = ""
     cable_id: str = ""
     link_peer_ids: tuple[str, ...] = ()
+    description: str = ""
+    duplex: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryIpAddress:
+    """A NetBox IP address (only the fields planning needs)."""
+
+    source_id: str
+    address: str
+    status: str = ""
+    dns_name: str = ""
+    description: str = ""
+    assigned_object_type: str = ""
+    assigned_object_id: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryIpRange:
+    source_id: str
+    start_address: str
+    end_address: str
+    status: str = ""
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryWirelessLan:
+    source_id: str
+    ssid: str
+    vlan_id: str = ""
+    status: str = ""
+    auth_type: str = ""
+    auth_cipher: str = ""
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryManufacturer:
+    source_id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class InventoryCustomField:
+    source_id: str
+    name: str
+    type: str = ""
+    object_types: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -216,6 +284,21 @@ class InventorySnapshot:
     disk_error: str = ""
     inventory_items: tuple[InventoryItem, ...] = ()
     inventory_item_error: str = ""
+    # UniFi details from internal endpoints (allow-listed, see details.py).
+    sfps: tuple[InventorySfp, ...] = ()
+    dhcp_ranges: tuple[InventoryDhcpRange, ...] = ()
+    wlans: tuple[InventoryWlan, ...] = ()
+    reservations: tuple[InventoryReservation, ...] = ()
+    client_error: str = ""
+    # Optional NetBox catalogs; each failure only disables its planning.
+    manufacturers: tuple[InventoryManufacturer, ...] = ()
+    ip_addresses: tuple[InventoryIpAddress, ...] = ()
+    ip_ranges: tuple[InventoryIpRange, ...] = ()
+    address_error: str = ""
+    wireless_lans: tuple[InventoryWirelessLan, ...] = ()
+    wireless_error: str = ""
+    custom_fields: tuple[InventoryCustomField, ...] = ()
+    custom_field_error: str = ""
 
 
 def _text(value: object) -> str:
@@ -272,6 +355,15 @@ def normalize_netbox_device(row: dict[str, object]) -> InventoryDevice:
     if isinstance(site_value, dict):
         site = _text(site_value.get("name"))
 
+    primary = row.get("primary_ip4")
+    ip_address = ""
+    primary_id = ""
+    if isinstance(primary, dict):
+        ip_address = _text(primary.get("address")).split("/", 1)[0]
+        primary_id = _identifier(primary.get("id"))
+    custom = row.get("custom_fields")
+    firmware = _text(custom.get(FIRMWARE_FIELD)) if isinstance(custom, dict) else ""
+
     return InventoryDevice(
         source_id=str(row.get("id", "")).strip(),
         name=_text(row.get("name")),
@@ -280,6 +372,9 @@ def normalize_netbox_device(row: dict[str, object]) -> InventoryDevice:
         manufacturer=manufacturer,
         mac_address=_normalize_mac(row.get("primary_mac_address")),
         site=site,
+        ip_address=ip_address,
+        firmware=firmware,
+        primary_ip_id=primary_id,
     )
 
 
@@ -362,6 +457,89 @@ def _normalize_netbox_interface(row: dict[str, object]) -> InventoryInterface | 
         lag_id=_related_id(row.get("lag")),
         cable_id=_related_id(row.get("cable")),
         link_peer_ids=_interface_peers(row),
+        description=_text(row.get("description")),
+        duplex=_choice_value(row.get("duplex")),
+    )
+
+
+def _normalize_netbox_ip_address(row: dict[str, object]) -> InventoryIpAddress | None:
+    source_id = _identifier(row.get("id"))
+    address = _text(row.get("address"))
+    if not source_id or not address:
+        return None
+    return InventoryIpAddress(
+        source_id=source_id,
+        address=address,
+        status=_choice_value(row.get("status")),
+        dns_name=_text(row.get("dns_name")),
+        description=_text(row.get("description")),
+        assigned_object_type=_text(row.get("assigned_object_type")),
+        assigned_object_id=_identifier(row.get("assigned_object_id")),
+    )
+
+
+def _normalize_netbox_ip_range(row: dict[str, object]) -> InventoryIpRange | None:
+    source_id = _identifier(row.get("id"))
+    start = _text(row.get("start_address"))
+    end = _text(row.get("end_address"))
+    if not source_id or not start or not end:
+        return None
+    return InventoryIpRange(
+        source_id=source_id,
+        start_address=start,
+        end_address=end,
+        status=_choice_value(row.get("status")),
+        description=_text(row.get("description")),
+    )
+
+
+def _normalize_netbox_wireless_lan(
+    row: dict[str, object],
+) -> InventoryWirelessLan | None:
+    source_id = _identifier(row.get("id"))
+    ssid = _text(row.get("ssid"))
+    if not source_id or not ssid:
+        return None
+    return InventoryWirelessLan(
+        source_id=source_id,
+        ssid=ssid,
+        vlan_id=_related_id(row.get("vlan")),
+        status=_choice_value(row.get("status")),
+        auth_type=_choice_value(row.get("auth_type")),
+        auth_cipher=_choice_value(row.get("auth_cipher")),
+        description=_text(row.get("description")),
+    )
+
+
+def _normalize_netbox_manufacturer(
+    row: dict[str, object],
+) -> InventoryManufacturer | None:
+    source_id = _identifier(row.get("id"))
+    name = _text(row.get("name"))
+    if not source_id or not name:
+        return None
+    return InventoryManufacturer(source_id=source_id, name=name)
+
+
+def _normalize_netbox_custom_field(
+    row: dict[str, object],
+) -> InventoryCustomField | None:
+    source_id = _identifier(row.get("id"))
+    name = _text(row.get("name"))
+    if not source_id or not name:
+        return None
+    object_types = row.get("object_types")
+    return InventoryCustomField(
+        source_id=source_id,
+        name=name,
+        type=_choice_value(row.get("type")),
+        object_types=tuple(
+            sorted(
+                value
+                for value in (object_types if isinstance(object_types, list) else ())
+                if isinstance(value, str)
+            )
+        ),
     )
 
 
@@ -648,6 +826,54 @@ def read_netbox_inventory(
                     f"NetBox inventory items could not be read: {error}"
                 )
 
+            # Optional catalogs for the M11 details; each failure only
+            # disables the planning that needs it.
+            def optional(paths, label):
+                found: list[list[object]] = []
+                try:
+                    for path, normalize in paths:
+                        rows = _netbox_paginated_rows(
+                            session,
+                            config,
+                            path,
+                            page_size=page_size,
+                            max_pages=max_pages,
+                            limit_error=(
+                                f"NetBox {label} pagination exceeded the "
+                                "configured page safety limit."
+                            ),
+                        )
+                        found.append(
+                            [item for item in map(normalize, rows) if item is not None]
+                        )
+                except InventoryError as error:
+                    return [
+                        [] for _ in paths
+                    ], f"NetBox {label} could not be read: {error}"
+                return found, ""
+
+            (manufacturers,), manufacturer_error = optional(
+                (("/api/dcim/manufacturers/", _normalize_netbox_manufacturer),),
+                "manufacturers",
+            )
+            if manufacturer_error and not inventory_item_error:
+                inventory_item_error = manufacturer_error
+            (ip_addresses, ip_ranges), address_error = optional(
+                (
+                    ("/api/ipam/ip-addresses/", _normalize_netbox_ip_address),
+                    ("/api/ipam/ip-ranges/", _normalize_netbox_ip_range),
+                ),
+                "IP addresses",
+            )
+            (wireless_lans,), wireless_error = optional(
+                (("/api/wireless/wireless-lans/", _normalize_netbox_wireless_lan),),
+                "wireless LANs",
+            )
+            (custom_fields,), custom_field_error = optional(
+                (("/api/extras/custom-fields/", _normalize_netbox_custom_field),),
+                "custom fields",
+            )
+
             type_rows = _netbox_paginated_rows(
                 session,
                 config,
@@ -729,6 +955,14 @@ def read_netbox_inventory(
         ipam_error=ipam_error,
         inventory_items=tuple(inventory_items),
         inventory_item_error=inventory_item_error,
+        manufacturers=tuple(manufacturers),
+        ip_addresses=tuple(ip_addresses),
+        ip_ranges=tuple(ip_ranges),
+        address_error=address_error,
+        wireless_lans=tuple(wireless_lans),
+        wireless_error=wireless_error,
+        custom_fields=tuple(custom_fields),
+        custom_field_error=custom_field_error,
     )
 
 
@@ -750,51 +984,85 @@ def _unifi_json(client: httpx.Client, path: str, **params) -> dict[str, object]:
     return payload
 
 
+@dataclass(frozen=True)
+class _InternalDetails:
+    """Everything read from internal Network endpoints (allow-listed)."""
+
+    port_configs: tuple[InventoryPortConfig, ...] = ()
+    links: tuple[InventoryLink, ...] = ()
+    sfps: tuple[InventorySfp, ...] = ()
+    dhcp_ranges: tuple[InventoryDhcpRange, ...] = ()
+    error: str = ""
+    wlans: tuple[InventoryWlan, ...] = ()
+    reservations: tuple[InventoryReservation, ...] = ()
+    client_error: str = ""
+
+
 def _read_port_configs(
     client: httpx.Client,
     config: UniFiConfig,
     version: str,
     reference: str,
     raw_devices: list[dict[str, object]],
-) -> tuple[tuple[InventoryPortConfig, ...], tuple[InventoryLink, ...], str]:
-    """Port configuration and link evidence from internal endpoints.
+) -> _InternalDetails:
+    """Port configuration, link evidence and details from internal endpoints.
 
-    Returns (configs, links, error); on failure both tuples are empty and the
-    error explains why.
+    Port configuration, links, SFP modules and DHCP ranges come from the
+    device and network payloads; on failure they are empty and ``error``
+    explains why. Wireless LANs and reservations are a separate, optional
+    read with their own ``client_error``.
 
     Read-only and tolerant: any failure leaves the official data untouched.
     Raw internal payloads are reduced to allow-listed fields right here and
     never stored, so network secrets do not leave this function.
     """
     if not version.startswith(INTERNAL_API_SERIES):
-        return (
-            (),
-            (),
-            (
-                "Port configuration is only read for validated UniFi Network "
-                f"{', '.join(s.rstrip('.') for s in INTERNAL_API_SERIES)}; "
-                f"installed {version or 'unknown'}."
-            ),
+        message = (
+            "Port configuration is only read for validated UniFi Network "
+            f"{', '.join(s.rstrip('.') for s in INTERNAL_API_SERIES)}; "
+            f"installed {version or 'unknown'}."
         )
+        return _InternalDetails(error=message, client_error=message)
     base = f"{config.url.rstrip('/')}/proxy/network/api/s/{reference}/"
     try:
         devices = _internal_rows(client, base + "stat/device")
         profiles = allowed_profiles(_internal_rows(client, base + "rest/portconf"))
-        networks = allowed_networks(_internal_rows(client, base + "rest/networkconf"))
+        network_rows = _internal_rows(client, base + "rest/networkconf")
     except InventoryError as error:
-        return (), (), f"Port configuration unavailable: {error}"
+        message = f"Port configuration unavailable: {error}"
+        return _InternalDetails(error=message, client_error=message)
     except httpx.HTTPError, OSError, ValueError, TypeError:
-        return (), (), "Port configuration unavailable due to transport errors."
+        message = "Port configuration unavailable due to transport errors."
+        return _InternalDetails(error=message, client_error=message)
+    networks = allowed_networks(network_rows)
     by_mac = {
         mac: _text(row.get("id"))
         for row in raw_devices
         if (mac := _normalize_mac(row.get("macAddress")).replace(":", "").lower())
     }
-    return (
-        resolve_port_configs(devices, profiles, networks, by_mac),
-        read_links(devices, by_mac),
-        "",
+    details = _InternalDetails(
+        port_configs=resolve_port_configs(devices, profiles, networks, by_mac),
+        links=read_links(devices, by_mac),
+        sfps=read_sfps(devices, by_mac),
+        dhcp_ranges=read_dhcp_ranges(network_rows),
     )
+    try:
+        wlans = read_wlans(
+            _internal_rows(client, base + "rest/wlanconf"), network_vlans(network_rows)
+        )
+        reservations = read_reservations(_internal_rows(client, base + "rest/user"))
+    except InventoryError as error:
+        return replace(
+            details, client_error=f"Wireless LANs and reservations unavailable: {error}"
+        )
+    except httpx.HTTPError, OSError, ValueError, TypeError:
+        return replace(
+            details,
+            client_error=(
+                "Wireless LANs and reservations unavailable due to transport errors."
+            ),
+        )
+    return replace(details, wlans=wlans, reservations=reservations)
 
 
 def _internal_rows(client: httpx.Client, url: str) -> list[object]:
@@ -876,7 +1144,16 @@ def _normalize_unifi_device(row: dict[str, object], site_name: str) -> Inventory
         manufacturer=manufacturer,
         mac_address=_normalize_mac(row.get("macAddress") or row.get("mac")),
         site=site_name,
+        ip_address=_ipv4_text(row.get("ipAddress")),
+        firmware=_text(row.get("firmwareVersion")),
     )
+
+
+def _ipv4_text(value: object) -> str:
+    try:
+        return str(ipaddress.IPv4Address(_text(value)))
+    except ValueError:
+        return ""
 
 
 def _int(value: object) -> int:
@@ -1093,7 +1370,7 @@ def read_unifi_inventory(
                 if network is not None:
                     networks.append(network)
 
-            port_configs, links, port_config_error = _read_port_configs(
+            details = _read_port_configs(
                 client, config, version, site["internalReference"], raw_devices
             )
     except InventoryError:
@@ -1113,7 +1390,12 @@ def read_unifi_inventory(
         unifi_raw_devices=tuple(raw_devices),
         ports=tuple(ports),
         networks=tuple(networks),
-        port_configs=port_configs,
-        port_config_error=port_config_error,
-        links=links,
+        port_configs=details.port_configs,
+        port_config_error=details.error,
+        links=details.links,
+        sfps=details.sfps,
+        dhcp_ranges=details.dhcp_ranges,
+        wlans=details.wlans,
+        reservations=details.reservations,
+        client_error=details.client_error,
     )

@@ -92,6 +92,13 @@ history.
   NetBox interface (paired by connector kind and number), connector and speed,
   live link state and PoE, plus notes for speed or PoE differences and
   unpaired ports or interfaces. Link state and speed are never written.
+  Plugged SFP modules (part number, tooltip with vendor and serial) and
+  configured fixed speeds are shown as well.
+- The detail panel also shows the management IP and firmware version that
+  UniFi reports next to the NetBox primary IPv4 and `firmware` Custom Field.
+  UniFi DHCP ranges, wireless LANs (never their passphrases) and fixed-IP
+  reservations are read and counted in the preview summary. Writing these
+  details to NetBox is being added in milestone M11.
 - NetBox-only devices (delete proposals) are limited to the active UniFi site
   by default; a setting includes all NetBox devices. Nothing is deleted.
 
@@ -165,7 +172,8 @@ header), and the app has its own icon in title bars, taskbar and executable.
  - Cover port profiles/overrides, native/tagged VLANs, interfaces, IP/MAC, PoE,
 	 LAG and LLDP where verified API data and standard NetBox fields allow it.
  - Separate configuration from operational state. No automatic deletions or
-	 unapproved Custom Fields. Network first, then Protect, Access and Drive.
+	 unapproved Custom Fields (the only one is `firmware`, created visibly on
+	 selection). Network first, then Protect, Access and Drive.
  - Show last successful snapshots when offline; startup checks and Refresh never
 	 imply permission to write. Apply requires a confirmed current preview.
 

@@ -4,14 +4,24 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from unifi2netbox.details import (
+    InventoryDhcpRange,
+    InventoryReservation,
+    InventorySfp,
+    InventoryWlan,
+)
 from unifi2netbox.inventory import (
+    InventoryCustomField,
     InventoryDevice,
     InventoryDeviceRole,
     InventoryDeviceStatus,
     InventoryDeviceType,
     InventoryDisk,
     InventoryInterface,
+    InventoryIpAddress,
+    InventoryIpRange,
     InventoryItem,
+    InventoryManufacturer,
     InventoryNetwork,
     InventoryPort,
     InventoryPrefix,
@@ -20,11 +30,32 @@ from unifi2netbox.inventory import (
     InventorySource,
     InventoryVlan,
     InventoryVlanGroup,
+    InventoryWirelessLan,
 )
 from unifi2netbox.links import InventoryLink
 from unifi2netbox.port_config import InventoryPortConfig
 
 SNAPSHOT_SCHEMA_VERSION = 1
+
+# M11 detail lists (all optional; older snapshots decode them as empty).
+_DETAIL_TYPES = {
+    "sfps": InventorySfp,
+    "dhcp_ranges": InventoryDhcpRange,
+    "wlans": InventoryWlan,
+    "reservations": InventoryReservation,
+    "manufacturers": InventoryManufacturer,
+    "ip_addresses": InventoryIpAddress,
+    "ip_ranges": InventoryIpRange,
+    "wireless_lans": InventoryWirelessLan,
+    "custom_fields": InventoryCustomField,
+}
+_DETAIL_LISTS = tuple(_DETAIL_TYPES)
+_DETAIL_ERRORS = (
+    "client_error",
+    "address_error",
+    "wireless_error",
+    "custom_field_error",
+)
 
 
 class SnapshotStoreError(ValueError):
@@ -149,6 +180,11 @@ def _encode(snapshot: InventorySnapshot) -> str:
         "disk_error": snapshot.disk_error,
         "inventory_items": [asdict(item) for item in snapshot.inventory_items],
         "inventory_item_error": snapshot.inventory_item_error,
+        **{
+            name: [asdict(item) for item in getattr(snapshot, name)]
+            for name in _DETAIL_LISTS
+        },
+        **{name: getattr(snapshot, name) for name in _DETAIL_ERRORS},
     }
     return json.dumps(data, separators=(",", ":"), sort_keys=True)
 
@@ -200,7 +236,9 @@ def _decode(raw: str) -> InventorySnapshot:
     links = payload.get("links", [])
     disks = payload.get("disks", [])
     inventory_items = payload.get("inventory_items", [])
+    details = {name: payload.get(name, []) for name in _DETAIL_LISTS}
     for items in (
+        *details.values(),
         ports,
         interfaces,
         networks,
@@ -262,4 +300,17 @@ def _decode(raw: str) -> InventorySnapshot:
         disk_error=str(payload.get("disk_error", "")),
         inventory_items=tuple(InventoryItem(**item) for item in inventory_items),
         inventory_item_error=str(payload.get("inventory_item_error", "")),
+        **{
+            name: tuple(_DETAIL_TYPES[name](**_tuples(item)) for item in items)
+            for name, items in details.items()
+        },
+        **{name: str(payload.get(name, "")) for name in _DETAIL_ERRORS},
     )
+
+
+def _tuples(item: dict) -> dict:
+    """JSON lists back to tuples (frozen dataclasses hold tuples)."""
+    return {
+        key: tuple(value) if isinstance(value, list) else value
+        for key, value in item.items()
+    }

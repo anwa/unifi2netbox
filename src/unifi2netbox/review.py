@@ -13,6 +13,7 @@ from datetime import datetime
 
 from unifi2netbox.cables import CablePlan, CablePlanRow, select_cable
 from unifi2netbox.config import BehaviorConfig
+from unifi2netbox.details import InventorySfp
 from unifi2netbox.disks import DiskPlan, DiskPlanRow, select_disk
 from unifi2netbox.interface_plan import (
     InterfacePlan,
@@ -509,6 +510,43 @@ class ReviewState:
             for config in self.unifi_port_configs
             if unifi_id and config.device_id == unifi_id
         }
+
+    def sfps_for(self, key: str) -> dict[int, InventorySfp]:
+        """Plugged SFP modules of one device, by port index (display only)."""
+        unifi_id, _ = _device_ids(key)
+        return {
+            sfp.port_idx: sfp
+            for sfp in (self.result.unifi_sfps if self.result else ())
+            if unifi_id and sfp.device_id == unifi_id
+        }
+
+    def details_for(self, key: str) -> tuple[tuple[str, str, str], ...]:
+        """(label, NetBox value, UniFi value) of management IP and firmware."""
+        unifi_id, netbox_id = _device_ids(key)
+        result = self.result
+        unifi = next(
+            (
+                d
+                for d in (result.unifi_device_records if result else ())
+                if unifi_id and d.source_id == unifi_id
+            ),
+            None,
+        )
+        netbox = next(
+            (
+                d
+                for d in (result.netbox_device_records if result else ())
+                if netbox_id and d.source_id == netbox_id
+            ),
+            None,
+        )
+        rows = []
+        for title, name in (("Management IP", "ip_address"), ("Firmware", "firmware")):
+            target = getattr(netbox, name, "") if netbox else ""
+            source = getattr(unifi, name, "") if unifi else ""
+            if target or source:
+                rows.append((title, target, source))
+        return tuple(rows)
 
     # -- user actions --------------------------------------------------------
 
