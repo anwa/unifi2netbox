@@ -782,3 +782,14 @@ existing management interface; all /24 from the UniFi management network)
 and 1, the UDM, only got a note because UniFi reports its public WAN address.
 The dry run re-read UniFi and NetBox, passed every check for all 18 and wrote
 nothing.
+
+Then, with the user's explicit approval, the assistant ran the slice 3 write
+test against the NetBox developer instance (commit 14427d8, application
+1.0.3) through the real pipeline for exactly one device; UniFi was only read.
+Results, all passed (6/6): for `HG-DG-Technik-SW11` the virtual,
+management-only interface `Management`, the IP 10.10.0.11/24 on it and the
+primary IPv4 were written and read back as verified; a refreshed preview
+showed the row in sync with one `Management` interface and the primary IPv4
+10.10.0.11, the other 17 devices still pending, and a second apply had
+nothing to write. The run is in the write history. As approved, the
+interface, IP and primary IPv4 stay in NetBox (real data, not test objects).

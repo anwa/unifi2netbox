@@ -540,11 +540,11 @@ Slices:
   (1.0.2, 2026-11-15: offline tests, a live dry run of the field create plus
   19 firmware updates, and an approved live write test, 6/6: field created,
   one device written, both verified, second apply a no-op.)
-- [ ] 3. Management IP: IP address on the management interface (create the
+- [x] 3. Management IP: IP address on the management interface (create the
   virtual interface when needed) and primary IPv4; conflicts never overwrite.
-  (1.0.3, 2026-11-15: offline tests and a live dry run of 18 devices; the
-  UDM reports its public WAN address, which is never used; the approved live
-  write test is pending.)
+  (1.0.3, 2026-11-15: offline tests, a live dry run of 18 devices and an
+  approved live write test, 6/6, for one device; the UDM reports its public
+  WAN address, which is never used.)
 - [ ] 4. Port details: description from the UniFi port name, speed/duplex
   only when auto-negotiation is off, PoE mode/type as port capability.
 - [ ] 5. SFP modules as inventory items linked to their interface (create and
