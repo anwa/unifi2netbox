@@ -27,6 +27,16 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	blocks firmware. Creation never duplicates the field, reconciles an
 	interrupted create by name and is read back; firmware updates PATCH only
 	the Custom Field, are drift-checked and read back.
+- M11 slice 3: the management IP of matched devices becomes the NetBox
+	primary IPv4. The prefix length comes from the UniFi network that contains
+	the IP; the IP goes onto the management-only interface, an interface named
+	`Management`, or a new virtual management-only `Management` interface.
+	Missing IPs are created, unassigned ones assigned; an IP on another
+	object, duplicate IPs, several management interfaces or another primary
+	IPv4 are conflicts and never overwritten. Public (WAN) addresses are not
+	used. The detail panel offers one checkbox per device; writes run after
+	device writes with UniFi and NetBox re-reads, lookup of interrupted
+	creates and read-back.
 
 ## v1.0.0
 

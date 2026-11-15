@@ -616,9 +616,36 @@ class DetailPanel(QScrollArea):
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(2, 1)
         self.layout_.addLayout(grid)
-        self.layout_.addWidget(
-            label("Shown for reference; not written yet.", "caption")
-        )
+        row = self.state.mgmt_ip_row_for(key)
+        plan = self.state.mgmt_ip_plan
+        if row is None:
+            text = (plan.blocker if plan is not None else "") or (
+                "Match this device in NetBox and refresh to plan its management IP."
+            )
+            self.layout_.addWidget(label(text, "caption"))
+            return
+        outcome = self.state.outcomes.get(row.key)
+        if row.selectable:
+            box = QCheckBox(f"Primary IPv4 {row.address}: {row.describe()}")
+            box.setObjectName("mgmtIp")
+            box.setChecked(row.selected)
+            box.toggled.connect(
+                lambda checked, k=row.key: self._toggle_mgmt_ip(k, checked)
+            )
+            self.layout_.addWidget(box)
+        else:
+            text = {"in_sync": "in sync", "conflict": "conflict"}.get(
+                row.action, "not written"
+            )
+            self.layout_.addWidget(label(f"Primary IPv4: {text}", "secondary"))
+        if row.notes:
+            self.layout_.addWidget(label("\n".join(row.notes), "caption"))
+        if outcome is not None:
+            self.layout_.addWidget(label(outcome.message, "caption"))
+
+    def _toggle_mgmt_ip(self, key: str, checked: bool) -> None:
+        self.state.set_mgmt_ip_selected(key, checked)
+        self.changed.emit()
 
     def _add_disks(self, key: str) -> None:
         """Drive bays of a UNAS, display only."""
@@ -935,9 +962,11 @@ class ConfirmDialog(QDialog):
         cable_plan: CablePlan | None = None,
         disk_plan=None,
         custom_field_plan=None,
+        mgmt_ip_plan=None,
     ) -> None:
         super().__init__(parent)
         field_ops = custom_field_plan.operation_count if custom_field_plan else 0
+        ip_ops = mgmt_ip_plan.operation_count if mgmt_ip_plan else 0
         creates = sum(
             op.operation_type == OperationType.CREATE_DEVICE for op in plan.operations
         )
@@ -954,6 +983,7 @@ class ConfirmDialog(QDialog):
             + cable_ops
             + disk_ops
             + field_ops
+            + ip_ops
         )
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
@@ -983,6 +1013,8 @@ class ConfirmDialog(QDialog):
             )
         if cable_ops:
             parts.append(f"{cable_ops} cable{'s' if cable_ops != 1 else ''}")
+        if ip_ops:
+            parts.append(f"{ip_ops} management IP{'s' if ip_ops != 1 else ''}")
         if disk_ops:
             parts.append(f"{disk_ops} drive item{'s' if disk_ops != 1 else ''}")
         summary = label(", ".join(parts) or "No changes", "subheading")

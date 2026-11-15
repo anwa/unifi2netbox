@@ -224,9 +224,11 @@ class WriteExecutionJob(QRunnable):
         drive_config=None,
         disk_plan=None,
         custom_field_plan=None,
+        mgmt_ip_plan=None,
     ) -> None:
         super().__init__()
         self.custom_field_plan = custom_field_plan
+        self.mgmt_ip_plan = mgmt_ip_plan
         self.access_config = access_config
         self.drive_config = drive_config
         self.disk_plan = disk_plan
@@ -270,6 +272,7 @@ class WriteExecutionJob(QRunnable):
                 drive_config=self.drive_config,
                 disk_plan=self.disk_plan,
                 custom_field_plan=self.custom_field_plan,
+                mgmt_ip_plan=self.mgmt_ip_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -314,6 +317,7 @@ class WriteExecutionRunner(QObject):
         drive_config=None,
         disk_plan=None,
         custom_field_plan=None,
+        mgmt_ip_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -337,6 +341,7 @@ class WriteExecutionRunner(QObject):
             drive_config=drive_config,
             disk_plan=disk_plan,
             custom_field_plan=custom_field_plan,
+            mgmt_ip_plan=mgmt_ip_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1900,6 +1905,7 @@ class MainWindow(QMainWindow):
         cable_ops = self.review.cable_operation_count()
         disk_ops = self.review.disk_operation_count()
         field_ops = self.review.custom_field_operation_count()
+        ip_ops = self.review.mgmt_ip_operation_count()
         operations = (
             (len(plan.operations) if plan is not None else 0)
             + network_ops
@@ -1907,6 +1913,7 @@ class MainWindow(QMainWindow):
             + cable_ops
             + disk_ops
             + field_ops
+            + ip_ops
         )
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
@@ -1921,6 +1928,8 @@ class MainWindow(QMainWindow):
             parts.append(f"{interface_ops} interface writes")
         if cable_ops:
             parts.append(f"{cable_ops} cables")
+        if ip_ops:
+            parts.append(f"{ip_ops} management IPs")
         self.selection_label.setText(", ".join(parts))
         for button in (self.select_all_button, self.select_none_button):
             button.setVisible(
@@ -2093,6 +2102,8 @@ class MainWindow(QMainWindow):
             # A single device without firmware must not create the field.
             custom_field_plan = select_custom_field(custom_field_plan, False)
         network_ops += custom_field_plan.operation_count if custom_field_plan else 0
+        mgmt_ip_plan = self.review.mgmt_ip_plan_for(device_key)
+        network_ops += mgmt_ip_plan.operation_count if mgmt_ip_plan else 0
         if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
@@ -2112,6 +2123,7 @@ class MainWindow(QMainWindow):
             cable_plan=cable_plan,
             disk_plan=disk_plan,
             custom_field_plan=custom_field_plan,
+            mgmt_ip_plan=mgmt_ip_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -2140,6 +2152,7 @@ class MainWindow(QMainWindow):
             drive_config=self.drive.config,
             disk_plan=disk_plan,
             custom_field_plan=custom_field_plan,
+            mgmt_ip_plan=mgmt_ip_plan,
         )
         self.update_check_action()
 

@@ -22,6 +22,7 @@ from unifi2netbox.interface_plan import (
     select_interface,
 )
 from unifi2netbox.inventory import InventoryDisk
+from unifi2netbox.mgmt_ip import MgmtIpPlan, MgmtIpRow, select_mgmt_ip
 from unifi2netbox.networks import NetworkPlan, NetworkPlanRow, select_network
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
@@ -151,6 +152,7 @@ class ReviewState:
         self.custom_field_plan: CustomFieldPlan | None = (
             result.custom_field_plan if result else None
         )
+        self.mgmt_ip_plan: MgmtIpPlan | None = result.mgmt_ip_plan if result else None
         self.protect_kinds: dict[str, str] = {
             device.source_id: device.kind
             for device in (result.protect_devices if result else ())
@@ -611,6 +613,33 @@ class ReviewState:
                         self.diff, device.device_key, FIRMWARE, False
                     )
         self._recompute()
+
+    # -- management IP ------------------------------------------------------
+
+    def mgmt_ip_row_for(self, key: str) -> MgmtIpRow | None:
+        """The management-IP row of a matched device row, if any."""
+        _, netbox_id = _device_ids(key)
+        if not netbox_id or self.mgmt_ip_plan is None or key.startswith("create:"):
+            return None
+        return self.mgmt_ip_plan.row_for(netbox_id)
+
+    def mgmt_ip_operation_count(self) -> int:
+        return self.mgmt_ip_plan.operation_count if self.mgmt_ip_plan else 0
+
+    def set_mgmt_ip_selected(self, key: str, selected: bool) -> None:
+        if self.mgmt_ip_plan is not None:
+            self.mgmt_ip_plan = select_mgmt_ip(self.mgmt_ip_plan, key, selected)
+
+    def mgmt_ip_plan_for(self, device_key: str | None) -> MgmtIpPlan | None:
+        """The whole plan, or only the row of one device for a single apply."""
+        plan = self.mgmt_ip_plan
+        if plan is None or device_key is None:
+            return plan
+        row = self.mgmt_ip_row_for(device_key)
+        return replace(
+            plan,
+            rows=tuple(r for r in plan.rows if row is not None and r.key == row.key),
+        )
 
     def firmware_selected_count(self) -> int:
         if self.diff is None:

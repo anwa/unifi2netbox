@@ -59,6 +59,8 @@ from unifi2netbox.matching import (
     deduplicate_inventory,
     suggest_device_types_for_unmatched,
 )
+from unifi2netbox.mgmt_ip import MgmtIpPlan, MgmtPair, build_mgmt_ip_plan
+from unifi2netbox.mgmt_ip_execute import execute_mgmt_ip_plan
 from unifi2netbox.network_execute import execute_network_plan
 from unifi2netbox.networks import NetworkPlan, build_network_plan, group_name_for
 from unifi2netbox.port_config import InventoryPortConfig
@@ -140,6 +142,7 @@ class InventoryPreviewResult:
     netbox_device_records: tuple[InventoryDevice, ...] = ()
     unifi_sfps: tuple[InventorySfp, ...] = ()
     custom_field_plan: CustomFieldPlan | None = None
+    mgmt_ip_plan: MgmtIpPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -359,6 +362,34 @@ def build_inventory_preview(
         netbox_device_records=netbox_snapshot.devices,
         unifi_sfps=unifi_snapshot.sfps,
         custom_field_plan=custom_field_plan,
+        mgmt_ip_plan=_mgmt_ip_plan(dedup.pairs, netbox_snapshot, mapped_unifi),
+    )
+
+
+def _mgmt_ip_plan(
+    pairs, netbox_snapshot: InventorySnapshot, unifi_snapshot: InventorySnapshot
+) -> MgmtIpPlan:
+    """Management IPs of matched devices as NetBox primary IPv4."""
+    names = {device.source_id: device.name for device in unifi_snapshot.devices}
+    mgmt_pairs = []
+    for pair in pairs:
+        unifi_id = pair.unifi_observation_id.split(":", 1)[-1]
+        mgmt_pairs.append(
+            MgmtPair(
+                f"{pair.unifi_observation_id}->{pair.netbox_observation_id}",
+                names.get(unifi_id, unifi_id),
+                unifi_id,
+                pair.netbox_observation_id.split(":", 1)[-1],
+            )
+        )
+    return build_mgmt_ip_plan(
+        mgmt_pairs,
+        unifi_snapshot.devices,
+        netbox_snapshot.devices,
+        netbox_snapshot.interfaces,
+        netbox_snapshot.ip_addresses,
+        unifi_snapshot.networks,
+        address_error=netbox_snapshot.address_error,
     )
 
 
@@ -496,6 +527,7 @@ def run_write_execution(
     drive_config: DriveConfig | None = None,
     disk_plan: DiskPlan | None = None,
     custom_field_plan: CustomFieldPlan | None = None,
+    mgmt_ip_plan: MgmtIpPlan | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
@@ -504,7 +536,8 @@ def run_write_execution(
     Custom Field ``firmware`` is created first when selected, then network
     writes (VLAN group, VLANs, prefixes), then interface configuration and
     cables of matched devices, then device writes (firmware only when the
-    field is available), then drive inventory items of matched UNAS devices.
+    field is available), then management IPs (primary IPv4), then drive
+    inventory items of matched UNAS devices.
     """
     started = _now()
     snapshot, source_error = (
@@ -578,6 +611,15 @@ def run_write_execution(
         source_devices=source_devices,
         source_error=source_error,
         firmware_writable=firmware_writable,
+    )
+    network_outcomes += execute_mgmt_ip_plan(
+        mgmt_ip_plan,
+        backend,
+        dry_run=dry_run,
+        source_devices=(
+            {d.source_id: d for d in snapshot.devices} if snapshot is not None else None
+        ),
+        source_error=source_error,
     )
     network_outcomes += execute_disk_plan(
         disk_plan,

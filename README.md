@@ -99,10 +99,15 @@ history.
   offers "Create the NetBox Custom Field 'firmware'" (preselected, created once
   before any device write); unchecking it also unchecks firmware. An existing
   field of another type is never changed and blocks firmware writes.
-- The detail panel also shows the management IP that UniFi reports next to
-  the NetBox primary IPv4. UniFi DHCP ranges, wireless LANs (never their
-  passphrases) and fixed-IP reservations are read and counted in the preview
-  summary. Writing these details to NetBox is being added in milestone M11.
+- The management IP that UniFi reports becomes the NetBox primary IPv4 of a
+  matched device (checkbox in the detail panel). The IP is put on the
+  management-only interface, or on a virtual `Management` interface that is
+  created when missing; the prefix length comes from the UniFi network. An
+  existing other primary IPv4, an IP assigned elsewhere and public (WAN)
+  addresses are never written.
+- UniFi DHCP ranges, wireless LANs (never their passphrases) and fixed-IP
+  reservations are read and counted in the preview summary. Writing them to
+  NetBox is being added in milestone M11.
 - NetBox-only devices (delete proposals) are limited to the active UniFi site
   by default; a setting includes all NetBox devices. Nothing is deleted.
 

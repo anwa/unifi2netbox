@@ -773,3 +773,12 @@ the field as present, the device in sync and the other 18 firmware changes
 still pending; a second apply of the device had nothing to write. The run is
 in the write history. As approved, the Custom Field and the firmware value
 stay in NetBox (real data, not a test object).
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 3 (application
+1.0.3 working tree on top of commit 3d5f70f) with snapshots in a scratch
+folder and no write history: 19 matched devices carry a UniFi IP; 18 were
+planned (17 with a new virtual `Management` interface, the RPS reusing its
+existing management interface; all /24 from the UniFi management network)
+and 1, the UDM, only got a note because UniFi reports its public WAN address.
+The dry run re-read UniFi and NetBox, passed every check for all 18 and wrote
+nothing.
