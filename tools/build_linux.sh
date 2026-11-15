@@ -22,7 +22,7 @@ echo "Building unifi2netbox ${version} for Linux"
 
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox \
     --paths src --recursive-copy-metadata unifi2netbox \
-    --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." \
+    --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" \
     --add-data "src/unifi2netbox/resources:unifi2netbox/resources" \
     src/unifi2netbox/__main__.py
 
@@ -33,7 +33,7 @@ if [[ -n "${forbidden}" ]]; then
     echo "Forbidden files in bundle: ${forbidden}" >&2
     exit 1
 fi
-for notice in LICENSE THIRD_PARTY_NOTICES.md; do
+for notice in LICENSE THIRD_PARTY_NOTICES.md manual/index.md; do
     test -f "dist/unifi2netbox/_internal/${notice}" || { echo "Missing ${notice}" >&2; exit 1; }
 done
 

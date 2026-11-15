@@ -851,6 +851,15 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-15 the assistant added the user manual (application 1.1.1
+working tree on top of v1.1.0): `tests/test_manual.py` checks the chapter
+structure, that every page has a title, that every link and image resolves
+and every screenshot is used, and drives the manual window (overview first,
+tree and link navigation, Back, Overview, opening from the main window). The
+screenshots were rendered offscreen with `tools/build_manual_screenshots.py`
+from fictional demo data and reviewed visually; no real system data or local
+path appears in them. Not verified: the manual window in a packaged build.
+
 On 2026-11-15 the assistant checked M11 slice 7 (application 1.0.7 working
 tree on top of commit d2f40ad) with live read data and nothing written. The
 review window rendered offscreen (`QT_QPA_FONTDIR=C:/Windows/Fonts`) with the

@@ -36,7 +36,7 @@ Write-Host "Building unifi2netbox $version"
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox `
     --icon src/unifi2netbox/resources/unifi2netbox.ico `
     --paths src --recursive-copy-metadata unifi2netbox `
-    --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." `
+    --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" `
     --add-data "src/unifi2netbox/resources:unifi2netbox/resources" `
     src/unifi2netbox/__main__.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
@@ -45,7 +45,7 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 $forbidden = Get-ChildItem -Recurse dist\unifi2netbox -File |
     Where-Object { $_.Name -match '^(config\.toml|snapshots\.sqlite3|write-journal\.sqlite3)$' -or $_.Extension -in '.har', '.pcap' }
 if ($forbidden) { throw "Forbidden files in bundle: $($forbidden.FullName -join ', ')" }
-foreach ($notice in 'LICENSE', 'THIRD_PARTY_NOTICES.md') {
+foreach ($notice in 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'manual/index.md') {
     if (-not (Test-Path "dist\unifi2netbox\_internal\$notice")) { throw "Missing $notice in bundle." }
 }
 

@@ -81,6 +81,7 @@ from unifi2netbox.connections import (
     check_unifi_connection,
 )
 from unifi2netbox.custom_fields import select_custom_field
+from unifi2netbox.gui_manual import ManualWindow
 from unifi2netbox.gui_review import (
     COL_CHANGE,
     COL_DEVICE,
@@ -481,9 +482,9 @@ OPTIONAL_SERVICES = {
         "UniFi Drive",
         "Drive",
         "Optional. Management address of your UNAS console and a local API key "
-        "created on it. Ubiquiti documents no Drive device API yet, so only the "
-        "public system information is read; the key is kept for future APIs. "
-        "File contents are never accessed.",
+        "created on it. Ubiquiti documents no Drive device API yet; the app "
+        "reads the public system information and, with the key, the drive bays "
+        "(model, serial, size, state). File contents are never accessed.",
         "https://unas.example.lan",
         "Local API key",
         "Optional. Set the UNAS console URL and its local API key.",
@@ -1260,6 +1261,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"unifi2netbox {version('unifi2netbox')}")
         self.resize(1180, 760)
         self.setMinimumSize(860, 560)
+        self.manual_window: ManualWindow | None = None
         # Aliases to the NetBox connection, used by older callers and tests.
         self.runner = self.netbox.runner
         self.state = self.netbox.state
@@ -1340,9 +1342,19 @@ class MainWindow(QMainWindow):
         self.history_action.triggered.connect(self.show_history)
         self.copy_summary_action = QAction("Copy summary", self)
         self.copy_summary_action.triggered.connect(self.copy_summary)
+        self.manual_action = QAction(
+            theme.icon("HelpContents", QStyle.StandardPixmap.SP_DialogHelpButton),
+            "Manual",
+            self,
+        )
+        self.manual_action.setShortcut(
+            QKeySequence(QKeySequence.StandardKey.HelpContents)
+        )
+        self.manual_action.setToolTip("Open the user manual (F1)")
+        self.manual_action.triggered.connect(lambda: self.show_manual())
         self.exit_action = QAction("Exit", self)
         self.exit_action.triggered.connect(self.close)
-        for action in (self.preview_action, self.settings_action):
+        for action in (self.preview_action, self.settings_action, self.manual_action):
             self.addAction(action)
 
     def _build_header(self) -> QFrame:
@@ -1387,6 +1399,12 @@ class MainWindow(QMainWindow):
         self.refresh_button.setToolTip(self.preview_action.toolTip())
         self.refresh_button.clicked.connect(self.preview_action.trigger)
         layout.addWidget(self.refresh_button)
+        self.manual_button = QPushButton("Manual")
+        self.manual_button.setObjectName("manualButton")
+        self.manual_button.setProperty("variant", "ghost")
+        self.manual_button.setToolTip(self.manual_action.toolTip())
+        self.manual_button.clicked.connect(self.manual_action.trigger)
+        layout.addWidget(self.manual_button)
         settings = QToolButton()
         settings.setDefaultAction(self.settings_action)
         settings.setProperty("variant", "ghost")
@@ -1403,6 +1421,7 @@ class MainWindow(QMainWindow):
         menu.addAction(self.history_action)
         menu.addAction(self.export_action)
         menu.addAction(self.copy_summary_action)
+        menu.addAction(self.manual_action)
         menu.addSeparator()
         menu.addAction(self.exit_action)
         more.setMenu(menu)
@@ -1510,32 +1529,33 @@ class MainWindow(QMainWindow):
             cards.addWidget(card)
         layout.addLayout(cards)
 
+        # Two rows so every segment keeps its full label at the default width:
+        # device filters with the search field, then networks and objects.
         filters = QHBoxLayout()
         filters.setSpacing(4)
+        object_filters = QHBoxLayout()
+        object_filters.setSpacing(4)
         self.segments: dict[str, QPushButton] = {}
-        for category in (
-            ALL,
-            CREATE,
-            UPDATE,
-            IN_SYNC,
-            ATTENTION,
-            NETBOX_ONLY,
-            NETWORKS,
-            INTERFACES,
-            CABLES,
-            ADDRESSES,
-            WIRELESS,
-            MODULES,
+        for row, categories in (
+            (filters, (ALL, CREATE, UPDATE, IN_SYNC, ATTENTION, NETBOX_ONLY)),
+            (
+                object_filters,
+                (NETWORKS, INTERFACES, CABLES, ADDRESSES, WIRELESS, MODULES),
+            ),
         ):
-            button = QPushButton(CATEGORY_LABELS[category])
-            button.setObjectName(f"filter_{category}")
-            button.setCheckable(True)
-            button.setProperty("segment", True)
-            button.clicked.connect(lambda _c=False, cat=category: self.set_filter(cat))
-            self.filter_group.addButton(button)
-            self.segments[category] = button
-            filters.addWidget(button)
+            for category in categories:
+                button = QPushButton(CATEGORY_LABELS[category])
+                button.setObjectName(f"filter_{category}")
+                button.setCheckable(True)
+                button.setProperty("segment", True)
+                button.clicked.connect(
+                    lambda _c=False, cat=category: self.set_filter(cat)
+                )
+                self.filter_group.addButton(button)
+                self.segments[category] = button
+                row.addWidget(button)
         filters.addStretch()
+        object_filters.addStretch()
         self.search = QLineEdit()
         self.search.setObjectName("deviceSearch")
         self.search.setPlaceholderText("Filter by name, model, port, VLAN or subnet")
@@ -1544,6 +1564,7 @@ class MainWindow(QMainWindow):
         self.search.textChanged.connect(lambda _t: self.apply_filter())
         filters.addWidget(self.search)
         layout.addLayout(filters)
+        layout.addLayout(object_filters)
 
         self.table_model = ReviewTableModel(self)
         self.table_model.selection_changed.connect(self.on_selection_changed)
@@ -2303,6 +2324,16 @@ class MainWindow(QMainWindow):
         self.update_check_action()
 
     # -- clipboard and exports ---------------------------------------------------
+
+    def show_manual(self, page: str = "") -> None:
+        """Open (or raise) the manual window at a page or the overview."""
+        if self.manual_window is None:
+            self.manual_window = ManualWindow(self)
+        if page:
+            self.manual_window.show_page(page)
+        self.manual_window.show()
+        self.manual_window.raise_()
+        self.manual_window.activateWindow()
 
     def show_history(self) -> None:
         try:
