@@ -45,6 +45,14 @@ from unifi2netbox.preview import (
     select_field,
 )
 from unifi2netbox.sfp import SfpPlan, SfpPlanRow, select_sfp
+from unifi2netbox.site_details import (
+    KIND_LABELS,
+    RANGE,
+    RESERVATION,
+    WLAN,
+    SiteDetailPlan,
+    select_site_detail,
+)
 from unifi2netbox.write_plan import (
     OperationType,
     WritePlan,
@@ -60,6 +68,9 @@ ATTENTION = "attention"
 NETWORKS = "networks"
 INTERFACES = "interfaces"
 CABLES = "cables"
+ADDRESSES = "addresses"
+WIRELESS = "wireless"
+MODULES = "modules"
 ALL = "all"
 
 CATEGORY_LABELS = {
@@ -72,7 +83,13 @@ CATEGORY_LABELS = {
     NETWORKS: "Networks",
     INTERFACES: "Interfaces",
     CABLES: "Cables",
+    ADDRESSES: "Addresses",
+    WIRELESS: "Wireless",
+    MODULES: "Modules",
 }
+
+# Object lists (M11): which rows each filter shows.
+OBJECT_FILTERS = (ADDRESSES, WIRELESS, MODULES)
 
 FIELD_LABELS = {
     "name": "Name",
@@ -83,6 +100,75 @@ FIELD_LABELS = {
     "mac_address": "MAC address",
     "firmware": "Firmware",
 }
+
+
+@dataclass(frozen=True)
+class ObjectRow:
+    """One row of the Addresses, Wireless or Modules list.
+
+    Wraps a management-IP, IP-range, reservation, wireless-LAN or SFP row with
+    the facts the list and the detail panel need.
+    """
+
+    key: str
+    kind: str
+    name: str
+    action: str
+    selectable: bool
+    selected: bool
+    changes: tuple[tuple[str, str, str], ...] = ()
+    notes: tuple[str, ...] = ()
+    outcome: WriteOutcome | None = None
+
+
+OBJECT_FIELD_LABELS = {
+    "ssid": "SSID",
+    "status": "Status",
+    "auth_type": "Authentication",
+    "auth_cipher": "Cipher",
+    "vlan": "VLAN",
+    "scope_id": "Site",
+    "start_address": "Start",
+    "end_address": "End",
+    "address": "Address",
+    "dns_name": "DNS name",
+    "description": "Description",
+    "part_id": "Part ID",
+    "serial": "Serial number",
+    "manufacturer": "Manufacturer",
+    "component_id": "Interface",
+}
+_HIDDEN_FIELDS = frozenset({"scope_type", "component_type"})
+
+
+def readable_changes(
+    changes: tuple[tuple[str, str, str], ...],
+    *,
+    site: str = "",
+    vid: int | None = None,
+    interface: str = "",
+    vendor: str = "",
+) -> tuple[tuple[str, str, str], ...]:
+    """Field changes with labels and names instead of NetBox IDs."""
+
+    def show(field: str, value: str) -> str:
+        if not value:
+            return ""
+        if field == "vlan":
+            return f"VLAN {vid}" if vid is not None else f"VLAN #{value}"
+        if field == "scope_id":
+            return site or f"#{value}"
+        if field == "component_id":
+            return interface or f"#{value}"
+        if field == "manufacturer":
+            return f"{vendor} (NetBox #{value})" if vendor else f"#{value}"
+        return value
+
+    return tuple(
+        (OBJECT_FIELD_LABELS.get(field, field), show(field, before), show(field, after))
+        for field, before, after in changes
+        if field not in _HIDDEN_FIELDS
+    )
 
 
 @dataclass(frozen=True)
@@ -155,6 +241,9 @@ class ReviewState:
         )
         self.mgmt_ip_plan: MgmtIpPlan | None = result.mgmt_ip_plan if result else None
         self.sfp_plan: SfpPlan | None = result.sfp_plan if result else None
+        self.site_detail_plan: SiteDetailPlan | None = (
+            result.site_detail_plan if result else None
+        )
         self.protect_kinds: dict[str, str] = {
             device.source_id: device.kind
             for device in (result.protect_devices if result else ())
@@ -332,6 +421,8 @@ class ReviewState:
         counts[NETWORKS] = len(self.network_rows())
         counts[INTERFACES] = len(self.interface_rows())
         counts[CABLES] = len(self.cable_rows())
+        for name in OBJECT_FILTERS:
+            counts[name] = len(self.object_rows(name))
         return counts
 
     # -- networks -----------------------------------------------------------
@@ -630,6 +721,111 @@ class ReviewState:
     def set_sfp_selected(self, key: str, selected: bool) -> None:
         if self.sfp_plan is not None:
             self.sfp_plan = select_sfp(self.sfp_plan, key, selected)
+
+    # -- object lists (addresses, wireless, modules) ------------------------
+
+    def object_rows(self, category: str, text: str = "") -> tuple[ObjectRow, ...]:
+        rows: list[ObjectRow] = []
+        site = self.site_detail_plan
+        if category == ADDRESSES:
+            for row in self.mgmt_ip_plan.rows if self.mgmt_ip_plan else ():
+                rows.append(
+                    ObjectRow(
+                        key=row.key,
+                        kind="Management IP",
+                        name=row.label,
+                        action=row.action,
+                        selectable=row.selectable,
+                        selected=row.selected and row.selectable,
+                        changes=(("Planned", "", row.describe()),) if row.steps else (),
+                        notes=row.notes,
+                        outcome=self.outcomes.get(row.key),
+                    )
+                )
+            kinds: tuple[str, ...] = (RANGE, RESERVATION)
+        elif category == WIRELESS:
+            kinds = (WLAN,)
+        elif category == MODULES:
+            for row in self.sfp_plan.rows if self.sfp_plan else ():
+                rows.append(
+                    ObjectRow(
+                        key=row.key,
+                        kind="SFP module",
+                        name=row.label,
+                        action=row.action,
+                        selectable=row.selectable,
+                        selected=row.selected and row.selectable,
+                        changes=readable_changes(
+                            row.changes(),
+                            interface=row.interface_name,
+                            vendor=row.sfp.vendor if row.sfp else "",
+                        ),
+                        notes=row.notes,
+                        outcome=self.outcomes.get(row.key),
+                    )
+                )
+            kinds = ()
+        else:
+            return ()
+        for kind in kinds:
+            for row in site.rows_of(kind) if site else ():
+                rows.append(
+                    ObjectRow(
+                        key=row.key,
+                        kind=KIND_LABELS[row.kind],
+                        name=row.name,
+                        action=row.action,
+                        selectable=row.selectable,
+                        selected=row.selected and row.selectable,
+                        changes=readable_changes(
+                            row.changes(),
+                            site=self.behavior.netbox_site_name,
+                            vid=getattr(row.source, "vlan_id", None),
+                        ),
+                        notes=row.notes,
+                        outcome=self.outcomes.get(row.key),
+                    )
+                )
+        needle = text.strip().lower()
+        return tuple(
+            row
+            for row in rows
+            if not needle or needle in f"{row.kind} {row.name}".lower()
+        )
+
+    def object_row(self, key: str) -> ObjectRow | None:
+        for category in OBJECT_FILTERS:
+            for row in self.object_rows(category):
+                if row.key == key:
+                    return row
+        return None
+
+    def object_note(self, category: str) -> str:
+        """Why a list is empty or incomplete (missing site, failed read)."""
+        plans = {
+            ADDRESSES: (self.site_detail_plan, self.mgmt_ip_plan),
+            WIRELESS: (self.site_detail_plan,),
+            MODULES: (self.sfp_plan,),
+        }.get(category, ())
+        for plan in plans:
+            text = getattr(plan, "note", "") or getattr(plan, "blocker", "")
+            if text:
+                return text
+        return ""
+
+    def set_object_selected(self, key: str, selected: bool) -> None:
+        if key.startswith("mgmt-ip:"):
+            self.set_mgmt_ip_selected(key, selected)
+        elif key.startswith("sfp"):
+            self.set_sfp_selected(key, selected)
+        elif self.site_detail_plan is not None:
+            self.site_detail_plan = select_site_detail(
+                self.site_detail_plan, key, selected
+            )
+
+    def site_detail_operation_count(self) -> int:
+        plan = self.site_detail_plan
+        return plan.operation_count if plan is not None else 0
 
     # -- management IP ------------------------------------------------------
 

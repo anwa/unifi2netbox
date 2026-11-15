@@ -578,9 +578,11 @@ def fake_runner(monkeypatch, window):
         custom_field_plan=None,
         mgmt_ip_plan=None,
         sfp_plan=None,
+        site_detail_plan=None,
     ):
         started.update(
             sfp_plan=sfp_plan,
+            site_detail_plan=site_detail_plan,
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
             plan=write_plan,
@@ -1880,3 +1882,116 @@ def test_online_unifi_chip_keeps_the_site_in_the_tooltip(qtbot, tmp_path, pool):
 
     assert window.unifi_chip.text().endswith("UniFi 10.6.100")
     assert "Default" in window.unifi_chip.toolTip()
+
+
+def site_detail_result():
+    from dataclasses import replace
+
+    from unifi2netbox.details import (
+        InventoryDhcpRange,
+        InventoryReservation,
+        InventoryWlan,
+    )
+    from unifi2netbox.inventory import InventoryNetwork, InventorySite
+    from unifi2netbox.site_details import build_site_detail_plan
+
+    plan = build_site_detail_plan(
+        wlans=(
+            InventoryWlan("w1", "Home", security="wpapsk", wpa_enc="ccmp"),
+            InventoryWlan("w2", "Old", enabled=False, security="open"),
+        ),
+        dhcp_ranges=(InventoryDhcpRange(1, "LAN", "10.0.0.100", "10.0.0.200"),),
+        reservations=(InventoryReservation("AA:BB:CC:00:00:01", "10.0.0.5", "NAS"),),
+        networks=(InventoryNetwork("n1", "LAN", 1, subnet="10.0.0.0/24"),),
+        sites=(InventorySite("3", "Home"),),
+        vlan_groups=(),
+        vlans=(),
+        wireless_lans=(),
+        ip_ranges=(),
+        ip_addresses=(),
+        site_name="Home",
+    )
+    return replace(preview_result(), site_detail_plan=plan)
+
+
+def test_wireless_and_address_filters_list_site_details(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, site_detail_result())
+
+    assert window.segments["wireless"].text() == "Wireless 2"
+    assert window.segments["addresses"].text() == "Addresses 2"
+    assert window.segments["modules"].text() == "Modules 0"
+    window.set_filter("wireless")
+
+    assert window.table_stack.currentWidget() is window.object_table
+    model = window.object_model
+    assert [model.data(model.index(r, 2)) for r in range(2)] == ["Home", "Old"]
+    assert model.data(model.index(0, 1)) == "Wireless LAN"
+    assert model.data(model.index(0, 4)) == "Ready"
+    assert model.data(model.index(1, 4)) == "Not selected"
+    box = window.detail.findChild(QCheckBox, "objectSelect")
+    assert box is not None and box.isChecked()
+
+    window.set_filter("addresses")
+    assert [model.data(model.index(r, 1)) for r in range(2)] == [
+        "IP range",
+        "Reserved IP",
+    ]
+    window.set_filter("modules")
+    assert model.rowCount() == 0
+
+
+def test_site_detail_writes_count_and_reach_the_job(qtbot, tmp_path, pool, monkeypatch):
+    window = review_window(qtbot, tmp_path, pool, site_detail_result())
+    base = len(window.review.plan.operations)
+    assert window.execute_plan_button.text() == f"Apply {base + 3} changes..."
+    assert "3 WLANs, ranges and reservations" in window.selection_label.text()
+
+    started = fake_runner(monkeypatch, window)
+    window.execute_plan_button.click()
+    assert started["site_detail_plan"].operation_count == 3
+
+    window.set_filter("addresses")
+    window.select_visible(False)
+    assert window.review.site_detail_operation_count() == 1
+    window.set_filter("wireless")
+    window.detail.findChild(QCheckBox, "objectSelect").setChecked(False)
+    assert window.review.site_detail_operation_count() == 0
+
+
+def test_confirm_dialog_lists_site_details(qtbot, tmp_path, pool):
+    window = review_window(qtbot, tmp_path, pool, site_detail_result())
+
+    confirm = ConfirmDialog(
+        window.review,
+        window.review.plan,
+        dry_run=False,
+        site_detail_plan=window.review.site_detail_plan,
+    )
+    qtbot.addWidget(confirm)
+
+    text = confirm.findChild(QLabel, "confirmSummary").text()
+    assert "1 wireless LAN" in text and "1 IP range" in text
+    assert "1 reserved IP" in text
+
+
+def test_object_details_show_names_instead_of_netbox_ids():
+    from unifi2netbox.review import readable_changes
+
+    changes = (
+        ("vlan", "", "21"),
+        ("scope_type", "", "dcim.site"),
+        ("scope_id", "", "3"),
+        ("component_id", "", "10"),
+        ("manufacturer", "", "5"),
+        ("auth_type", "open", "wpa-personal"),
+    )
+
+    assert readable_changes(
+        changes, site="Home", vid=30, interface="SFP+ 1", vendor="UBNT"
+    ) == (
+        ("VLAN", "", "VLAN 30"),
+        ("Site", "", "Home"),
+        ("Interface", "", "SFP+ 1"),
+        ("Manufacturer", "", "UBNT (NetBox #5)"),
+        ("Authentication", "open", "wpa-personal"),
+    )

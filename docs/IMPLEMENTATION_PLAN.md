@@ -556,17 +556,22 @@ Slices:
   tests, a live dry run of 23 creates, 19 with manufacturer Ubiquiti, 4
   H3C modules without a NetBox manufacturer, and an approved live write
   test, 5/5, for one module.)
-- [ ] 6. Wireless LANs (SSID, VLAN, status, authentication type/cipher, site
+- [x] 6. Wireless LANs (SSID, VLAN, status, authentication type/cipher, site
   scope), DHCP IP ranges and reserved IP addresses.
   (1.0.6, 2026-11-15: planned and executed in the pipeline (`site_details`,
   `site_details_execute`) with offline tests and a live dry run of 6
   wireless LANs, 15 IP ranges and 139 reservations, and an approved live
   write test, 6/6, for one object of each kind; review rows follow in
   slice 7.)
-- [ ] 7. GUI filters, write order (custom field, networks, ranges and
+- [x] 7. GUI filters, write order (custom field, networks, ranges and
   wireless, interfaces, cables, devices, IP addresses, inventory items),
   documentation, live read-only check, dry run and an approved write test on
   dedicated test objects.
+  (1.0.7, 2026-11-15: Addresses, Wireless and Modules filters with detail
+  panel, select all/none and counts; offscreen rendering with live read data
+  and a live dry run over all kinds. The approved write tests of slices 2 to
+  6 wrote one object of each kind; the user decided to keep them in NetBox
+  as real data instead of removing test objects.)
 
 - [ ] Obtain explicit merge approval; prepare version 1.1.0.
 - [ ] Complete the approved main merge and tag its resulting commit v1.1.0;

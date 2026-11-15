@@ -65,6 +65,12 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	and ranges are written after networks, reservations after management
 	IPs, with UniFi and NetBox re-reads and read-back. Inventory items and
 	the new objects share one object writer.
+- M11 slice 7: the review window has **Addresses** (management IPs, IP
+	ranges, reserved IPs), **Wireless** and **Modules** (SFP) filters with a
+	checkbox per entry, a detail panel that shows planned fields with names
+	instead of NetBox IDs, select all/none for the visible list, and counts
+	in the apply bar and the confirmation. Wireless LANs, ranges and
+	reservations are written on a full apply only.
 
 ## v1.0.0
 

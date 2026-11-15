@@ -61,6 +61,7 @@ from unifi2netbox.review import (
     IN_SYNC,
     NETBOX_ONLY,
     UPDATE,
+    ObjectRow,
     ReviewRow,
     ReviewState,
 )
@@ -513,6 +514,66 @@ class DetailPanel(QScrollArea):
             )
         )
         self.layout_.addStretch()
+
+    def show_object(self, state: ReviewState, key: str) -> None:
+        """Detail of an address, wireless LAN or SFP module row."""
+        self.state = state
+        row = state.object_row(key)
+        if row is None:
+            self.show_placeholder("Select an entry to see details.")
+            return
+        self.key = key
+        self._clear()
+        title = label(row.name, "heading")
+        title.setObjectName("detailTitle")
+        self.layout_.addWidget(title)
+        self.layout_.addWidget(label(row.kind, "secondary"))
+        if row.outcome is not None:
+            text = f"{row.outcome.status}: {row.outcome.message}"
+            if row.outcome.verification:
+                text += f" (read-back {row.outcome.verification})"
+            tone = {"success": "success", "failed": "danger"}.get(
+                row.outcome.status, "warning"
+            )
+            self.layout_.addWidget(banner(text, tone))
+        if row.notes:
+            tone = "danger" if row.action == "conflict" else "neutral"
+            self.layout_.addWidget(banner("\n".join(row.notes), tone))
+        self.layout_.addWidget(label("NetBox", "subheading"))
+        if row.selectable:
+            verb = "Create" if row.action == "create" else "Update"
+            box = QCheckBox(f"{verb} {row.kind} {row.name}")
+            box.setObjectName("objectSelect")
+            box.setChecked(row.selected)
+            box.toggled.connect(self._toggle_object)
+            self.layout_.addWidget(box)
+        else:
+            self.layout_.addWidget(
+                label(OBJECT_ACTION_TEXT.get(row.action, ""), "secondary")
+            )
+        if row.changes:
+            grid = QGridLayout()
+            grid.setHorizontalSpacing(12)
+            for index, (field, before, after) in enumerate(row.changes):
+                grid.addWidget(label(field, "caption"), index, 0)
+                text = f"{before} \u2192 {after}" if before else after
+                value = label(text, "secondary")
+                value.setWordWrap(True)
+                grid.addWidget(value, index, 1)
+            grid.setColumnStretch(1, 1)
+            self.layout_.addLayout(grid)
+        self.layout_.addWidget(
+            label(
+                "Only checked entries are written. Existing NetBox objects are "
+                "only completed; nothing is deleted.",
+                "caption",
+            )
+        )
+        self.layout_.addStretch()
+
+    def _toggle_object(self, checked: bool) -> None:
+        self.state.set_object_selected(self.key, checked)
+        self.changed.emit()
 
     def _toggle_cable(self, checked: bool) -> None:
         self.state.set_cable_selected(self.key, checked)
@@ -1017,9 +1078,18 @@ class ConfirmDialog(QDialog):
         custom_field_plan=None,
         mgmt_ip_plan=None,
         sfp_plan=None,
+        site_detail_plan=None,
     ) -> None:
         super().__init__(parent)
         field_ops = custom_field_plan.operation_count if custom_field_plan else 0
+        detail_counts = (
+            {
+                kind: len(site_detail_plan.selected_rows((kind,)))
+                for kind in ("wlan", "range", "reservation")
+            }
+            if site_detail_plan is not None
+            else {}
+        )
         ip_ops = mgmt_ip_plan.operation_count if mgmt_ip_plan else 0
         sfp_ops = sfp_plan.operation_count if sfp_plan else 0
         creates = sum(
@@ -1040,6 +1110,7 @@ class ConfirmDialog(QDialog):
             + field_ops
             + ip_ops
             + sfp_ops
+            + sum(detail_counts.values())
         )
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
@@ -1071,6 +1142,13 @@ class ConfirmDialog(QDialog):
             parts.append(f"{cable_ops} cable{'s' if cable_ops != 1 else ''}")
         if ip_ops:
             parts.append(f"{ip_ops} management IP{'s' if ip_ops != 1 else ''}")
+        for kind, noun in (
+            ("wlan", "wireless LAN"),
+            ("range", "IP range"),
+            ("reservation", "reserved IP"),
+        ):
+            if count := detail_counts.get(kind, 0):
+                parts.append(f"{count} {noun}{'s' if count != 1 else ''}")
         if disk_ops:
             parts.append(f"{disk_ops} drive item{'s' if disk_ops != 1 else ''}")
         if sfp_ops:
@@ -1602,6 +1680,159 @@ class InterfaceTableModel(QAbstractTableModel):
             return False
         checked = Qt.CheckState(value) == Qt.CheckState.Checked
         self.state.set_interface_selected(row.key, "all", checked)
+        self.refresh_rows()
+        self.selection_changed.emit()
+        return True
+
+
+OBJECT_HEADERS = ("", "Kind", "Name", "Change", "Status")
+OBJECT_CHANGE_LABELS = {
+    "create": ("New", "accent"),
+    "update": ("Changed", "warning"),
+    "conflict": ("Conflict", "danger"),
+    "in_sync": ("In sync", "success"),
+    "note": ("Note", "neutral"),
+    "reference": ("Reference", "neutral"),
+}
+OBJECT_ACTION_TEXT = {
+    "in_sync": "NetBox already has these values.",
+    "conflict": "Not written; see the notes above.",
+    "note": "Not written; see the notes above.",
+    "reference": "Shown for reference; nothing is written.",
+}
+
+
+def object_status(row: ObjectRow) -> tuple[str, str]:
+    outcome = row.outcome
+    if outcome is not None:
+        if outcome.status == "failed" or outcome.verification == "mismatch":
+            return "Failed", "danger"
+        if outcome.status == "success":
+            if outcome.verification == "verified":
+                return "Verified", "success"
+            return "Written", "success"
+        return "Skipped", "warning"
+    if row.action == "conflict":
+        return (row.notes[-1] if row.notes else "Conflict"), "danger"
+    if row.selectable and not row.selected:
+        return "Not selected", "neutral"
+    if row.selected:
+        return "Ready", "success"
+    return "", "neutral"
+
+
+class ObjectTableModel(QAbstractTableModel):
+    """Addresses, Wireless or Modules list, chosen with ``set_category``."""
+
+    selection_changed = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.state = ReviewState()
+        self.category = ""
+        self.search = ""
+        self.items: tuple[ObjectRow, ...] = ()
+
+    def set_state(self, state: ReviewState) -> None:
+        self.state = state
+        self.reload()
+
+    def set_category(self, category: str) -> None:
+        self.category = category
+        self.reload()
+
+    def set_filter(self, search: str) -> None:
+        self.search = search
+        self.reload()
+
+    def reload(self) -> None:
+        self.beginResetModel()
+        self.items = self.state.object_rows(self.category, self.search)
+        self.endResetModel()
+
+    def refresh_rows(self) -> None:
+        keys = [row.key for row in self.items]
+        fresh = {row.key: row for row in self.state.object_rows(self.category)}
+        self.items = tuple(fresh[key] for key in keys if key in fresh)
+        if self.items:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self.items) - 1, len(OBJECT_HEADERS) - 1),
+            )
+
+    def key_at(self, row: int) -> str:
+        return self.items[row].key if 0 <= row < len(self.items) else ""
+
+    def row_of(self, key: str) -> int:
+        return next((i for i, row in enumerate(self.items) if row.key == key), -1)
+
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(self.items)
+
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(OBJECT_HEADERS)
+
+    def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
+            return OBJECT_HEADERS[section]
+        return None
+
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        row = self.items[index.row()] if 0 <= index.row() < len(self.items) else None
+        if index.column() == 0 and row is not None and row.selectable:
+            base |= Qt.ItemFlag.ItemIsUserCheckable
+        return base
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
+        if not index.isValid():
+            return None
+        row = self.items[index.row()]
+        column = index.column()
+        if role == KEY_ROLE:
+            return row.key
+        if column == 0 and role == Qt.ItemDataRole.CheckStateRole:
+            if not row.selectable:
+                return None
+            return Qt.CheckState.Checked if row.selected else Qt.CheckState.Unchecked
+        if role == Qt.ItemDataRole.DisplayRole:
+            if column == 1:
+                return row.kind
+            if column == 2:
+                return row.name
+            if column == 3:
+                return OBJECT_CHANGE_LABELS.get(row.action, ("", ""))[0]
+            if column == 4:
+                return object_status(row)[0]
+        if role == TONE_ROLE:
+            if column == 3:
+                return OBJECT_CHANGE_LABELS.get(row.action, ("", "neutral"))[1]
+            if column == 4:
+                return object_status(row)[1]
+        if role == Qt.ItemDataRole.ToolTipRole and row.notes:
+            return "\n".join(row.notes)
+        return None
+
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value,
+        role=Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        if index.column() != 0 or role != Qt.ItemDataRole.CheckStateRole:
+            return False
+        row = self.items[index.row()]
+        if not row.selectable:
+            return False
+        checked = Qt.CheckState(value) == Qt.CheckState.Checked
+        self.state.set_object_selected(row.key, checked)
         self.refresh_rows()
         self.selection_changed.emit()
         return True

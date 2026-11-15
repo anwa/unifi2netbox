@@ -95,6 +95,7 @@ from unifi2netbox.gui_review import (
     HistoryDialog,
     InterfaceTableModel,
     NetworkTableModel,
+    ObjectTableModel,
     ReviewTableModel,
     banner,
     device_summary,
@@ -109,6 +110,7 @@ from unifi2netbox.pipeline import (
 )
 from unifi2netbox.preview import FIRMWARE, DifferencePreview
 from unifi2netbox.review import (
+    ADDRESSES,
     ALL,
     ATTENTION,
     CABLES,
@@ -116,9 +118,12 @@ from unifi2netbox.review import (
     CREATE,
     IN_SYNC,
     INTERFACES,
+    MODULES,
     NETBOX_ONLY,
     NETWORKS,
+    OBJECT_FILTERS,
     UPDATE,
+    WIRELESS,
     ReviewState,
     humanize_timestamp,
     single_operation_plan,
@@ -226,8 +231,10 @@ class WriteExecutionJob(QRunnable):
         custom_field_plan=None,
         mgmt_ip_plan=None,
         sfp_plan=None,
+        site_detail_plan=None,
     ) -> None:
         super().__init__()
+        self.site_detail_plan = site_detail_plan
         self.custom_field_plan = custom_field_plan
         self.mgmt_ip_plan = mgmt_ip_plan
         self.sfp_plan = sfp_plan
@@ -276,6 +283,7 @@ class WriteExecutionJob(QRunnable):
                 custom_field_plan=self.custom_field_plan,
                 mgmt_ip_plan=self.mgmt_ip_plan,
                 sfp_plan=self.sfp_plan,
+                site_detail_plan=self.site_detail_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -284,6 +292,16 @@ class WriteExecutionJob(QRunnable):
                 detail_lines=(f"Write execution error: {error}",),
             )
         self.signals.finished.emit(result)
+
+
+OBJECT_KEY_PREFIXES = (
+    "mgmt-ip:",
+    "sfp:",
+    "sfp-item:",
+    "wlan:",
+    "range:",
+    "reservation:",
+)
 
 
 class WriteExecutionRunner(QObject):
@@ -322,6 +340,7 @@ class WriteExecutionRunner(QObject):
         custom_field_plan=None,
         mgmt_ip_plan=None,
         sfp_plan=None,
+        site_detail_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -347,6 +366,7 @@ class WriteExecutionRunner(QObject):
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
             sfp_plan=sfp_plan,
+            site_detail_plan=site_detail_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1503,6 +1523,9 @@ class MainWindow(QMainWindow):
             NETWORKS,
             INTERFACES,
             CABLES,
+            ADDRESSES,
+            WIRELESS,
+            MODULES,
         ):
             button = QPushButton(CATEGORY_LABELS[category])
             button.setObjectName(f"filter_{category}")
@@ -1655,8 +1678,41 @@ class MainWindow(QMainWindow):
                 self.cable_model.key_at(current.row())
             )
         )
+        self.object_model = ObjectTableModel(self)
+        self.object_model.selection_changed.connect(self.on_selection_changed)
+        self.object_table = QTableView()
+        self.object_table.setObjectName("objectTable")
+        self.object_table.setModel(self.object_model)
+        self.object_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.object_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.object_table.setShowGrid(False)
+        self.object_table.setWordWrap(False)
+        self.object_table.verticalHeader().hide()
+        self.object_table.verticalHeader().setDefaultSectionSize(38)
+        self.object_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        object_badge = BadgeDelegate(self.object_table)
+        self.object_table.setItemDelegateForColumn(3, object_badge)
+        self.object_table.setItemDelegateForColumn(4, object_badge)
+        object_header = self.object_table.horizontalHeader()
+        object_header.setHighlightSections(False)
+        object_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        object_header.resizeSection(0, 36)
+        object_header.resizeSection(1, 120)
+        object_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        object_header.resizeSection(3, 100)
+        object_header.resizeSection(4, 130)
+        self.object_table.selectionModel().currentRowChanged.connect(
+            lambda current, _previous: self.show_detail(
+                self.object_model.key_at(current.row())
+            )
+        )
         self.table_stack = QStackedWidget()
         self.table_stack.addWidget(self.table)
+        self.table_stack.addWidget(self.object_table)
         self.table_stack.addWidget(self.network_table)
         self.table_stack.addWidget(self.interface_table)
         self.table_stack.addWidget(self.cable_table)
@@ -1786,11 +1842,13 @@ class MainWindow(QMainWindow):
             or self.review.network_rows()
             or self.review.interface_rows()
             or self.review.cable_rows()
+            or any(self.review.object_rows(name) for name in OBJECT_FILTERS)
         )
         self.pages.setCurrentIndex(1 if has_rows else 0)
         self.network_model.set_state(self.review)
         self.interface_model.set_state(self.review)
         self.cable_model.set_state(self.review)
+        self.object_model.set_state(self.review)
         self.update_counts_only()
         self.apply_filter(keep_key)
 
@@ -1806,6 +1864,9 @@ class MainWindow(QMainWindow):
         )
 
     def apply_filter(self, keep_key: str = "") -> None:
+        if self.current_filter() in OBJECT_FILTERS:
+            self.apply_object_filter(keep_key)
+            return
         views = {
             NETWORKS: (
                 self.network_table,
@@ -1862,8 +1923,34 @@ class MainWindow(QMainWindow):
         else:
             self.detail.show_placeholder()
 
+    def apply_object_filter(self, keep_key: str = "") -> None:
+        category = self.current_filter()
+        self.table_stack.setCurrentWidget(self.object_table)
+        self.object_model.category = category
+        self.object_model.set_filter(self.search.text())
+        key = keep_key or self.detail.key
+        row = self.object_model.row_of(key) if key else -1
+        if row < 0 and self.object_model.rowCount() > 0:
+            row = 0
+        if row >= 0:
+            self.object_table.selectionModel().setCurrentIndex(
+                self.object_model.index(row, 2),
+                QItemSelectionModel.SelectionFlag.ClearAndSelect
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
+            self.show_detail(self.object_model.key_at(row))
+        else:
+            empty = {
+                ADDRESSES: "No management IPs, DHCP ranges or reservations.",
+                WIRELESS: "UniFi reports no wireless LANs.",
+                MODULES: "No SFP modules in ports of matched devices.",
+            }[category]
+            self.detail.show_placeholder(self.review.object_note(category) or empty)
+
     def show_detail(self, key: str) -> None:
-        if key.startswith("network"):
+        if key.startswith(OBJECT_KEY_PREFIXES):
+            self.detail.show_object(self.review, key)
+        elif key.startswith("network"):
             self.detail.show_network(self.review, key)
         elif key.startswith("interface:"):
             self.detail.show_interface(self.review, key)
@@ -1884,6 +1971,7 @@ class MainWindow(QMainWindow):
         self.network_model.refresh_rows()
         self.interface_model.refresh_rows()
         self.cable_model.refresh_rows()
+        self.object_model.refresh_rows()
         self.update_counts_only()
 
     def update_counts_only(self) -> None:
@@ -1912,6 +2000,7 @@ class MainWindow(QMainWindow):
         field_ops = self.review.custom_field_operation_count()
         ip_ops = self.review.mgmt_ip_operation_count()
         sfp_ops = self.review.sfp_operation_count()
+        detail_ops = self.review.site_detail_operation_count()
         operations = (
             (len(plan.operations) if plan is not None else 0)
             + network_ops
@@ -1921,6 +2010,7 @@ class MainWindow(QMainWindow):
             + field_ops
             + ip_ops
             + sfp_ops
+            + detail_ops
         )
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
@@ -1939,6 +2029,8 @@ class MainWindow(QMainWindow):
             parts.append(f"{ip_ops} management IPs")
         if sfp_ops:
             parts.append(f"{sfp_ops} SFP modules")
+        if detail_ops:
+            parts.append(f"{detail_ops} WLANs, ranges and reservations")
         self.selection_label.setText(", ".join(parts))
         for button in (self.select_all_button, self.select_none_button):
             button.setVisible(
@@ -1947,6 +2039,7 @@ class MainWindow(QMainWindow):
                     or self.review.network_rows()
                     or self.review.interface_rows()
                     or self.review.cable_rows()
+                    or any(self.review.object_rows(n) for n in OBJECT_FILTERS)
                 )
             )
         noun = "change" if operations == 1 else "changes"
@@ -1959,6 +2052,12 @@ class MainWindow(QMainWindow):
         self.apply_bar.setVisible(self.pages.currentIndex() == 1)
 
     def select_visible(self, selected: bool) -> None:
+        if self.current_filter() in OBJECT_FILTERS:
+            for row in self.object_model.items:
+                self.review.set_object_selected(row.key, selected)
+            self.object_model.refresh_rows()
+            self.on_selection_changed()
+            return
         if self.current_filter() == NETWORKS:
             for row in self.network_model.items:
                 self.review.set_network_selected(row.key, "all", selected)
@@ -2115,6 +2214,8 @@ class MainWindow(QMainWindow):
         network_ops += mgmt_ip_plan.operation_count if mgmt_ip_plan else 0
         sfp_plan = self.review.sfp_plan if device_key is None else None
         network_ops += sfp_plan.operation_count if sfp_plan else 0
+        site_detail_plan = self.review.site_detail_plan if device_key is None else None
+        network_ops += site_detail_plan.operation_count if site_detail_plan else 0
         if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
@@ -2136,6 +2237,7 @@ class MainWindow(QMainWindow):
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
             sfp_plan=sfp_plan,
+            site_detail_plan=site_detail_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -2166,6 +2268,7 @@ class MainWindow(QMainWindow):
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
             sfp_plan=sfp_plan,
+            site_detail_plan=site_detail_plan,
         )
         self.update_check_action()
 
@@ -2175,6 +2278,7 @@ class MainWindow(QMainWindow):
         self.network_model.refresh_rows()
         self.interface_model.refresh_rows()
         self.cable_model.refresh_rows()
+        self.object_model.refresh_rows()
         failed = sum(o.status == "failed" for o in result.outcomes)
         skipped = sum(o.status == "skipped" for o in result.outcomes)
         if result.status == "Error":

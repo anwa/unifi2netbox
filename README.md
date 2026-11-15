@@ -110,9 +110,20 @@ history.
   created when missing; the prefix length comes from the UniFi network. An
   existing other primary IPv4, an IP assigned elsewhere and public (WAN)
   addresses are never written.
-- UniFi DHCP ranges, wireless LANs (never their passphrases) and fixed-IP
-  reservations are read and counted in the preview summary. Writing them to
-  NetBox is being added in milestone M11.
+- The **Wireless** filter lists the UniFi wireless LANs as NetBox wireless
+  LANs for the configured site: SSID, status, authentication type and cipher
+  and the VLAN of the site VLAN group (passphrases are never read). Disabled
+  WLANs are shown but not preselected.
+- The **Addresses** filter lists management IPs, DHCP pools as NetBox IP
+  ranges (`DHCP <network>`) and fixed client IPs as reserved, unassigned IP
+  addresses (DNS name only from an enabled local DNS record, description
+  from the client name). Existing objects are only completed; a different
+  VLAN, site, DNS name or description, overlapping ranges and duplicates
+  are conflicts and never written.
+- The **Modules** filter lists the SFP modules of matched devices.
+- In these lists each entry has a checkbox; the detail panel shows the
+  planned fields with names instead of NetBox IDs. **Select all** and
+  **Select none** act on the visible list.
 - NetBox-only devices (delete proposals) are limited to the active UniFi site
   by default; a setting includes all NetBox devices. Nothing is deleted.
 

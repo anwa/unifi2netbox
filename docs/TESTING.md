@@ -850,3 +850,16 @@ address `10.10.0.2` were created and read back as verified; a refreshed
 preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
+
+On 2026-11-15 the assistant checked M11 slice 7 (application 1.0.7 working
+tree on top of commit d2f40ad) with live read data and nothing written. The
+review window rendered offscreen (`QT_QPA_FONTDIR=C:/Windows/Fonts`) with the
+new filters Addresses 173 (17 management IPs, 15 ranges, 139 reservations,
+plus in-sync and note rows), Wireless 6 and Modules 23; the detail panel
+showed the planned fields with VLAN and interface names. A dry run over every
+kind together (no write history) skipped 95 interfaces, 17 management IPs,
+14 ranges, 138 reservations, 22 SFP modules and 5 wireless LANs with
+"Dry-run mode", so all passed the UniFi and NetBox re-read checks; device
+writes stayed pending because six device creates still need a device type
+and role (preflight blocker, as before). No network or cable change was
+pending, and the Custom Field `firmware` already exists.
