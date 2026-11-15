@@ -552,6 +552,10 @@ Slices:
   live write test, 4/4, for one interface; PoE writes are offline-tested.)
 - [ ] 5. SFP modules as inventory items linked to their interface (create and
   update only), sharing the inventory-item logic of the drive items.
+  (1.0.5, 2026-11-15: items are named `Transceiver <interface>`; offline
+  tests and a live dry run of 23 creates, 19 with manufacturer Ubiquiti, 4
+  H3C modules without a NetBox manufacturer; the approved live write test is
+  pending.)
 - [ ] 6. Wireless LANs (SSID, VLAN, status, authentication type/cipher, site
   scope), DHCP IP ranges and reserved IP addresses.
 - [ ] 7. GUI filters, write order (custom field, networks, ranges and

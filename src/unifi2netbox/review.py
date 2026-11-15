@@ -44,6 +44,7 @@ from unifi2netbox.preview import (
     select_device,
     select_field,
 )
+from unifi2netbox.sfp import SfpPlan, SfpPlanRow, select_sfp
 from unifi2netbox.write_plan import (
     OperationType,
     WritePlan,
@@ -153,6 +154,7 @@ class ReviewState:
             result.custom_field_plan if result else None
         )
         self.mgmt_ip_plan: MgmtIpPlan | None = result.mgmt_ip_plan if result else None
+        self.sfp_plan: SfpPlan | None = result.sfp_plan if result else None
         self.protect_kinds: dict[str, str] = {
             device.source_id: device.kind
             for device in (result.protect_devices if result else ())
@@ -613,6 +615,21 @@ class ReviewState:
                         self.diff, device.device_key, FIRMWARE, False
                     )
         self._recompute()
+
+    # -- SFP modules --------------------------------------------------------
+
+    def sfp_rows_for(self, key: str) -> tuple[SfpPlanRow, ...]:
+        _, netbox_id = _device_ids(key)
+        if not netbox_id or self.sfp_plan is None or key.startswith("create:"):
+            return ()
+        return self.sfp_plan.rows_for(netbox_id)
+
+    def sfp_operation_count(self) -> int:
+        return self.sfp_plan.operation_count if self.sfp_plan else 0
+
+    def set_sfp_selected(self, key: str, selected: bool) -> None:
+        if self.sfp_plan is not None:
+            self.sfp_plan = select_sfp(self.sfp_plan, key, selected)
 
     # -- management IP ------------------------------------------------------
 

@@ -811,3 +811,12 @@ back as verified; a refreshed preview showed the interface in sync and the
 other 95 interfaces still pending, and a second apply had nothing to write.
 The run is in the write history; the values stay in NetBox as approved. PoE
 writes are covered by offline tests because no live interface needed one.
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 5 (application
+1.0.5 working tree on top of commit 9dd833a) with snapshots in a scratch
+folder and no write history: all 23 SFP modules sat in ports paired with a
+NetBox interface and were planned as creates of `Transceiver <interface>`
+items; 19 got the NetBox manufacturer Ubiquiti (vendors `UBNT` and
+`Ubiquiti Inc.`), 4 `H3C-OEM` modules none, because NetBox has no matching
+manufacturer. The dry run passed the UniFi and NetBox re-read checks for all
+23 and wrote nothing.

@@ -44,6 +44,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	Empty NetBox values are preselected; other existing values (for example
 	PoE from the device type or a hand-written description) are shown but
 	replaced only when checked. A PoE type always goes with the PoE mode.
+- M11 slice 5: SFP modules of matched devices become NetBox inventory items
+	`Transceiver <interface>`, linked to the paired interface, with part ID,
+	serial, description (compliance and revision) and the NetBox manufacturer
+	when exactly one matches the vendor (`UBNT` and `Ubiquiti Inc.` match
+	`Ubiquiti`; none is created). Create and update only; items of removed
+	modules are kept. The detail panel lists them with checkboxes; they are
+	written last with a UniFi module re-read. Drive items and SFP items now
+	share one inventory-item writer.
 
 ## v1.0.0
 

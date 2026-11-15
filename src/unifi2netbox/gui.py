@@ -225,10 +225,12 @@ class WriteExecutionJob(QRunnable):
         disk_plan=None,
         custom_field_plan=None,
         mgmt_ip_plan=None,
+        sfp_plan=None,
     ) -> None:
         super().__init__()
         self.custom_field_plan = custom_field_plan
         self.mgmt_ip_plan = mgmt_ip_plan
+        self.sfp_plan = sfp_plan
         self.access_config = access_config
         self.drive_config = drive_config
         self.disk_plan = disk_plan
@@ -273,6 +275,7 @@ class WriteExecutionJob(QRunnable):
                 disk_plan=self.disk_plan,
                 custom_field_plan=self.custom_field_plan,
                 mgmt_ip_plan=self.mgmt_ip_plan,
+                sfp_plan=self.sfp_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -318,6 +321,7 @@ class WriteExecutionRunner(QObject):
         disk_plan=None,
         custom_field_plan=None,
         mgmt_ip_plan=None,
+        sfp_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -342,6 +346,7 @@ class WriteExecutionRunner(QObject):
             disk_plan=disk_plan,
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
+            sfp_plan=sfp_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1906,6 +1911,7 @@ class MainWindow(QMainWindow):
         disk_ops = self.review.disk_operation_count()
         field_ops = self.review.custom_field_operation_count()
         ip_ops = self.review.mgmt_ip_operation_count()
+        sfp_ops = self.review.sfp_operation_count()
         operations = (
             (len(plan.operations) if plan is not None else 0)
             + network_ops
@@ -1914,6 +1920,7 @@ class MainWindow(QMainWindow):
             + disk_ops
             + field_ops
             + ip_ops
+            + sfp_ops
         )
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
@@ -1930,6 +1937,8 @@ class MainWindow(QMainWindow):
             parts.append(f"{cable_ops} cables")
         if ip_ops:
             parts.append(f"{ip_ops} management IPs")
+        if sfp_ops:
+            parts.append(f"{sfp_ops} SFP modules")
         self.selection_label.setText(", ".join(parts))
         for button in (self.select_all_button, self.select_none_button):
             button.setVisible(
@@ -2104,6 +2113,8 @@ class MainWindow(QMainWindow):
         network_ops += custom_field_plan.operation_count if custom_field_plan else 0
         mgmt_ip_plan = self.review.mgmt_ip_plan_for(device_key)
         network_ops += mgmt_ip_plan.operation_count if mgmt_ip_plan else 0
+        sfp_plan = self.review.sfp_plan if device_key is None else None
+        network_ops += sfp_plan.operation_count if sfp_plan else 0
         if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
@@ -2124,6 +2135,7 @@ class MainWindow(QMainWindow):
             disk_plan=disk_plan,
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
+            sfp_plan=sfp_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -2153,6 +2165,7 @@ class MainWindow(QMainWindow):
             disk_plan=disk_plan,
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
+            sfp_plan=sfp_plan,
         )
         self.update_check_action()
 

@@ -96,7 +96,9 @@ history.
   live link state and PoE, plus notes for speed or PoE differences and
   unpaired ports or interfaces. Link state and speed are never written.
   Plugged SFP modules (part number, tooltip with vendor and serial) and
-  configured fixed speeds are shown as well.
+  configured fixed speeds are shown as well. SFP modules of matched devices
+  can be written as NetBox inventory items `Transceiver <interface>` linked
+  to their interface (create and update only, never deleted).
 - Firmware is a device field: the version UniFi reports is written into the
   NetBox Custom Field `firmware`. If NetBox has no such field, the detail panel
   offers "Create the NetBox Custom Field 'firmware'" (preselected, created once

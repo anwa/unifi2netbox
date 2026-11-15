@@ -255,6 +255,9 @@ class InventoryItem:
     part_id: str = ""
     serial: str = ""
     description: str = ""
+    manufacturer: str = ""
+    component_type: str = ""
+    component_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -422,6 +425,9 @@ def _normalize_netbox_inventory_item(row: dict[str, object]) -> InventoryItem | 
         part_id=_text(row.get("part_id")),
         serial=_text(row.get("serial")),
         description=_text(row.get("description")),
+        manufacturer=_related_id(row.get("manufacturer")),
+        component_type=_text(row.get("component_type")),
+        component_id=_identifier(row.get("component_id")),
     )
 
 

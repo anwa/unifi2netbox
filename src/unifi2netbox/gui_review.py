@@ -566,6 +566,7 @@ class DetailPanel(QScrollArea):
         self._add_details(key)
 
         self._add_ports(item)
+        self._add_sfp_items(key)
         self._add_disks(key)
 
         if item.row.suggested_device_types and item.category == CREATE:
@@ -716,6 +717,58 @@ class DetailPanel(QScrollArea):
                 "caption",
             )
         )
+
+    def _add_sfp_items(self, key: str) -> None:
+        """Selectable inventory items for the SFP modules of a matched device."""
+        rows = self.state.sfp_rows_for(key)
+        plan = self.state.sfp_plan
+        if not rows:
+            if plan is not None and plan.blocker and self.state.sfps_for(key):
+                self.layout_.addWidget(label("SFP modules", "subheading"))
+                self.layout_.addWidget(label(plan.blocker, "caption"))
+            return
+        self.layout_.addWidget(label("SFP modules (inventory items)", "subheading"))
+        for row in rows:
+            outcome = self.state.outcomes.get(row.key)
+            part = row.sfp.part if row.sfp is not None else ""
+            if row.selectable:
+                verb = "Create" if row.action == "create" else "Update"
+                fields = ", ".join(field for field, _, _ in row.changes())
+                box = QCheckBox(
+                    f"{verb} {row.name} {part} ({fields})".replace("  ", " ")
+                )
+                box.setObjectName(f"sfp_{row.port_idx}")
+                box.setChecked(row.selected)
+                box.toggled.connect(
+                    lambda checked, k=row.key: self._toggle_sfp(k, checked)
+                )
+                self.layout_.addWidget(box)
+            else:
+                text = {
+                    "in_sync": "in sync",
+                    "conflict": "conflict",
+                    "reference": "kept",
+                    "note": "not written",
+                }.get(row.action, row.action)
+                self.layout_.addWidget(label(f"{row.name}: {text}", "secondary"))
+            if row.notes:
+                self.layout_.addWidget(label("\n".join(row.notes), "caption"))
+            if outcome is not None:
+                self.layout_.addWidget(
+                    label(f"{row.name}: {outcome.message}", "caption")
+                )
+        self.layout_.addWidget(
+            label(
+                "Modules are written as inventory items linked to their interface: "
+                "part ID, serial, description and a matching manufacturer. Items "
+                "are never deleted.",
+                "caption",
+            )
+        )
+
+    def _toggle_sfp(self, key: str, checked: bool) -> None:
+        self.state.set_sfp_selected(key, checked)
+        self.changed.emit()
 
     def _toggle_disk(self, key: str, checked: bool) -> None:
         self.state.set_disk_selected(key, checked)
@@ -963,10 +1016,12 @@ class ConfirmDialog(QDialog):
         disk_plan=None,
         custom_field_plan=None,
         mgmt_ip_plan=None,
+        sfp_plan=None,
     ) -> None:
         super().__init__(parent)
         field_ops = custom_field_plan.operation_count if custom_field_plan else 0
         ip_ops = mgmt_ip_plan.operation_count if mgmt_ip_plan else 0
+        sfp_ops = sfp_plan.operation_count if sfp_plan else 0
         creates = sum(
             op.operation_type == OperationType.CREATE_DEVICE for op in plan.operations
         )
@@ -984,6 +1039,7 @@ class ConfirmDialog(QDialog):
             + disk_ops
             + field_ops
             + ip_ops
+            + sfp_ops
         )
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
@@ -1017,6 +1073,8 @@ class ConfirmDialog(QDialog):
             parts.append(f"{ip_ops} management IP{'s' if ip_ops != 1 else ''}")
         if disk_ops:
             parts.append(f"{disk_ops} drive item{'s' if disk_ops != 1 else ''}")
+        if sfp_ops:
+            parts.append(f"{sfp_ops} SFP module{'s' if sfp_ops != 1 else ''}")
         summary = label(", ".join(parts) or "No changes", "subheading")
         summary.setObjectName("confirmSummary")
         layout.addWidget(summary)

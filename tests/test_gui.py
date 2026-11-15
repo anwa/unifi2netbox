@@ -577,8 +577,10 @@ def fake_runner(monkeypatch, window):
         disk_plan=None,
         custom_field_plan=None,
         mgmt_ip_plan=None,
+        sfp_plan=None,
     ):
         started.update(
+            sfp_plan=sfp_plan,
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
             plan=write_plan,
