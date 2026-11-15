@@ -141,7 +141,11 @@ header), and the app has its own icon in title bars, taskbar and executable.
 - The header shows a status chip per connection (green online, amber online
   with a security warning, red on errors). Click a chip for endpoint, version,
   last check and **Check again**. **Refresh** (F5) reads both inventories;
-  **Settings** and a **More** menu (UniFi API dump, copy summary) sit next to it.
+  **Manual** (F1), **Settings** and a **More** menu (write history, UniFi API
+  dump, copy summary) sit next to it.
+- **Manual** opens the user manual from [`manual/`](manual/index.md): the
+  chapter tree on the left, the page with screenshots on the right, starting
+  at the overview. The same Markdown pages can be read on GitHub.
 - Summary cards count new devices, devices with changes, devices in sync,
   devices that need attention and NetBox-only devices; clicking a card filters
   the table. Filter chips and a name/model search narrow the list further.

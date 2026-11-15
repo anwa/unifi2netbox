@@ -17,7 +17,10 @@ starting work. Key points that are easy to miss:
 - Every approved minor/major release also gets a Windows exe build from the
   tagged commit plus the native smoke test (`docs/DEPLOYMENT.md`); record it there.
 - Keep README.md, CHANGELOG.md, `docs/TESTING.md` and the milestone checkboxes in
-  `docs/IMPLEMENTATION_PLAN.md` current with every behavior change.
+  `docs/IMPLEMENTATION_PLAN.md` current with every behavior change, and the
+  user manual in `manual/` for user-visible changes. Regenerate its screenshots
+  with `python tools/build_manual_screenshots.py` (fictional demo data only;
+  never screenshots of real systems, the manual is public).
 - Two machines use this repo: the **developer workstation** (direct access to
   the user's NetBox and UniFi) and an **external developer notebook** (no
   access). On the workstation you may run the app and opt-in live tests against
@@ -155,6 +158,8 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   the system light/dark mode. Worker jobs only call pipeline functions. Widgets
   opt into styles via dynamic properties (`variant`, `chip`, `badge`, `banner`,
   `role`); use `theme.set_variant` when changing them at runtime.
+  `gui_manual.py` shows the Markdown manual from `manual/` (located by
+  `manual.py`, bundled by the build scripts) with a chapter tree.
   `window_frame.py` sets the app icon (`resources/`, rebuilt by
   `tools/build_icons.py`) and themes native Windows title bars via DWM. Render the
   GUI offscreen for screenshots with `QT_QPA_FONTDIR=C:/Windows/Fonts`.

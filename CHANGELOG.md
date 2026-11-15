@@ -6,6 +6,29 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Added
+
+- User manual in `manual/` (Markdown pages in chapter folders with
+	screenshots): overview, getting started, settings for every service, the
+	review window and each filter, applying changes, and reference pages
+	(what is written, permissions, files and data, troubleshooting,
+	diagnostics).
+- **Manual** button in the header (also F1 and the More menu) opens a manual
+	window with the chapter tree on the left and the page on the right,
+	starting at the overview; links, Back, Forward and Overview navigate,
+	screenshots scale to the page width. Windows and Linux builds bundle the
+	manual.
+- `tools/build_manual_screenshots.py` renders all manual screenshots offscreen
+	from a fictional demo network through the real pipeline (no connection,
+	placeholder tokens, neutral paths).
+
+### Fixed
+
+- The review filters use two rows (devices, then networks and objects), so
+	every filter label stays readable at the default window width.
+- The UniFi Drive settings text now says that the drive bays are read with
+	the key.
+
 ## v1.1.0
 
 ### Summary
