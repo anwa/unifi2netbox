@@ -6,11 +6,24 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.1.2
+
+### Summary
+
+- Patch release: windows that are opened a second time, such as the manual,
+	keep the themed title bar on Windows. No other change.
+
 ### Fixed
 
 - A window that is closed and opened again (for example the manual) keeps
 	the themed title bar on Windows. The second opening used a stale native
 	handle, so the title bar fell back to the default Windows colors.
+
+### Validation
+
+- Offline gate: 614 passed, 2 skipped; Ruff lint and format pass.
+- Native check on Windows 11: the manual window opened twice reports the
+	app's dark or light title bar setting on both openings.
 
 ## v1.1.1
 
