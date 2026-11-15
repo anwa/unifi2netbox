@@ -761,3 +761,15 @@ folder and no write history: the plan proposed creating the Custom Field
 `firmware` (NetBox had none) and 19 firmware-only updates of matched devices;
 the dry run re-read UniFi and NetBox, passed every check and wrote nothing
 (20 operations skipped as dry run).
+
+Then, with the user's explicit approval, the assistant ran the slice 2 write
+test against the NetBox developer instance (commit 63ce9b0, application
+1.0.2) through the real pipeline, with firmware selected for exactly one
+device; UniFi was only read. Results, all passed (6/6): the Custom Field
+`firmware` (text, `dcim.device`) was created and read back as verified; the
+firmware of `HG-DG-Technik-SW11` (empty in NetBox, 7.5.15 in UniFi) was
+written as `custom_fields.firmware` and verified; a refreshed preview showed
+the field as present, the device in sync and the other 18 firmware changes
+still pending; a second apply of the device had nothing to write. The run is
+in the write history. As approved, the Custom Field and the firmware value
+stay in NetBox (real data, not a test object).

@@ -535,10 +535,11 @@ Slices:
   `poe_caps` bit mask is undocumented).
   (1.0.1, 2026-11-15: offline tests and live read-only check, see
   `TESTING.md`.)
-- [ ] 2. Firmware: plan and create the `firmware` Custom Field when missing;
+- [x] 2. Firmware: plan and create the `firmware` Custom Field when missing;
   firmware as a device field for updates and creates.
-  (1.0.2, 2026-11-15: offline tests and a live dry run of the field create
-  plus 19 firmware updates; the approved live write test is pending.)
+  (1.0.2, 2026-11-15: offline tests, a live dry run of the field create plus
+  19 firmware updates, and an approved live write test, 6/6: field created,
+  one device written, both verified, second apply a no-op.)
 - [ ] 3. Management IP: IP address on the management interface (create the
   virtual interface when needed) and primary IPv4; conflicts never overwrite.
 - [ ] 4. Port details: description from the UniFi port name, speed/duplex
