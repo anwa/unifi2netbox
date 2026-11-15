@@ -17,6 +17,7 @@ written (NetBox LAG interfaces are not created automatically).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
@@ -34,15 +35,45 @@ ENABLED = "enabled"
 MODE = "mode"
 UNTAGGED = "untagged_vlan"
 TAGGED_VLANS = "tagged_vlans"
-FIELDS = (ENABLED, MODE, UNTAGGED, TAGGED_VLANS)
+DESCRIPTION = "description"
+SPEED = "speed"
+DUPLEX = "duplex"
+POE_MODE = "poe_mode"
+POE_TYPE = "poe_type"
+FIELDS = (
+    ENABLED,
+    MODE,
+    UNTAGGED,
+    TAGGED_VLANS,
+    DESCRIPTION,
+    SPEED,
+    DUPLEX,
+    POE_MODE,
+    POE_TYPE,
+)
 FIELD_LABELS = {
     ENABLED: "Enabled",
     MODE: "802.1Q mode",
     UNTAGGED: "Untagged VLAN",
     TAGGED_VLANS: "Tagged VLANs",
+    DESCRIPTION: "Description",
+    SPEED: "Speed",
+    DUPLEX: "Duplex",
+    POE_MODE: "PoE mode",
+    POE_TYPE: "PoE type",
 }
-# VLAN fields only make sense once NetBox has the matching 802.1Q mode.
+# Fields that need another field written with them: VLANs need the 802.1Q
+# mode, a PoE type needs the PoE mode (NetBox validation).
+_REQUIRES = {UNTAGGED: MODE, TAGGED_VLANS: MODE, POE_TYPE: POE_MODE}
 _NEEDS_MODE = (UNTAGGED, TAGGED_VLANS)
+# Official UniFi PoE type (1-4) to the NetBox PoE type choice.
+POE_TYPES = {
+    1: "type1-ieee802.3af",
+    2: "type2-ieee802.3at",
+    3: "type3-ieee802.3bt",
+    4: "type4-ieee802.3bt",
+}
+_DEFAULT_NAME = re.compile(r"(Port|SFP\+?|SFP28) ?\d+", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -153,6 +184,7 @@ def build_interface_plan(
                     vlan_by_vid,
                     vlan_names,
                     missing_group,
+                    match.port,
                 )
             )
     return InterfacePlan(rows=tuple(rows))
@@ -165,9 +197,12 @@ def _plan_row(
     vlan_by_vid: dict[int, InventoryVlan],
     vlan_names: dict[str, str],
     missing_group: str,
+    port: InventoryPort | None = None,
 ) -> InterfacePlanRow:
     changes: list[FieldChange] = []
     notes = list(config.notes)
+    # Fields whose NetBox value is set but differs: shown, not preselected.
+    keep: set[str] = set()
 
     def add(field: str, current: object, desired: object) -> None:
         if current != desired:
@@ -220,6 +255,35 @@ def _plan_row(
     elif config.mode != DISABLED:
         notes.append("Port configuration is unknown; only the enable state is used.")
 
+    name = config.name.strip()
+    if name and not _DEFAULT_NAME.fullmatch(name):
+        add(DESCRIPTION, interface.description, name)
+        if interface.description and interface.description != name:
+            keep.add(DESCRIPTION)
+            notes.append(
+                "NetBox has another description; it is replaced only when checked."
+            )
+    if config.speed_mbps is not None:
+        add(SPEED, interface.speed_kbps, config.speed_mbps * 1000)
+        if config.full_duplex is not None:
+            add(DUPLEX, interface.duplex, "full" if config.full_duplex else "half")
+    if port is not None and port.poe_standard:
+        poe_type = POE_TYPES.get(port.poe_type, "")
+        add(POE_MODE, interface.poe_mode, "pse")
+        if poe_type:
+            add(POE_TYPE, interface.poe_type, poe_type)
+        for field, current in (
+            (POE_MODE, interface.poe_mode),
+            (POE_TYPE, interface.poe_type),
+        ):
+            if current and any(c.field == field for c in changes):
+                keep.add(field)
+        if keep & {POE_MODE, POE_TYPE}:
+            notes.append(
+                "NetBox has other PoE values (often from the device type); they "
+                "are replaced only when checked."
+            )
+
     return InterfacePlanRow(
         key=f"interface:{interface.source_id}",
         device_key=pair.device_key,
@@ -231,7 +295,7 @@ def _plan_row(
         interface_name=interface.name,
         config=config,
         changes=tuple(changes),
-        selected_fields=tuple(c.field for c in changes),
+        selected_fields=tuple(c.field for c in changes if c.field not in keep),
         notes=tuple(notes),
     )
 
@@ -241,8 +305,9 @@ def select_interface(
 ) -> InterfacePlan:
     """Select or clear one field (or "all") of one interface row.
 
-    VLAN fields depend on the mode change: clearing the mode clears them, and
-    selecting a VLAN field selects the mode change too.
+    VLAN fields depend on the mode change and the PoE type on the PoE mode:
+    clearing the required field clears its dependents, and selecting a
+    dependent selects the required change too.
     """
     rows = []
     for row in plan.rows:
@@ -255,12 +320,14 @@ def select_interface(
                     continue
                 if selected:
                     chosen.add(name)
-                    if name in _NEEDS_MODE and MODE in available:
-                        chosen.add(MODE)
+                    required = _REQUIRES.get(name)
+                    if required in available:
+                        chosen.add(required)
                 else:
                     chosen.discard(name)
-                    if name == MODE:
-                        chosen.difference_update(_NEEDS_MODE)
+                    chosen.difference_update(
+                        f for f, needed in _REQUIRES.items() if needed == name
+                    )
             row = replace(row, selected_fields=tuple(f for f in FIELDS if f in chosen))
         rows.append(row)
     return replace(plan, rows=tuple(rows))
@@ -276,7 +343,12 @@ def _label(field: str, value: object, vlan_names: dict[str, str]) -> str:
     if field == TAGGED_VLANS:
         values = tuple(value) if isinstance(value, tuple) else ()
         return ", ".join(_vlan_label(v, vlan_names) for v in values) or "-"
-    return str(value)
+    if field == SPEED:
+        if not value:
+            return "-"
+        mbps = int(str(value)) // 1000
+        return f"{mbps // 1000} Gbps" if mbps >= 1000 else f"{mbps} Mbps"
+    return str(value) or "-"
 
 
 def _vlan_label(vlan_id: str, names: dict[str, str]) -> str:

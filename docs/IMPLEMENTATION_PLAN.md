@@ -547,6 +547,9 @@ Slices:
   WAN address, which is never used.)
 - [ ] 4. Port details: description from the UniFi port name, speed/duplex
   only when auto-negotiation is off, PoE mode/type as port capability.
+  (1.0.4, 2026-11-15: offline tests and a live dry run of 96 interfaces: 87
+  descriptions, 18 fixed speeds with duplex, no PoE change; the approved live
+  write test is pending.)
 - [ ] 5. SFP modules as inventory items linked to their interface (create and
   update only), sharing the inventory-item logic of the drive items.
 - [ ] 6. Wireless LANs (SSID, VLAN, status, authentication type/cipher, site

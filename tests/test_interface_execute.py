@@ -14,7 +14,7 @@ from unifi2netbox.interface_plan import (
 from unifi2netbox.inventory import InventoryInterface, InventoryPort, InventoryVlan
 from unifi2netbox.port_config import InventoryPortConfig
 
-CONFIG = InventoryPortConfig("a", 1, "Uplink", True, "tagged", 1, (20,))
+CONFIG = InventoryPortConfig("a", 1, "Port 1", True, "tagged", 1, (20,))
 
 
 class FakeNetBox:
@@ -153,7 +153,7 @@ def test_changed_netbox_interface_is_skipped():
 
 def test_changed_or_unreadable_unifi_source_is_skipped():
     backend = FakeNetBox(netbox_row())
-    changed = InventoryPortConfig("a", 1, "Uplink", True, "access", 20)
+    changed = InventoryPortConfig("a", 1, "Port 1", True, "access", 20)
 
     (moved,) = execute_interface_plan(
         make_plan(), backend, source_configs={("a", 1): changed}

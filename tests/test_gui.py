@@ -1357,9 +1357,9 @@ def test_detail_panel_shows_port_configuration(qtbot, tmp_path, pool):
             InventoryInterface("11", "1", "Port 2", "1000base-t"),
         ),
         unifi_port_configs=(
-            InventoryPortConfig("a", 1, "Uplink", True, "tagged-all", 1, (), "", 1),
+            InventoryPortConfig("a", 1, "Port 1", True, "tagged-all", 1, (), "", 1),
             InventoryPortConfig(
-                "a", 2, "Cam", True, "access", 30, (), "Cams", None, ("note x",)
+                "a", 2, "Port 2", True, "access", 30, (), "Cams", None, ("note x",)
             ),
         ),
     )
@@ -1413,8 +1413,8 @@ def interface_result():
             ),
         ),
         (
-            InventoryPortConfig("a", 1, "Uplink", True, "tagged", 1, (20,)),
-            InventoryPortConfig("a", 2, "Cam", True, "access", 20),
+            InventoryPortConfig("a", 1, "Port 1", True, "tagged", 1, (20,)),
+            InventoryPortConfig("a", 2, "Port 2", True, "access", 20),
         ),
         (InventoryVlan("101", 1, "Default", "9"), InventoryVlan("120", 20, "IoT", "9")),
         vlan_group_id="9",

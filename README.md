@@ -79,7 +79,10 @@ history.
   Access and Access over Protect. Access reports no serial numbers.
 - The **Interfaces** filter compares the effective UniFi port configuration
   with the paired NetBox interfaces of matched devices and offers field-level
-  writes for enabled state, 802.1Q mode, untagged and tagged VLANs. VLANs come
+  writes for enabled state, 802.1Q mode, untagged and tagged VLANs, the
+  description (UniFi port name), a fixed speed and duplex (only without
+  auto-negotiation) and the PoE mode and type. Other existing NetBox values
+  are shown but only replaced when checked. VLANs come
   from the site's "UniFi <site>" VLAN group, so write the networks first and
   refresh. Interfaces are only updated, never created or deleted; LAGs and
   cables are not changed, and a second apply after a refresh writes nothing.

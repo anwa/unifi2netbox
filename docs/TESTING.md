@@ -793,3 +793,11 @@ showed the row in sync with one `Management` interface and the primary IPv4
 10.10.0.11, the other 17 devices still pending, and a second apply had
 nothing to write. The run is in the write history. As approved, the
 interface, IP and primary IPv4 stay in NetBox (real data, not test objects).
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 4 (application
+1.0.4 working tree on top of commit d51f164) with snapshots in a scratch
+folder and no write history: of 194 paired interfaces, 96 had changes, all
+preselected (87 descriptions from UniFi port names, 18 fixed 10 Gbps speeds
+with full duplex; no PoE change because the NetBox device types already
+carry the same PoE values; the VLAN modes were already in sync). The dry run
+passed the UniFi and NetBox re-read checks for all 96 and wrote nothing.

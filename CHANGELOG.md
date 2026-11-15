@@ -37,6 +37,13 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	used. The detail panel offers one checkbox per device; writes run after
 	device writes with UniFi and NetBox re-reads, lookup of interrupted
 	creates and read-back.
+- M11 slice 4: the Interfaces plan also covers the description (the UniFi
+	port name, unless it is a default name such as `Port 3`), a fixed speed
+	and duplex (only when auto-negotiation is off in UniFi; link speed stays
+	display-only) and the PoE capability (`pse` with the official PoE type).
+	Empty NetBox values are preselected; other existing values (for example
+	PoE from the device type or a hand-written description) are shown but
+	replaced only when checked. A PoE type always goes with the PoE mode.
 
 ## v1.0.0
 
