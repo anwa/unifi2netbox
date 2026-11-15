@@ -839,3 +839,14 @@ site VLAN group), 15 DHCP IP ranges and 139 reserved IP addresses (3 with a
 DNS name) were planned as preselected creates; NetBox 4.7.3 had none of
 them. The dry run passed the UniFi and NetBox re-read checks for all 160 and
 wrote nothing.
+
+Then, with the user's explicit approval, the assistant ran the slice 6 write
+test against the NetBox developer instance (commit 65243a7, application
+1.0.6) through the real pipeline for exactly one object of each kind; UniFi
+was only read. Results, all passed (6/6): the wireless LAN `Amazon` (status,
+WPA personal with AES, its VLAN from the site VLAN group and the site scope),
+the IP range `10.10.0.200-10.10.0.250` (`DHCP Default`) and the reserved IP
+address `10.10.0.2` were created and read back as verified; a refreshed
+preview showed all three in sync, the other 157 objects still pending, and a
+second apply had nothing to write. The run is in the write history; the
+objects stay in NetBox as approved.

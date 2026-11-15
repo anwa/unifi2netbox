@@ -560,8 +560,9 @@ Slices:
   scope), DHCP IP ranges and reserved IP addresses.
   (1.0.6, 2026-11-15: planned and executed in the pipeline (`site_details`,
   `site_details_execute`) with offline tests and a live dry run of 6
-  wireless LANs, 15 IP ranges and 139 reservations; review rows follow in
-  slice 7, the approved live write test is pending.)
+  wireless LANs, 15 IP ranges and 139 reservations, and an approved live
+  write test, 6/6, for one object of each kind; review rows follow in
+  slice 7.)
 - [ ] 7. GUI filters, write order (custom field, networks, ranges and
   wireless, interfaces, cables, devices, IP addresses, inventory items),
   documentation, live read-only check, dry run and an approved write test on
