@@ -60,6 +60,19 @@ tarball from the same tag and passed its offscreen smoke tests. All three
 files and `SHA256SUMS.txt` are attached to the public GitHub release v1.1.0
 (approved by the user on 2026-11-15).
 
+Release v1.1.1 (tag v1.1.1 on merge commit 02fa9c0, patch release with the
+user manual) was built on 2026-11-15 the same way from a clean detached
+worktree at the tag: bundle check (now including `manual/index.md`) and
+native smoke test passed (1 passed, 1 skipped), the exe reports `1.1.1`, the
+bundle holds the manual with its 22 screenshots, and the installer
+`unifi2netbox-1.1.1-setup.exe` is 45.4 MB (SHA-256
+`20DF2D8F536647E4D5D83EC2AAB74C8222590049E3C83B9F57046E76BD858D92`). The
+Offline Tests and Packages workflows passed for main and the tag; the Linux
+tarball contains the manual. All three files and `SHA256SUMS.txt` are
+attached to the public GitHub release v1.1.1 (requested by the user). Not
+verified: installer upgrade/uninstall for this version and opening the
+manual window in the packaged app. The Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
