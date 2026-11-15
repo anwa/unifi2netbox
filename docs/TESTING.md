@@ -801,3 +801,13 @@ preselected (87 descriptions from UniFi port names, 18 fixed 10 Gbps speeds
 with full duplex; no PoE change because the NetBox device types already
 carry the same PoE values; the VLAN modes were already in sync). The dry run
 passed the UniFi and NetBox re-read checks for all 96 and wrote nothing.
+
+Then, with the user's explicit approval, the assistant ran the slice 4 write
+test against the NetBox developer instance (commit 7f7d313, application
+1.0.4) through the real pipeline for exactly one interface; UniFi was only
+read. Results, all passed (4/4): `NG-DG-R1-SW11 SFP+ 7` got the description
+"Uplink", speed 10 Gbps (10000000 kbps) and full duplex in one PATCH, read
+back as verified; a refreshed preview showed the interface in sync and the
+other 95 interfaces still pending, and a second apply had nothing to write.
+The run is in the write history; the values stay in NetBox as approved. PoE
+writes are covered by offline tests because no live interface needed one.
