@@ -53,6 +53,17 @@ def caption_colors(widget: QWidget, palette: theme.Colors) -> tuple[str, str, st
     return caption, palette.text, palette.border
 
 
+def native_handle(widget: QWidget) -> int:
+    """The current native window handle of a top-level widget.
+
+    A dialog that is closed and shown again gets a new native window, while
+    ``QWidget.winId()`` can still return the destroyed one; the window
+    handle (``QWindow``) always knows the current handle.
+    """
+    window = widget.windowHandle()
+    return int(window.winId()) if window is not None else int(widget.winId())
+
+
 def style_title_bar(widget: QWidget) -> bool:
     """Apply the theme to the native title bar; False where unsupported."""
     if (
@@ -69,7 +80,7 @@ def style_title_bar(widget: QWidget) -> bool:
         dwm = ctypes.windll.dwmapi
     except ImportError, AttributeError, OSError:
         return False
-    hwnd = wintypes.HWND(int(widget.winId()))
+    hwnd = wintypes.HWND(native_handle(widget))
     palette = theme.colors()
     caption, text, border = caption_colors(widget, palette)
 

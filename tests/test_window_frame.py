@@ -79,3 +79,24 @@ def test_install_sets_the_icon_and_restyles_on_theme_changes(qapp, monkeypatch):
     assert len(calls) == 2
     qapp.removeEventFilter(styler)
     theme.apply_theme(qapp, None)
+
+
+def test_native_handle_prefers_the_current_window_handle():
+    class Window:
+        def winId(self):  # noqa: N802 - Qt naming
+            return 0x7B177E
+
+    class Reopened:
+        """A dialog shown again: its winId() still names the destroyed window."""
+
+        def __init__(self, window):
+            self.window = window
+
+        def windowHandle(self):  # noqa: N802 - Qt naming
+            return self.window
+
+        def winId(self):  # noqa: N802 - Qt naming
+            return 0x7A177E
+
+    assert window_frame.native_handle(Reopened(Window())) == 0x7B177E
+    assert window_frame.native_handle(Reopened(None)) == 0x7A177E
