@@ -743,3 +743,123 @@ exist" because the real configuration has no NetBox site mapping (Sync
 defaults); this is configuration, not a defect. On the real screen the UniFi
 chip overlapped the Protect chip; fixed in 0.10.5 and rechecked on screen.
 Linux was verified only by the GitHub Actions Packages workflow (offscreen).
+
+On 2026-11-15 the assistant checked M11 slice 1 read-only on the developer
+workstation (application 1.0.1 on top of commit f2de96f, CPython 3.15.1,
+Windows 11 10.0.26200), calling the inventory readers directly so the snapshot
+database was not changed; only counts were printed. UniFi Network 11.0.99: 19
+devices, all with management IP and firmware; 195 port configurations, 18 with
+a fixed speed; 23 SFP modules; 15 DHCP ranges; 6 wireless LANs; 139
+reservations; no secrets (`x_passphrase`, `x_password`, `x_authkey`) in the
+models. NetBox 4.7.3: 26 devices without primary IPv4 or firmware, 3
+manufacturers, 0 IP addresses, 0 IP ranges, 0 wireless LANs, 0 Custom Fields;
+all optional reads succeeded. No writes were made.
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 2 (application
+1.0.2 working tree on top of commit b4fe839) with snapshots in a scratch
+folder and no write history: the plan proposed creating the Custom Field
+`firmware` (NetBox had none) and 19 firmware-only updates of matched devices;
+the dry run re-read UniFi and NetBox, passed every check and wrote nothing
+(20 operations skipped as dry run).
+
+Then, with the user's explicit approval, the assistant ran the slice 2 write
+test against the NetBox developer instance (commit 63ce9b0, application
+1.0.2) through the real pipeline, with firmware selected for exactly one
+device; UniFi was only read. Results, all passed (6/6): the Custom Field
+`firmware` (text, `dcim.device`) was created and read back as verified; the
+firmware of `HG-DG-Technik-SW11` (empty in NetBox, 7.5.15 in UniFi) was
+written as `custom_fields.firmware` and verified; a refreshed preview showed
+the field as present, the device in sync and the other 18 firmware changes
+still pending; a second apply of the device had nothing to write. The run is
+in the write history. As approved, the Custom Field and the firmware value
+stay in NetBox (real data, not a test object).
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 3 (application
+1.0.3 working tree on top of commit 3d5f70f) with snapshots in a scratch
+folder and no write history: 19 matched devices carry a UniFi IP; 18 were
+planned (17 with a new virtual `Management` interface, the RPS reusing its
+existing management interface; all /24 from the UniFi management network)
+and 1, the UDM, only got a note because UniFi reports its public WAN address.
+The dry run re-read UniFi and NetBox, passed every check for all 18 and wrote
+nothing.
+
+Then, with the user's explicit approval, the assistant ran the slice 3 write
+test against the NetBox developer instance (commit 14427d8, application
+1.0.3) through the real pipeline for exactly one device; UniFi was only read.
+Results, all passed (6/6): for `HG-DG-Technik-SW11` the virtual,
+management-only interface `Management`, the IP 10.10.0.11/24 on it and the
+primary IPv4 were written and read back as verified; a refreshed preview
+showed the row in sync with one `Management` interface and the primary IPv4
+10.10.0.11, the other 17 devices still pending, and a second apply had
+nothing to write. The run is in the write history. As approved, the
+interface, IP and primary IPv4 stay in NetBox (real data, not test objects).
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 4 (application
+1.0.4 working tree on top of commit d51f164) with snapshots in a scratch
+folder and no write history: of 194 paired interfaces, 96 had changes, all
+preselected (87 descriptions from UniFi port names, 18 fixed 10 Gbps speeds
+with full duplex; no PoE change because the NetBox device types already
+carry the same PoE values; the VLAN modes were already in sync). The dry run
+passed the UniFi and NetBox re-read checks for all 96 and wrote nothing.
+
+Then, with the user's explicit approval, the assistant ran the slice 4 write
+test against the NetBox developer instance (commit 7f7d313, application
+1.0.4) through the real pipeline for exactly one interface; UniFi was only
+read. Results, all passed (4/4): `NG-DG-R1-SW11 SFP+ 7` got the description
+"Uplink", speed 10 Gbps (10000000 kbps) and full duplex in one PATCH, read
+back as verified; a refreshed preview showed the interface in sync and the
+other 95 interfaces still pending, and a second apply had nothing to write.
+The run is in the write history; the values stay in NetBox as approved. PoE
+writes are covered by offline tests because no live interface needed one.
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 5 (application
+1.0.5 working tree on top of commit 9dd833a) with snapshots in a scratch
+folder and no write history: all 23 SFP modules sat in ports paired with a
+NetBox interface and were planned as creates of `Transceiver <interface>`
+items; 19 got the NetBox manufacturer Ubiquiti (vendors `UBNT` and
+`Ubiquiti Inc.`), 4 `H3C-OEM` modules none, because NetBox has no matching
+manufacturer. The dry run passed the UniFi and NetBox re-read checks for all
+23 and wrote nothing.
+
+Then, with the user's explicit approval, the assistant ran the slice 5 write
+test against the NetBox developer instance (commit 5cbc35b, application
+1.0.5) through the real pipeline for exactly one module; UniFi was only
+read. Results, all passed (5/5): the item `Transceiver SFP+ 7` of
+`NG-DG-R1-SW11` was created with part ID `UF-MM-10G`, its serial, the
+description "10G BASE-SR", manufacturer Ubiquiti and a link to the
+interface `SFP+ 7`, read back as verified; a refreshed preview showed
+exactly one item of that name, in sync, the other 22 modules still pending,
+and a second apply had nothing to write. The run is in the write history;
+the item stays in NetBox as approved.
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 6 (application
+1.0.6 working tree on top of commit ec93204) with snapshots in a scratch
+folder and no write history: 6 wireless LANs (all with their VLAN from the
+site VLAN group), 15 DHCP IP ranges and 139 reserved IP addresses (3 with a
+DNS name) were planned as preselected creates; NetBox 4.7.3 had none of
+them. The dry run passed the UniFi and NetBox re-read checks for all 160 and
+wrote nothing.
+
+Then, with the user's explicit approval, the assistant ran the slice 6 write
+test against the NetBox developer instance (commit 65243a7, application
+1.0.6) through the real pipeline for exactly one object of each kind; UniFi
+was only read. Results, all passed (6/6): the wireless LAN `Amazon` (status,
+WPA personal with AES, its VLAN from the site VLAN group and the site scope),
+the IP range `10.10.0.200-10.10.0.250` (`DHCP Default`) and the reserved IP
+address `10.10.0.2` were created and read back as verified; a refreshed
+preview showed all three in sync, the other 157 objects still pending, and a
+second apply had nothing to write. The run is in the write history; the
+objects stay in NetBox as approved.
+
+On 2026-11-15 the assistant checked M11 slice 7 (application 1.0.7 working
+tree on top of commit d2f40ad) with live read data and nothing written. The
+review window rendered offscreen (`QT_QPA_FONTDIR=C:/Windows/Fonts`) with the
+new filters Addresses 173 (17 management IPs, 15 ranges, 139 reservations,
+plus in-sync and note rows), Wireless 6 and Modules 23; the detail panel
+showed the planned fields with VLAN and interface names. A dry run over every
+kind together (no write history) skipped 95 interfaces, 17 management IPs,
+14 ranges, 138 reservations, 22 SFP modules and 5 wireless LANs with
+"Dry-run mode", so all passed the UniFi and NetBox re-read checks; device
+writes stayed pending because six device creates still need a device type
+and role (preflight blocker, as before). No network or cable change was
+pending, and the Custom Field `firmware` already exists.

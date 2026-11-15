@@ -21,7 +21,8 @@ passed on 2026-10-25. Linux/exact-platform verification remains open.
   UniFi; live acceptance runs there. The external developer notebook used
   earlier has no access. Earlier "target PC" results were user-reported.
 - UniFi is read-only. NetBox changes are selected and explicitly confirmed.
-  No automatic deletion, automatic background writes or unapproved Custom Fields.
+  No automatic deletion, automatic background writes or unapproved Custom Fields
+  (the only approved one is `firmware`, created visibly on selection; see M11).
 - Network first; later inventory of cameras, NVRs, Access hardware and UNAS.
   Exclude recordings, file contents, personal access data and device controls.
 
@@ -493,6 +494,92 @@ Slices:
 
 Acceptance: verified install/start/settings/read/preview workflows. Unavailable
 platforms stay explicitly unverified rather than being marked supported by CI.
+
+### M11: Extended UniFi Details -> v1.1.0
+
+Branch: `feature/unifi-details`; follows M10.
+
+Gate finding (2026-11-15, read-only with the stored API key): the internal
+Network endpoints used by the earlier script project still answer with the
+local API key on Network 11.0 (`stat/device`, `stat/sta`, `rest/user`,
+`rest/networkconf`, `rest/portconf`, `rest/wlanconf` and others: HTTP 200;
+`rest/tag`: 400; `rest/firewallrule` is empty under zone-based firewalls).
+The official Integration API already returns `firmwareVersion` and
+`ipAddress` per device, which the app did not keep.
+
+Decisions (2026-11-15, user):
+
+- Scope: management IP and firmware, port details, SFP modules, wireless LANs
+  plus DHCP ranges and reservations.
+- The management IP is assigned to an existing management-only interface; if
+  there is none, a virtual `Management` interface (management only) is planned
+  as a visible, selectable create.
+- Firmware goes into the device Custom Field `firmware` (label "Firmware",
+  text, `dcim.device`). If it is missing, the app plans its creation as a
+  separate, visible and selectable first operation; a field with an
+  incompatible type or object type blocks firmware writes. This is the only
+  Custom Field the app creates, and never silently.
+- Unchanged: UniFi is read with GET and field allow-lists only (no `x_*`
+  secrets, no WLAN passphrases); internal fields stay limited to the validated
+  11.0 series; nothing is deleted; missing source values never clear NetBox
+  values; re-read, drift skip, read-back and journal for every write.
+
+Slices:
+
+- [x] 1. Read and show: device IP and firmware (official API); SFP, configured
+  speed/duplex per port, DHCP ranges, wireless LANs (no secrets) and
+  fixed-IP reservations (internal API); NetBox primary IPv4, firmware Custom
+  Field, interface description/duplex, IP addresses, IP ranges, wireless LANs
+  and manufacturers. Snapshot fields with defaults; export counts only.
+  PoE capability comes from the official `poe.standard` (the internal
+  `poe_caps` bit mask is undocumented).
+  (1.0.1, 2026-11-15: offline tests and live read-only check, see
+  `TESTING.md`.)
+- [x] 2. Firmware: plan and create the `firmware` Custom Field when missing;
+  firmware as a device field for updates and creates.
+  (1.0.2, 2026-11-15: offline tests, a live dry run of the field create plus
+  19 firmware updates, and an approved live write test, 6/6: field created,
+  one device written, both verified, second apply a no-op.)
+- [x] 3. Management IP: IP address on the management interface (create the
+  virtual interface when needed) and primary IPv4; conflicts never overwrite.
+  (1.0.3, 2026-11-15: offline tests, a live dry run of 18 devices and an
+  approved live write test, 6/6, for one device; the UDM reports its public
+  WAN address, which is never used.)
+- [x] 4. Port details: description from the UniFi port name, speed/duplex
+  only when auto-negotiation is off, PoE mode/type as port capability.
+  (1.0.4, 2026-11-15: offline tests, a live dry run of 96 interfaces (87
+  descriptions, 18 fixed speeds with duplex, no PoE change) and an approved
+  live write test, 4/4, for one interface; PoE writes are offline-tested.)
+- [x] 5. SFP modules as inventory items linked to their interface (create and
+  update only), sharing the inventory-item logic of the drive items.
+  (1.0.5, 2026-11-15: items are named `Transceiver <interface>`; offline
+  tests, a live dry run of 23 creates, 19 with manufacturer Ubiquiti, 4
+  H3C modules without a NetBox manufacturer, and an approved live write
+  test, 5/5, for one module.)
+- [x] 6. Wireless LANs (SSID, VLAN, status, authentication type/cipher, site
+  scope), DHCP IP ranges and reserved IP addresses.
+  (1.0.6, 2026-11-15: planned and executed in the pipeline (`site_details`,
+  `site_details_execute`) with offline tests and a live dry run of 6
+  wireless LANs, 15 IP ranges and 139 reservations, and an approved live
+  write test, 6/6, for one object of each kind; review rows follow in
+  slice 7.)
+- [x] 7. GUI filters, write order (custom field, networks, ranges and
+  wireless, interfaces, cables, devices, IP addresses, inventory items),
+  documentation, live read-only check, dry run and an approved write test on
+  dedicated test objects.
+  (1.0.7, 2026-11-15: Addresses, Wireless and Modules filters with detail
+  panel, select all/none and counts; offscreen rendering with live read data
+  and a live dry run over all kinds. The approved write tests of slices 2 to
+  6 wrote one object of each kind; the user decided to keep them in NetBox
+  as real data instead of removing test objects.)
+
+- [x] Obtain explicit merge approval; prepare version 1.1.0. (Approved
+  2026-11-15.)
+- [ ] Complete the approved main merge and tag its resulting commit v1.1.0;
+  build the Windows exe and installer from the tag.
+
+Acceptance: every new field is previewed with provenance, written only when
+selected, verified by read-back, and a second apply is a no-op.
 
 ## Security and Configuration
 

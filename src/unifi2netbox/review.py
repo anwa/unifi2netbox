@@ -13,6 +13,8 @@ from datetime import datetime
 
 from unifi2netbox.cables import CablePlan, CablePlanRow, select_cable
 from unifi2netbox.config import BehaviorConfig
+from unifi2netbox.custom_fields import CustomFieldPlan, select_custom_field
+from unifi2netbox.details import InventorySfp
 from unifi2netbox.disks import DiskPlan, DiskPlanRow, select_disk
 from unifi2netbox.interface_plan import (
     InterfacePlan,
@@ -20,6 +22,7 @@ from unifi2netbox.interface_plan import (
     select_interface,
 )
 from unifi2netbox.inventory import InventoryDisk
+from unifi2netbox.mgmt_ip import MgmtIpPlan, MgmtIpRow, select_mgmt_ip
 from unifi2netbox.networks import NetworkPlan, NetworkPlanRow, select_network
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
@@ -31,6 +34,7 @@ from unifi2netbox.pipeline import (
 from unifi2netbox.port_config import InventoryPortConfig
 from unifi2netbox.ports import PortMatch, match_ports
 from unifi2netbox.preview import (
+    FIRMWARE,
     ChangePreview,
     DeviceAction,
     DevicePreview,
@@ -39,6 +43,15 @@ from unifi2netbox.preview import (
     build_change_preview,
     select_device,
     select_field,
+)
+from unifi2netbox.sfp import SfpPlan, SfpPlanRow, select_sfp
+from unifi2netbox.site_details import (
+    KIND_LABELS,
+    RANGE,
+    RESERVATION,
+    WLAN,
+    SiteDetailPlan,
+    select_site_detail,
 )
 from unifi2netbox.write_plan import (
     OperationType,
@@ -55,6 +68,9 @@ ATTENTION = "attention"
 NETWORKS = "networks"
 INTERFACES = "interfaces"
 CABLES = "cables"
+ADDRESSES = "addresses"
+WIRELESS = "wireless"
+MODULES = "modules"
 ALL = "all"
 
 CATEGORY_LABELS = {
@@ -67,7 +83,13 @@ CATEGORY_LABELS = {
     NETWORKS: "Networks",
     INTERFACES: "Interfaces",
     CABLES: "Cables",
+    ADDRESSES: "Addresses",
+    WIRELESS: "Wireless",
+    MODULES: "Modules",
 }
+
+# Object lists (M11): which rows each filter shows.
+OBJECT_FILTERS = (ADDRESSES, WIRELESS, MODULES)
 
 FIELD_LABELS = {
     "name": "Name",
@@ -76,7 +98,77 @@ FIELD_LABELS = {
     "serial": "Serial number",
     "site": "Site",
     "mac_address": "MAC address",
+    "firmware": "Firmware",
 }
+
+
+@dataclass(frozen=True)
+class ObjectRow:
+    """One row of the Addresses, Wireless or Modules list.
+
+    Wraps a management-IP, IP-range, reservation, wireless-LAN or SFP row with
+    the facts the list and the detail panel need.
+    """
+
+    key: str
+    kind: str
+    name: str
+    action: str
+    selectable: bool
+    selected: bool
+    changes: tuple[tuple[str, str, str], ...] = ()
+    notes: tuple[str, ...] = ()
+    outcome: WriteOutcome | None = None
+
+
+OBJECT_FIELD_LABELS = {
+    "ssid": "SSID",
+    "status": "Status",
+    "auth_type": "Authentication",
+    "auth_cipher": "Cipher",
+    "vlan": "VLAN",
+    "scope_id": "Site",
+    "start_address": "Start",
+    "end_address": "End",
+    "address": "Address",
+    "dns_name": "DNS name",
+    "description": "Description",
+    "part_id": "Part ID",
+    "serial": "Serial number",
+    "manufacturer": "Manufacturer",
+    "component_id": "Interface",
+}
+_HIDDEN_FIELDS = frozenset({"scope_type", "component_type"})
+
+
+def readable_changes(
+    changes: tuple[tuple[str, str, str], ...],
+    *,
+    site: str = "",
+    vid: int | None = None,
+    interface: str = "",
+    vendor: str = "",
+) -> tuple[tuple[str, str, str], ...]:
+    """Field changes with labels and names instead of NetBox IDs."""
+
+    def show(field: str, value: str) -> str:
+        if not value:
+            return ""
+        if field == "vlan":
+            return f"VLAN {vid}" if vid is not None else f"VLAN #{value}"
+        if field == "scope_id":
+            return site or f"#{value}"
+        if field == "component_id":
+            return interface or f"#{value}"
+        if field == "manufacturer":
+            return f"{vendor} (NetBox #{value})" if vendor else f"#{value}"
+        return value
+
+    return tuple(
+        (OBJECT_FIELD_LABELS.get(field, field), show(field, before), show(field, after))
+        for field, before, after in changes
+        if field not in _HIDDEN_FIELDS
+    )
 
 
 @dataclass(frozen=True)
@@ -144,6 +236,14 @@ class ReviewState:
         )
         self.cable_plan: CablePlan | None = result.cable_plan if result else None
         self.disk_plan: DiskPlan | None = result.disk_plan if result else None
+        self.custom_field_plan: CustomFieldPlan | None = (
+            result.custom_field_plan if result else None
+        )
+        self.mgmt_ip_plan: MgmtIpPlan | None = result.mgmt_ip_plan if result else None
+        self.sfp_plan: SfpPlan | None = result.sfp_plan if result else None
+        self.site_detail_plan: SiteDetailPlan | None = (
+            result.site_detail_plan if result else None
+        )
         self.protect_kinds: dict[str, str] = {
             device.source_id: device.kind
             for device in (result.protect_devices if result else ())
@@ -190,6 +290,15 @@ class ReviewState:
             )
             self._rows = tuple(self.result.rows) if self.result else ()
             return
+        plan = self.custom_field_plan
+        if (
+            plan is not None
+            and plan.selectable
+            and not plan.selected
+            and self.firmware_selected_count()
+        ):
+            # Selected firmware values need the Custom Field create.
+            self.custom_field_plan = select_custom_field(plan, True)
         catalog = self.netbox_sites or None
         self.change = build_change_preview(self.diff)
         self.plan = build_write_plan(self.diff, self.change, netbox_sites=catalog)
@@ -312,6 +421,8 @@ class ReviewState:
         counts[NETWORKS] = len(self.network_rows())
         counts[INTERFACES] = len(self.interface_rows())
         counts[CABLES] = len(self.cable_rows())
+        for name in OBJECT_FILTERS:
+            counts[name] = len(self.object_rows(name))
         return counts
 
     # -- networks -----------------------------------------------------------
@@ -510,6 +621,46 @@ class ReviewState:
             if unifi_id and config.device_id == unifi_id
         }
 
+    def sfps_for(self, key: str) -> dict[int, InventorySfp]:
+        """Plugged SFP modules of one device, by port index (display only)."""
+        unifi_id, _ = _device_ids(key)
+        return {
+            sfp.port_idx: sfp
+            for sfp in (self.result.unifi_sfps if self.result else ())
+            if unifi_id and sfp.device_id == unifi_id
+        }
+
+    def details_for(self, key: str) -> tuple[tuple[str, str, str], ...]:
+        """(label, NetBox value, UniFi value) of the management IP.
+
+        Firmware is a regular device field since M11 slice 2.
+        """
+        unifi_id, netbox_id = _device_ids(key)
+        result = self.result
+        unifi = next(
+            (
+                d
+                for d in (result.unifi_device_records if result else ())
+                if unifi_id and d.source_id == unifi_id
+            ),
+            None,
+        )
+        netbox = next(
+            (
+                d
+                for d in (result.netbox_device_records if result else ())
+                if netbox_id and d.source_id == netbox_id
+            ),
+            None,
+        )
+        rows = []
+        for title, name in (("Management IP", "ip_address"),):
+            target = getattr(netbox, name, "") if netbox else ""
+            source = getattr(unifi, name, "") if unifi else ""
+            if target or source:
+                rows.append((title, target, source))
+        return tuple(rows)
+
     # -- user actions --------------------------------------------------------
 
     def set_device_selected(self, key: str, selected: bool) -> None:
@@ -530,6 +681,188 @@ class ReviewState:
             return
         self.diff = select_field(self.diff, key, field_name, selected)
         self._recompute()
+
+    # -- custom field --------------------------------------------------------
+
+    def custom_field_operation_count(self) -> int:
+        plan = self.custom_field_plan
+        return plan.operation_count if plan is not None else 0
+
+    def set_custom_field_selected(self, selected: bool) -> None:
+        """Toggle the planned Custom Field create.
+
+        Without the field no firmware can be written, so deselecting it also
+        deselects every selected firmware value.
+        """
+        plan = self.custom_field_plan
+        if plan is None or not plan.selectable:
+            return
+        self.custom_field_plan = select_custom_field(plan, selected)
+        if not selected and self.diff is not None:
+            for device in self.diff.devices:
+                field = next((f for f in device.fields if f.name == FIRMWARE), None)
+                if field is not None and field.selected:
+                    self.diff = select_field(
+                        self.diff, device.device_key, FIRMWARE, False
+                    )
+        self._recompute()
+
+    # -- SFP modules --------------------------------------------------------
+
+    def sfp_rows_for(self, key: str) -> tuple[SfpPlanRow, ...]:
+        _, netbox_id = _device_ids(key)
+        if not netbox_id or self.sfp_plan is None or key.startswith("create:"):
+            return ()
+        return self.sfp_plan.rows_for(netbox_id)
+
+    def sfp_operation_count(self) -> int:
+        return self.sfp_plan.operation_count if self.sfp_plan else 0
+
+    def set_sfp_selected(self, key: str, selected: bool) -> None:
+        if self.sfp_plan is not None:
+            self.sfp_plan = select_sfp(self.sfp_plan, key, selected)
+
+    # -- object lists (addresses, wireless, modules) ------------------------
+
+    def object_rows(self, category: str, text: str = "") -> tuple[ObjectRow, ...]:
+        rows: list[ObjectRow] = []
+        site = self.site_detail_plan
+        if category == ADDRESSES:
+            for row in self.mgmt_ip_plan.rows if self.mgmt_ip_plan else ():
+                rows.append(
+                    ObjectRow(
+                        key=row.key,
+                        kind="Management IP",
+                        name=row.label,
+                        action=row.action,
+                        selectable=row.selectable,
+                        selected=row.selected and row.selectable,
+                        changes=(("Planned", "", row.describe()),) if row.steps else (),
+                        notes=row.notes,
+                        outcome=self.outcomes.get(row.key),
+                    )
+                )
+            kinds: tuple[str, ...] = (RANGE, RESERVATION)
+        elif category == WIRELESS:
+            kinds = (WLAN,)
+        elif category == MODULES:
+            for row in self.sfp_plan.rows if self.sfp_plan else ():
+                rows.append(
+                    ObjectRow(
+                        key=row.key,
+                        kind="SFP module",
+                        name=row.label,
+                        action=row.action,
+                        selectable=row.selectable,
+                        selected=row.selected and row.selectable,
+                        changes=readable_changes(
+                            row.changes(),
+                            interface=row.interface_name,
+                            vendor=row.sfp.vendor if row.sfp else "",
+                        ),
+                        notes=row.notes,
+                        outcome=self.outcomes.get(row.key),
+                    )
+                )
+            kinds = ()
+        else:
+            return ()
+        for kind in kinds:
+            for row in site.rows_of(kind) if site else ():
+                rows.append(
+                    ObjectRow(
+                        key=row.key,
+                        kind=KIND_LABELS[row.kind],
+                        name=row.name,
+                        action=row.action,
+                        selectable=row.selectable,
+                        selected=row.selected and row.selectable,
+                        changes=readable_changes(
+                            row.changes(),
+                            site=self.behavior.netbox_site_name,
+                            vid=getattr(row.source, "vlan_id", None),
+                        ),
+                        notes=row.notes,
+                        outcome=self.outcomes.get(row.key),
+                    )
+                )
+        needle = text.strip().lower()
+        return tuple(
+            row
+            for row in rows
+            if not needle or needle in f"{row.kind} {row.name}".lower()
+        )
+
+    def object_row(self, key: str) -> ObjectRow | None:
+        for category in OBJECT_FILTERS:
+            for row in self.object_rows(category):
+                if row.key == key:
+                    return row
+        return None
+
+    def object_note(self, category: str) -> str:
+        """Why a list is empty or incomplete (missing site, failed read)."""
+        plans = {
+            ADDRESSES: (self.site_detail_plan, self.mgmt_ip_plan),
+            WIRELESS: (self.site_detail_plan,),
+            MODULES: (self.sfp_plan,),
+        }.get(category, ())
+        for plan in plans:
+            text = getattr(plan, "note", "") or getattr(plan, "blocker", "")
+            if text:
+                return text
+        return ""
+
+    def set_object_selected(self, key: str, selected: bool) -> None:
+        if key.startswith("mgmt-ip:"):
+            self.set_mgmt_ip_selected(key, selected)
+        elif key.startswith("sfp"):
+            self.set_sfp_selected(key, selected)
+        elif self.site_detail_plan is not None:
+            self.site_detail_plan = select_site_detail(
+                self.site_detail_plan, key, selected
+            )
+
+    def site_detail_operation_count(self) -> int:
+        plan = self.site_detail_plan
+        return plan.operation_count if plan is not None else 0
+
+    # -- management IP ------------------------------------------------------
+
+    def mgmt_ip_row_for(self, key: str) -> MgmtIpRow | None:
+        """The management-IP row of a matched device row, if any."""
+        _, netbox_id = _device_ids(key)
+        if not netbox_id or self.mgmt_ip_plan is None or key.startswith("create:"):
+            return None
+        return self.mgmt_ip_plan.row_for(netbox_id)
+
+    def mgmt_ip_operation_count(self) -> int:
+        return self.mgmt_ip_plan.operation_count if self.mgmt_ip_plan else 0
+
+    def set_mgmt_ip_selected(self, key: str, selected: bool) -> None:
+        if self.mgmt_ip_plan is not None:
+            self.mgmt_ip_plan = select_mgmt_ip(self.mgmt_ip_plan, key, selected)
+
+    def mgmt_ip_plan_for(self, device_key: str | None) -> MgmtIpPlan | None:
+        """The whole plan, or only the row of one device for a single apply."""
+        plan = self.mgmt_ip_plan
+        if plan is None or device_key is None:
+            return plan
+        row = self.mgmt_ip_row_for(device_key)
+        return replace(
+            plan,
+            rows=tuple(r for r in plan.rows if row is not None and r.key == row.key),
+        )
+
+    def firmware_selected_count(self) -> int:
+        if self.diff is None:
+            return 0
+        return sum(
+            1
+            for device in self.diff.devices
+            for field in device.fields
+            if field.name == FIRMWARE and field.selectable and field.selected
+        )
 
     def set_choice(self, kind: str, key: str, value: str) -> None:
         target = {

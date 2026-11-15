@@ -6,6 +6,95 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.1.0
+
+### Summary
+
+- Milestone M11 (extended UniFi details): firmware, management IPs, port
+	details, SFP modules, wireless LANs, DHCP ranges and DHCP reservations
+	from UniFi are previewed and, when selected, written to NetBox with the
+	same re-read, drift, read-back and journal safeguards as device writes.
+	The app may create one Custom Field, `firmware`, as a visible and
+	selectable operation; it never creates other Custom Fields or
+	manufacturers and never deletes anything.
+
+### Added
+
+- M11 slice 1 (read and show only, nothing is written yet): the management IP
+	and firmware version of UniFi devices (official API); SFP modules,
+	configured fixed port speed and duplex, DHCP ranges, wireless LANs and
+	fixed-IP reservations (internal Network API, allow-listed fields only,
+	never passphrases or other secrets); NetBox primary IPv4, the `firmware`
+	Custom Field, interface description and duplex, IP addresses, IP ranges,
+	wireless LANs, manufacturers and Custom Field definitions (each optional).
+	The device detail panel shows management IP and firmware, the port list
+	shows SFP modules and fixed speeds, and the preview summary counts the new
+	details. Diagnostic exports only count the new lists.
+- M11 slice 2: firmware is a device field written into the NetBox Custom
+	Field `firmware`. When the field is missing, the app plans its creation
+	(text, devices) as a visible, selectable first operation: the detail panel
+	shows a checkbox, the apply bar and confirmation count it, unchecking it
+	also unchecks every firmware value, and selecting a firmware value selects
+	it again. A field with another type or object type is never changed and
+	blocks firmware. Creation never duplicates the field, reconciles an
+	interrupted create by name and is read back; firmware updates PATCH only
+	the Custom Field, are drift-checked and read back.
+- M11 slice 3: the management IP of matched devices becomes the NetBox
+	primary IPv4. The prefix length comes from the UniFi network that contains
+	the IP; the IP goes onto the management-only interface, an interface named
+	`Management`, or a new virtual management-only `Management` interface.
+	Missing IPs are created, unassigned ones assigned; an IP on another
+	object, duplicate IPs, several management interfaces or another primary
+	IPv4 are conflicts and never overwritten. Public (WAN) addresses are not
+	used. The detail panel offers one checkbox per device; writes run after
+	device writes with UniFi and NetBox re-reads, lookup of interrupted
+	creates and read-back.
+- M11 slice 4: the Interfaces plan also covers the description (the UniFi
+	port name, unless it is a default name such as `Port 3`), a fixed speed
+	and duplex (only when auto-negotiation is off in UniFi; link speed stays
+	display-only) and the PoE capability (`pse` with the official PoE type).
+	Empty NetBox values are preselected; other existing values (for example
+	PoE from the device type or a hand-written description) are shown but
+	replaced only when checked. A PoE type always goes with the PoE mode.
+- M11 slice 5: SFP modules of matched devices become NetBox inventory items
+	`Transceiver <interface>`, linked to the paired interface, with part ID,
+	serial, description (compliance and revision) and the NetBox manufacturer
+	when exactly one matches the vendor (`UBNT` and `Ubiquiti Inc.` match
+	`Ubiquiti`; none is created). Create and update only; items of removed
+	modules are kept. The detail panel lists them with checkboxes; they are
+	written last with a UniFi module re-read. Drive items and SFP items now
+	share one inventory-item writer.
+- M11 slice 6 (pipeline only; the review window offers these rows from slice
+	7 on): wireless LANs (SSID, status, authentication type and cipher, the
+	VLAN of the site VLAN group, site scope; never a passphrase; disabled
+	WLANs not preselected), DHCP pools as IP ranges (`DHCP <network>`, prefix
+	length of the network) and fixed client IPs as unassigned reserved IP
+	addresses (DNS name only from an enabled local DNS record, description
+	from the client name or hostname). Existing objects are only completed:
+	authentication and status follow UniFi, empty fields are filled, a
+	different VLAN, scope, DNS name or reservation description is a
+	conflict, overlapping ranges and duplicates are conflicts. Wireless LANs
+	and ranges are written after networks, reservations after management
+	IPs, with UniFi and NetBox re-reads and read-back. Inventory items and
+	the new objects share one object writer.
+- M11 slice 7: the review window has **Addresses** (management IPs, IP
+	ranges, reserved IPs), **Wireless** and **Modules** (SFP) filters with a
+	checkbox per entry, a detail panel that shows planned fields with names
+	instead of NetBox IDs, select all/none for the visible list, and counts
+	in the apply bar and the confirmation. Wireless LANs, ranges and
+	reservations are written on a full apply only.
+
+### Validation
+
+- Offline gate: 606 passed, 2 skipped; Ruff lint and format pass.
+- Live on the developer workstation (UniFi Network 11.0.99, NetBox 4.7.3,
+	2026-11-15): read-only probes and dry runs for every slice, and approved
+	write tests for one object of each kind (Custom Field and firmware,
+	management IP, interface details, SFP item, wireless LAN, IP range,
+	reserved IP), each read back as verified with a no-op second apply. The
+	written objects stay in NetBox as real data.
+- Linux and the packaged builds of this version are not verified yet.
+
 ## v1.0.0
 
 ### Summary

@@ -117,6 +117,11 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
 - **Drive items** (`disks.py`, `disk_execute.py`): drive bays of a matched
   UNAS become NetBox inventory items `Disk <slot>` (create/update only),
   written after device writes with a fresh bay check and read-back.
+- **Site details** (`site_details.py`, `site_details_execute.py`): UniFi
+  wireless LANs, DHCP pools and fixed client IPs become NetBox wireless LANs,
+  IP ranges and reserved IP addresses for the configured site (complete
+  existing objects only; different links are conflicts). Written through the
+  shared `object_writes.py` writer, which inventory items use as well.
 - **Ports** (`ports.py`): pairs UniFi ports with NetBox interfaces of a
   matched device by connector kind, then family, in numbering order; link
   state and speed are operational and display-only.

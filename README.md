@@ -1,24 +1,25 @@
 # unifi2netbox
 
-Latest main release: **v1.0.0**, the first stable release (M10: deployment and
-platform acceptance). Download the Windows installer or the Ubuntu `.deb` from
-the [GitHub releases](https://github.com/anwa/unifi2netbox/releases).
+Latest main release: **v1.1.0** (M11: extended UniFi details). Download the
+Windows installer or the Ubuntu `.deb` from the
+[GitHub releases](https://github.com/anwa/unifi2netbox/releases).
 
-Release **v1.0.0** compares UniFi Network inventory with NetBox in a modern
+Release **v1.1.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
 history. Beyond devices it covers VLANs and prefixes, switch port
 configuration on NetBox interfaces, cable suggestions from LLDP and,
 optionally, the NVR and cameras of UniFi Protect, the hubs, readers and
-intercoms of UniFi Access and a UNAS with its drives (UniFi Drive). UniFi
-stays read-only.
+intercoms of UniFi Access and a UNAS with its drives (UniFi Drive), plus
+firmware (Custom Field `firmware`), management IPs, port details, SFP
+modules, wireless LANs, DHCP ranges and reservations. UniFi stays read-only.
 See [API capabilities](docs/API_CAPABILITIES.md) for the reference schemas and
 version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v1.0.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v1.1.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities
@@ -79,7 +80,10 @@ history.
   Access and Access over Protect. Access reports no serial numbers.
 - The **Interfaces** filter compares the effective UniFi port configuration
   with the paired NetBox interfaces of matched devices and offers field-level
-  writes for enabled state, 802.1Q mode, untagged and tagged VLANs. VLANs come
+  writes for enabled state, 802.1Q mode, untagged and tagged VLANs, the
+  description (UniFi port name), a fixed speed and duplex (only without
+  auto-negotiation) and the PoE mode and type. Other existing NetBox values
+  are shown but only replaced when checked. VLANs come
   from the site's "UniFi <site>" VLAN group, so write the networks first and
   refresh. Interfaces are only updated, never created or deleted; LAGs and
   cables are not changed, and a second apply after a refresh writes nothing.
@@ -92,6 +96,35 @@ history.
   NetBox interface (paired by connector kind and number), connector and speed,
   live link state and PoE, plus notes for speed or PoE differences and
   unpaired ports or interfaces. Link state and speed are never written.
+  Plugged SFP modules (part number, tooltip with vendor and serial) and
+  configured fixed speeds are shown as well. SFP modules of matched devices
+  can be written as NetBox inventory items `Transceiver <interface>` linked
+  to their interface (create and update only, never deleted).
+- Firmware is a device field: the version UniFi reports is written into the
+  NetBox Custom Field `firmware`. If NetBox has no such field, the detail panel
+  offers "Create the NetBox Custom Field 'firmware'" (preselected, created once
+  before any device write); unchecking it also unchecks firmware. An existing
+  field of another type is never changed and blocks firmware writes.
+- The management IP that UniFi reports becomes the NetBox primary IPv4 of a
+  matched device (checkbox in the detail panel). The IP is put on the
+  management-only interface, or on a virtual `Management` interface that is
+  created when missing; the prefix length comes from the UniFi network. An
+  existing other primary IPv4, an IP assigned elsewhere and public (WAN)
+  addresses are never written.
+- The **Wireless** filter lists the UniFi wireless LANs as NetBox wireless
+  LANs for the configured site: SSID, status, authentication type and cipher
+  and the VLAN of the site VLAN group (passphrases are never read). Disabled
+  WLANs are shown but not preselected.
+- The **Addresses** filter lists management IPs, DHCP pools as NetBox IP
+  ranges (`DHCP <network>`) and fixed client IPs as reserved, unassigned IP
+  addresses (DNS name only from an enabled local DNS record, description
+  from the client name). Existing objects are only completed; a different
+  VLAN, site, DNS name or description, overlapping ranges and duplicates
+  are conflicts and never written.
+- The **Modules** filter lists the SFP modules of matched devices.
+- In these lists each entry has a checkbox; the detail panel shows the
+  planned fields with names instead of NetBox IDs. **Select all** and
+  **Select none** act on the visible list.
 - NetBox-only devices (delete proposals) are limited to the active UniFi site
   by default; a setting includes all NetBox devices. Nothing is deleted.
 
@@ -165,7 +198,8 @@ header), and the app has its own icon in title bars, taskbar and executable.
  - Cover port profiles/overrides, native/tagged VLANs, interfaces, IP/MAC, PoE,
 	 LAG and LLDP where verified API data and standard NetBox fields allow it.
  - Separate configuration from operational state. No automatic deletions or
-	 unapproved Custom Fields. Network first, then Protect, Access and Drive.
+	 unapproved Custom Fields (the only one is `firmware`, created visibly on
+	 selection). Network first, then Protect, Access and Drive.
  - Show last successful snapshots when offline; startup checks and Refresh never
 	 imply permission to write. Apply requires a confirmed current preview.
 

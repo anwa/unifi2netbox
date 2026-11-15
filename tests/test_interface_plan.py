@@ -36,7 +36,7 @@ def plan_for(config, interface=None, *, group="9", vlans=VLANS, error=""):
 
 
 def config(**values):
-    return InventoryPortConfig("a", 1, "Uplink", **values)
+    return InventoryPortConfig("a", 1, "Port 1", **values)
 
 
 def test_access_port_plans_mode_and_untagged_vlan():

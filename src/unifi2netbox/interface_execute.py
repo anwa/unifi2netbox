@@ -1,5 +1,8 @@
 """Write selected interface configuration changes to NetBox.
 
+Fields: enabled, 802.1Q mode, untagged/tagged VLANs, description, fixed
+speed and duplex, PoE mode and type.
+
 Safeguards match device and network writes: UniFi is re-read and rows whose
 port configuration changed since the preview are skipped; each NetBox interface
 is re-read and skipped when a selected field no longer has its preview value;
@@ -12,8 +15,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from unifi2netbox.interface_plan import (
+    DESCRIPTION,
+    DUPLEX,
     ENABLED,
     MODE,
+    POE_MODE,
+    POE_TYPE,
+    SPEED,
     TAGGED_VLANS,
     UNTAGGED,
     InterfacePlan,
@@ -120,6 +128,17 @@ def read_field(interface: Mapping[str, object], field: str) -> object:
         values = interface.get("tagged_vlans")
         ids = {_related_id(item) for item in values} if isinstance(values, list) else ()
         return tuple(sorted((i for i in ids if i), key=_numeric))
+    if field == DESCRIPTION:
+        value = interface.get("description")
+        return value.strip() if isinstance(value, str) else ""
+    if field == SPEED:
+        value = interface.get("speed")
+        return value if type(value) is int and value > 0 else 0
+    if field in (DUPLEX, POE_MODE, POE_TYPE):
+        value = interface.get(field)
+        if isinstance(value, Mapping):
+            value = value.get("value")
+        return value if isinstance(value, str) else ""
     raise ValueError(field)
 
 

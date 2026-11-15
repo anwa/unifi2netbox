@@ -40,6 +40,7 @@ from unifi2netbox.cables import CREATE as CABLE_CREATE
 from unifi2netbox.cables import IN_SYNC as CABLE_IN_SYNC
 from unifi2netbox.cables import REFERENCE as CABLE_REFERENCE
 from unifi2netbox.cables import CablePlan, CablePlanRow
+from unifi2netbox.custom_fields import CONFLICT as CONFLICT_FIELD
 from unifi2netbox.interface_plan import FIELD_LABELS as IF_FIELD_LABELS
 from unifi2netbox.interface_plan import InterfacePlan, InterfacePlanRow
 from unifi2netbox.journal_store import StoredRun
@@ -60,6 +61,7 @@ from unifi2netbox.review import (
     IN_SYNC,
     NETBOX_ONLY,
     UPDATE,
+    ObjectRow,
     ReviewRow,
     ReviewState,
 )
@@ -513,6 +515,66 @@ class DetailPanel(QScrollArea):
         )
         self.layout_.addStretch()
 
+    def show_object(self, state: ReviewState, key: str) -> None:
+        """Detail of an address, wireless LAN or SFP module row."""
+        self.state = state
+        row = state.object_row(key)
+        if row is None:
+            self.show_placeholder("Select an entry to see details.")
+            return
+        self.key = key
+        self._clear()
+        title = label(row.name, "heading")
+        title.setObjectName("detailTitle")
+        self.layout_.addWidget(title)
+        self.layout_.addWidget(label(row.kind, "secondary"))
+        if row.outcome is not None:
+            text = f"{row.outcome.status}: {row.outcome.message}"
+            if row.outcome.verification:
+                text += f" (read-back {row.outcome.verification})"
+            tone = {"success": "success", "failed": "danger"}.get(
+                row.outcome.status, "warning"
+            )
+            self.layout_.addWidget(banner(text, tone))
+        if row.notes:
+            tone = "danger" if row.action == "conflict" else "neutral"
+            self.layout_.addWidget(banner("\n".join(row.notes), tone))
+        self.layout_.addWidget(label("NetBox", "subheading"))
+        if row.selectable:
+            verb = "Create" if row.action == "create" else "Update"
+            box = QCheckBox(f"{verb} {row.kind} {row.name}")
+            box.setObjectName("objectSelect")
+            box.setChecked(row.selected)
+            box.toggled.connect(self._toggle_object)
+            self.layout_.addWidget(box)
+        else:
+            self.layout_.addWidget(
+                label(OBJECT_ACTION_TEXT.get(row.action, ""), "secondary")
+            )
+        if row.changes:
+            grid = QGridLayout()
+            grid.setHorizontalSpacing(12)
+            for index, (field, before, after) in enumerate(row.changes):
+                grid.addWidget(label(field, "caption"), index, 0)
+                text = f"{before} \u2192 {after}" if before else after
+                value = label(text, "secondary")
+                value.setWordWrap(True)
+                grid.addWidget(value, index, 1)
+            grid.setColumnStretch(1, 1)
+            self.layout_.addLayout(grid)
+        self.layout_.addWidget(
+            label(
+                "Only checked entries are written. Existing NetBox objects are "
+                "only completed; nothing is deleted.",
+                "caption",
+            )
+        )
+        self.layout_.addStretch()
+
+    def _toggle_object(self, checked: bool) -> None:
+        self.state.set_object_selected(self.key, checked)
+        self.changed.emit()
+
     def _toggle_cable(self, checked: bool) -> None:
         self.state.set_cable_selected(self.key, checked)
         self.changed.emit()
@@ -562,8 +624,10 @@ class DetailPanel(QScrollArea):
         if item.category == CREATE:
             self._add_create_choices(item)
         self._add_fields(item)
+        self._add_details(key)
 
         self._add_ports(item)
+        self._add_sfp_items(key)
         self._add_disks(key)
 
         if item.row.suggested_device_types and item.category == CREATE:
@@ -593,6 +657,57 @@ class DetailPanel(QScrollArea):
         actions.addStretch()
         self.layout_.addLayout(actions)
         self.layout_.addStretch()
+
+    def _add_details(self, key: str) -> None:
+        """Management IP and firmware, display only (written in later slices)."""
+        rows = self.state.details_for(key)
+        if not rows:
+            return
+        self.layout_.addWidget(label("Device details", "subheading"))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(6)
+        for column, text in enumerate(("Field", "NetBox", "UniFi")):
+            grid.addWidget(label(text, "caption"), 0, column)
+        for row_index, (title, target, source) in enumerate(rows, start=1):
+            grid.addWidget(label(title), row_index, 0)
+            grid.addWidget(label(target or "-", "secondary"), row_index, 1)
+            value = label(source or "-")
+            value.setObjectName(f"detail_{title.replace(' ', '_').lower()}")
+            grid.addWidget(value, row_index, 2)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        self.layout_.addLayout(grid)
+        row = self.state.mgmt_ip_row_for(key)
+        plan = self.state.mgmt_ip_plan
+        if row is None:
+            text = (plan.blocker if plan is not None else "") or (
+                "Match this device in NetBox and refresh to plan its management IP."
+            )
+            self.layout_.addWidget(label(text, "caption"))
+            return
+        outcome = self.state.outcomes.get(row.key)
+        if row.selectable:
+            box = QCheckBox(f"Primary IPv4 {row.address}: {row.describe()}")
+            box.setObjectName("mgmtIp")
+            box.setChecked(row.selected)
+            box.toggled.connect(
+                lambda checked, k=row.key: self._toggle_mgmt_ip(k, checked)
+            )
+            self.layout_.addWidget(box)
+        else:
+            text = {"in_sync": "in sync", "conflict": "conflict"}.get(
+                row.action, "not written"
+            )
+            self.layout_.addWidget(label(f"Primary IPv4: {text}", "secondary"))
+        if row.notes:
+            self.layout_.addWidget(label("\n".join(row.notes), "caption"))
+        if outcome is not None:
+            self.layout_.addWidget(label(outcome.message, "caption"))
+
+    def _toggle_mgmt_ip(self, key: str, checked: bool) -> None:
+        self.state.set_mgmt_ip_selected(key, checked)
+        self.changed.emit()
 
     def _add_disks(self, key: str) -> None:
         """Drive bays of a UNAS, display only."""
@@ -663,6 +778,58 @@ class DetailPanel(QScrollArea):
                 "caption",
             )
         )
+
+    def _add_sfp_items(self, key: str) -> None:
+        """Selectable inventory items for the SFP modules of a matched device."""
+        rows = self.state.sfp_rows_for(key)
+        plan = self.state.sfp_plan
+        if not rows:
+            if plan is not None and plan.blocker and self.state.sfps_for(key):
+                self.layout_.addWidget(label("SFP modules", "subheading"))
+                self.layout_.addWidget(label(plan.blocker, "caption"))
+            return
+        self.layout_.addWidget(label("SFP modules (inventory items)", "subheading"))
+        for row in rows:
+            outcome = self.state.outcomes.get(row.key)
+            part = row.sfp.part if row.sfp is not None else ""
+            if row.selectable:
+                verb = "Create" if row.action == "create" else "Update"
+                fields = ", ".join(field for field, _, _ in row.changes())
+                box = QCheckBox(
+                    f"{verb} {row.name} {part} ({fields})".replace("  ", " ")
+                )
+                box.setObjectName(f"sfp_{row.port_idx}")
+                box.setChecked(row.selected)
+                box.toggled.connect(
+                    lambda checked, k=row.key: self._toggle_sfp(k, checked)
+                )
+                self.layout_.addWidget(box)
+            else:
+                text = {
+                    "in_sync": "in sync",
+                    "conflict": "conflict",
+                    "reference": "kept",
+                    "note": "not written",
+                }.get(row.action, row.action)
+                self.layout_.addWidget(label(f"{row.name}: {text}", "secondary"))
+            if row.notes:
+                self.layout_.addWidget(label("\n".join(row.notes), "caption"))
+            if outcome is not None:
+                self.layout_.addWidget(
+                    label(f"{row.name}: {outcome.message}", "caption")
+                )
+        self.layout_.addWidget(
+            label(
+                "Modules are written as inventory items linked to their interface: "
+                "part ID, serial, description and a matching manufacturer. Items "
+                "are never deleted.",
+                "caption",
+            )
+        )
+
+    def _toggle_sfp(self, key: str, checked: bool) -> None:
+        self.state.set_sfp_selected(key, checked)
+        self.changed.emit()
 
     def _toggle_disk(self, key: str, checked: bool) -> None:
         self.state.set_disk_selected(key, checked)
@@ -770,6 +937,7 @@ class DetailPanel(QScrollArea):
         grid.setColumnStretch(2, 1)
         grid.setColumnStretch(3 if item.category != CREATE else 2, 1)
         self.layout_.addLayout(grid)
+        self._add_custom_field(item)
         if item.category == UPDATE:
             self.layout_.addWidget(
                 label(
@@ -778,6 +946,30 @@ class DetailPanel(QScrollArea):
                     "caption",
                 )
             )
+
+    def _add_custom_field(self, item: ReviewRow) -> None:
+        """The firmware Custom Field: planned create, conflict or missing access."""
+        plan = self.state.custom_field_plan
+        if plan is None or not item.source_value("firmware"):
+            return
+        if item.category not in (CREATE, UPDATE) and plan.action != CONFLICT_FIELD:
+            return
+        if plan.selectable:
+            box = QCheckBox("Create the NetBox Custom Field 'firmware' (text, devices)")
+            box.setObjectName("customFieldCreate")
+            box.setChecked(plan.selected)
+            box.setToolTip(
+                "Created once before any device write. Without it no firmware "
+                "value is written; unchecking it also unchecks firmware."
+            )
+            box.toggled.connect(self._toggle_custom_field)
+            self.layout_.addWidget(box)
+        elif plan.action != "present":
+            self.layout_.addWidget(label(plan.message, "caption"))
+
+    def _toggle_custom_field(self, checked: bool) -> None:
+        self.state.set_custom_field_selected(checked)
+        self.changed.emit()
 
     def _add_ports(self, item: ReviewRow) -> None:
         matches = self.state.ports_for(item.key)
@@ -793,6 +985,7 @@ class DetailPanel(QScrollArea):
         if item.category == CREATE:
             summary += " NetBox adds interfaces from the device type on create."
         configs = self.state.port_configs_for(item.key)
+        sfps = self.state.sfps_for(item.key)
         if configs:
             summary += " Configuration is read from the internal UniFi API."
         elif self.state.port_config_error:
@@ -810,12 +1003,18 @@ class DetailPanel(QScrollArea):
         for row, match in enumerate(matches, start=1):
             port, interface = match.port, match.interface
             config = configs.get(port.idx) if port else None
+            sfp = sfps.get(port.idx) if port else None
             match_notes = list(match.notes) + list(config.notes if config else ())
+            port_type = (
+                _port_type(port) if port else (interface.type if interface else "")
+            )
+            if sfp is not None and sfp.part:
+                port_type += f" \N{MIDDLE DOT} {sfp.part}"
             values = (
                 str(port.idx) if port else "-",
                 config.name if config else "",
                 interface.name if interface else "-",
-                _port_type(port) if port else (interface.type if interface else ""),
+                port_type,
                 _port_config(config),
                 _port_link(port) if port else "",
                 _port_poe(port) if port else "",
@@ -827,6 +1026,8 @@ class DetailPanel(QScrollArea):
                 tips = list(match_notes)
                 if column == 4 and config is not None and config.profile:
                     tips.insert(0, f"Port profile: {config.profile}")
+                if column == 3 and sfp is not None:
+                    tips.insert(0, _sfp_text(sfp))
                 if tips:
                     cell.setToolTip("\n".join(tips))
                 grid.addWidget(cell, row, column)
@@ -874,8 +1075,23 @@ class ConfirmDialog(QDialog):
         interface_plan: InterfacePlan | None = None,
         cable_plan: CablePlan | None = None,
         disk_plan=None,
+        custom_field_plan=None,
+        mgmt_ip_plan=None,
+        sfp_plan=None,
+        site_detail_plan=None,
     ) -> None:
         super().__init__(parent)
+        field_ops = custom_field_plan.operation_count if custom_field_plan else 0
+        detail_counts = (
+            {
+                kind: len(site_detail_plan.selected_rows((kind,)))
+                for kind in ("wlan", "range", "reservation")
+            }
+            if site_detail_plan is not None
+            else {}
+        )
+        ip_ops = mgmt_ip_plan.operation_count if mgmt_ip_plan else 0
+        sfp_ops = sfp_plan.operation_count if sfp_plan else 0
         creates = sum(
             op.operation_type == OperationType.CREATE_DEVICE for op in plan.operations
         )
@@ -885,7 +1101,16 @@ class ConfirmDialog(QDialog):
         cable_ops = cable_plan.operation_count if cable_plan else 0
         disk_ops = disk_plan.operation_count if disk_plan else 0
         network_ops = (
-            group_ops + vlan_ops + prefix_ops + interface_ops + cable_ops + disk_ops
+            group_ops
+            + vlan_ops
+            + prefix_ops
+            + interface_ops
+            + cable_ops
+            + disk_ops
+            + field_ops
+            + ip_ops
+            + sfp_ops
+            + sum(detail_counts.values())
         )
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
@@ -897,6 +1122,8 @@ class ConfirmDialog(QDialog):
         )
         layout.addWidget(label(heading, "heading"))
         parts = []
+        if field_ops:
+            parts.append("1 Custom Field (firmware)")
         if creates:
             parts.append(f"{creates} new device{'s' if creates != 1 else ''}")
         if updates:
@@ -913,8 +1140,19 @@ class ConfirmDialog(QDialog):
             )
         if cable_ops:
             parts.append(f"{cable_ops} cable{'s' if cable_ops != 1 else ''}")
+        if ip_ops:
+            parts.append(f"{ip_ops} management IP{'s' if ip_ops != 1 else ''}")
+        for kind, noun in (
+            ("wlan", "wireless LAN"),
+            ("range", "IP range"),
+            ("reservation", "reserved IP"),
+        ):
+            if count := detail_counts.get(kind, 0):
+                parts.append(f"{count} {noun}{'s' if count != 1 else ''}")
         if disk_ops:
             parts.append(f"{disk_ops} drive item{'s' if disk_ops != 1 else ''}")
+        if sfp_ops:
+            parts.append(f"{sfp_ops} SFP module{'s' if sfp_ops != 1 else ''}")
         summary = label(", ".join(parts) or "No changes", "subheading")
         summary.setObjectName("confirmSummary")
         layout.addWidget(summary)
@@ -990,6 +1228,20 @@ def _port_config(config) -> str:
         text = f"off, {text}"
     if config.lag_id is not None:
         text += f", LAG {config.lag_id}"
+    if config.speed_mbps is not None:
+        duplex = " half" if config.full_duplex is False else ""
+        text += f", fixed {_short_speed(config.speed_mbps)}{duplex}"
+    return text
+
+
+def _sfp_text(sfp) -> str:
+    """Module description for a tooltip, e.g. 'SFP module UBNT UF-MM-10G'."""
+    parts = [sfp.vendor, sfp.part]
+    text = "SFP module " + " ".join(p for p in parts if p)
+    if sfp.compliance:
+        text += f" ({sfp.compliance})"
+    if sfp.serial:
+        text += f", serial {sfp.serial}"
     return text
 
 
@@ -1428,6 +1680,159 @@ class InterfaceTableModel(QAbstractTableModel):
             return False
         checked = Qt.CheckState(value) == Qt.CheckState.Checked
         self.state.set_interface_selected(row.key, "all", checked)
+        self.refresh_rows()
+        self.selection_changed.emit()
+        return True
+
+
+OBJECT_HEADERS = ("", "Kind", "Name", "Change", "Status")
+OBJECT_CHANGE_LABELS = {
+    "create": ("New", "accent"),
+    "update": ("Changed", "warning"),
+    "conflict": ("Conflict", "danger"),
+    "in_sync": ("In sync", "success"),
+    "note": ("Note", "neutral"),
+    "reference": ("Reference", "neutral"),
+}
+OBJECT_ACTION_TEXT = {
+    "in_sync": "NetBox already has these values.",
+    "conflict": "Not written; see the notes above.",
+    "note": "Not written; see the notes above.",
+    "reference": "Shown for reference; nothing is written.",
+}
+
+
+def object_status(row: ObjectRow) -> tuple[str, str]:
+    outcome = row.outcome
+    if outcome is not None:
+        if outcome.status == "failed" or outcome.verification == "mismatch":
+            return "Failed", "danger"
+        if outcome.status == "success":
+            if outcome.verification == "verified":
+                return "Verified", "success"
+            return "Written", "success"
+        return "Skipped", "warning"
+    if row.action == "conflict":
+        return (row.notes[-1] if row.notes else "Conflict"), "danger"
+    if row.selectable and not row.selected:
+        return "Not selected", "neutral"
+    if row.selected:
+        return "Ready", "success"
+    return "", "neutral"
+
+
+class ObjectTableModel(QAbstractTableModel):
+    """Addresses, Wireless or Modules list, chosen with ``set_category``."""
+
+    selection_changed = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.state = ReviewState()
+        self.category = ""
+        self.search = ""
+        self.items: tuple[ObjectRow, ...] = ()
+
+    def set_state(self, state: ReviewState) -> None:
+        self.state = state
+        self.reload()
+
+    def set_category(self, category: str) -> None:
+        self.category = category
+        self.reload()
+
+    def set_filter(self, search: str) -> None:
+        self.search = search
+        self.reload()
+
+    def reload(self) -> None:
+        self.beginResetModel()
+        self.items = self.state.object_rows(self.category, self.search)
+        self.endResetModel()
+
+    def refresh_rows(self) -> None:
+        keys = [row.key for row in self.items]
+        fresh = {row.key: row for row in self.state.object_rows(self.category)}
+        self.items = tuple(fresh[key] for key in keys if key in fresh)
+        if self.items:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self.items) - 1, len(OBJECT_HEADERS) - 1),
+            )
+
+    def key_at(self, row: int) -> str:
+        return self.items[row].key if 0 <= row < len(self.items) else ""
+
+    def row_of(self, key: str) -> int:
+        return next((i for i, row in enumerate(self.items) if row.key == key), -1)
+
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(self.items)
+
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT) -> int:
+        return 0 if parent.isValid() else len(OBJECT_HEADERS)
+
+    def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+        ):
+            return OBJECT_HEADERS[section]
+        return None
+
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        row = self.items[index.row()] if 0 <= index.row() < len(self.items) else None
+        if index.column() == 0 and row is not None and row.selectable:
+            base |= Qt.ItemFlag.ItemIsUserCheckable
+        return base
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role=Qt.ItemDataRole.DisplayRole,
+    ):
+        if not index.isValid():
+            return None
+        row = self.items[index.row()]
+        column = index.column()
+        if role == KEY_ROLE:
+            return row.key
+        if column == 0 and role == Qt.ItemDataRole.CheckStateRole:
+            if not row.selectable:
+                return None
+            return Qt.CheckState.Checked if row.selected else Qt.CheckState.Unchecked
+        if role == Qt.ItemDataRole.DisplayRole:
+            if column == 1:
+                return row.kind
+            if column == 2:
+                return row.name
+            if column == 3:
+                return OBJECT_CHANGE_LABELS.get(row.action, ("", ""))[0]
+            if column == 4:
+                return object_status(row)[0]
+        if role == TONE_ROLE:
+            if column == 3:
+                return OBJECT_CHANGE_LABELS.get(row.action, ("", "neutral"))[1]
+            if column == 4:
+                return object_status(row)[1]
+        if role == Qt.ItemDataRole.ToolTipRole and row.notes:
+            return "\n".join(row.notes)
+        return None
+
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value,
+        role=Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        if index.column() != 0 or role != Qt.ItemDataRole.CheckStateRole:
+            return False
+        row = self.items[index.row()]
+        if not row.selectable:
+            return False
+        checked = Qt.CheckState(value) == Qt.CheckState.Checked
+        self.state.set_object_selected(row.key, checked)
         self.refresh_rows()
         self.selection_changed.emit()
         return True

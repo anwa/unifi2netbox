@@ -76,6 +76,46 @@ The official API therefore leaves a demonstrated coverage gap for M6. Internal
 endpoints are used read-only, gated to the validated 11.0 series and covered by
 version-specific fixtures; see the M6 decision in `IMPLEMENTATION_PLAN.md`.
 
+## Extended UniFi Details (M11)
+
+Read-only probe on 2026-11-15 against Network 11.0.99, assistant-executed on
+the developer workstation with the local API key (status codes and counts
+only): the internal endpoints used by the earlier script project still answer
+(`stat/sysinfo`, `stat/device`, `stat/sta`, `rest/user`, `rest/networkconf`,
+`rest/portconf`, `rest/wlanconf`, `rest/firewallgroup`, `rest/portforward`,
+`stat/rogueap`, `stat/ccode`: HTTP 200; `rest/firewallrule`, `rest/routing`,
+`rest/dynamicdns`: empty; `rest/tag`: HTTP 400). No login with user name and
+password is needed.
+
+| Source | Fields kept (allow-list) |
+| --- | --- |
+| Official `sites/{id}/devices` | `ipAddress` (IPv4 only), `firmwareVersion` |
+| Internal `stat/device` `port_table` | `sfp_found`, `sfp_vendor`, `sfp_part`, `sfp_serial`, `sfp_compliance`, `sfp_rev` |
+| Internal `stat/device` `port_overrides`, `rest/portconf` | `autoneg`, `speed`, `full_duplex` (fixed speed only when `autoneg` is false; the override wins over the profile) |
+| Internal `rest/networkconf` | `dhcpd_enabled`, `dhcpd_start`, `dhcpd_stop` plus name, purpose and VLAN |
+| Internal `rest/wlanconf` | `_id`, `name` (SSID), `enabled`, `security`, `wpa_mode`, `wpa_enc`, `networkconf_id`, `hide_ssid`, `is_guest`; never `x_passphrase` or any other `x_*` field |
+| Internal `rest/user` | only rows with `use_fixedip`: `mac`, `fixed_ip`, `name`, `hostname`, `local_dns_record` (when `local_dns_record_enabled`) |
+
+Live result (application 1.0.1): 19 of 19 devices with IP and firmware, 18
+ports with a fixed speed (all set by port overrides; both profiles use
+auto-negotiation), 23 SFP modules with serial, 15 DHCP ranges, 6 wireless LANs
+(WPA2 personal and enterprise, all with a network) and 139 reservations (3
+with a local DNS record; only 54 carry `network_id`, so reservations are
+related to networks by subnet). Notes: the `port_table` `speed` is the live
+link speed and `autoneg` there also reads false for some SFP+ ports without a
+configured speed, so neither is used as configuration. `poe_caps` is an
+undocumented bit mask; PoE capability is taken from the official
+`poe.standard` instead.
+
+NetBox mapping of the site-level details (slice 6, NetBox 4.7.3; wireless LAN
+scope needs NetBox 4.2 or later):
+
+| UniFi | NetBox object | Fields |
+| --- | --- | --- |
+| `rest/wlanconf` | `wireless/wireless-lans` | `ssid`; `status` active/disabled; `auth_type` from `security` (`open`, `wep`, `wpapsk` = `wpa-personal`, `wpaeap` = `wpa-enterprise`); `auth_cipher` from `wpa_enc` (`ccmp`/`gcmp` = `aes`, `tkip`, `auto`); `vlan` from the site VLAN group; `scope_type`/`scope_id` the site |
+| `rest/networkconf` DHCP pool | `ipam/ip-ranges` | `start_address`/`end_address` with the network prefix length, `status` active, `description` `DHCP <network>` |
+| `rest/user` fixed IP | `ipam/ip-addresses` | `address` with the prefix length of the containing UniFi network, `status` reserved, `dns_name`, `description`; never assigned |
+
 ## UniFi Protect Connection Gate (M7)
 
 Protect runs on its own console with its own local API key; the Network

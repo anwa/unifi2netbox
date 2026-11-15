@@ -79,10 +79,13 @@ _FIELD_SPECS: tuple[tuple[str, FieldCategory], ...] = (
     ("serial", FieldCategory.CONFIGURED),
     ("site", FieldCategory.CONFIGURED),
     ("mac_address", FieldCategory.OPERATIONAL),
+    ("firmware", FieldCategory.OPERATIONAL),
 )
 
 # Fields the update executor can write; keep in sync with write_execute.
 _UPDATE_WRITABLE_FIELDS: frozenset[str] = frozenset({"name", "serial", "site"})
+# Written into the NetBox Custom Field "firmware" when it exists or is planned.
+FIRMWARE = "firmware"
 
 _UNSUPPORTED_FIELDS: tuple[str, ...] = (
     "profile",
@@ -101,8 +104,13 @@ def build_difference_preview(
     result: DeduplicationResult,
     *,
     netbox_sites: frozenset[str] | None = None,
+    firmware_writable: bool = False,
 ) -> DifferencePreview:
-    """Build the preview; ``netbox_sites`` enables the unknown-site guard."""
+    """Build the preview; ``netbox_sites`` enables the unknown-site guard.
+
+    ``firmware_writable`` says whether the NetBox Custom Field ``firmware``
+    exists or is planned; otherwise firmware is shown but not selectable.
+    """
     netbox_by_id = _device_index(netbox_snapshot)
     unifi_by_id = _device_index(unifi_snapshot)
 
@@ -113,7 +121,7 @@ def build_difference_preview(
         target = netbox_by_id.get(pair.netbox_observation_id)
         if source is None or target is None:
             continue
-        fields = _field_previews(source, target, netbox_sites)
+        fields = _field_previews(source, target, netbox_sites, firmware_writable)
         selectable = any(field.selectable for field in fields)
         selected = any(field.selected for field in fields)
         devices.append(
@@ -137,7 +145,7 @@ def build_difference_preview(
         source = unifi_by_id.get(observation_id)
         if source is None:
             continue
-        fields = _create_fields(source)
+        fields = _create_fields(source, firmware_writable)
         devices.append(
             DevicePreview(
                 device_key=f"create:{observation_id}",
@@ -327,13 +335,16 @@ def _field_previews(
     source: InventoryDevice,
     target: InventoryDevice,
     netbox_sites: frozenset[str] | None = None,
+    firmware_writable: bool = False,
 ) -> tuple[FieldPreview, ...]:
     previews: list[FieldPreview] = []
     for field_name, category in _FIELD_SPECS:
         source_value = _value(source, field_name)
         target_value = _value(target, field_name)
         changed = source_value != target_value
-        writable = field_name in _UPDATE_WRITABLE_FIELDS
+        writable = field_name in _UPDATE_WRITABLE_FIELDS or (
+            field_name == FIRMWARE and firmware_writable
+        )
         # Empty source values never clear NetBox; non-writable fields stay visible.
         unknown_site = (
             field_name == "site"
@@ -342,8 +353,13 @@ def _field_previews(
             and source_value not in netbox_sites
         )
         selectable = changed and writable and bool(source_value) and not unknown_site
-        provenance = f"UniFi.{field_name} -> NetBox.{field_name}"
-        if changed and not writable:
+        provenance = _provenance(field_name)
+        if changed and not writable and field_name == FIRMWARE:
+            provenance += (
+                " (preview only; the NetBox Custom Field 'firmware' is missing, "
+                "incompatible or not selected)"
+            )
+        elif changed and not writable:
             provenance += " (preview only; updates do not write this field)"
         elif changed and not source_value:
             provenance += " (source empty; NetBox value is kept)"
@@ -366,10 +382,13 @@ def _field_previews(
     return tuple(previews)
 
 
-def _create_fields(source: InventoryDevice) -> tuple[FieldPreview, ...]:
+def _create_fields(
+    source: InventoryDevice, firmware_writable: bool = False
+) -> tuple[FieldPreview, ...]:
     previews: list[FieldPreview] = []
     for field_name, category in _FIELD_SPECS:
         source_value = _value(source, field_name)
+        selectable = field_name != FIRMWARE or firmware_writable
         previews.append(
             FieldPreview(
                 name=field_name,
@@ -378,9 +397,9 @@ def _create_fields(source: InventoryDevice) -> tuple[FieldPreview, ...]:
                 target_value="",
                 changed=bool(source_value),
                 supported=True,
-                provenance=f"UniFi.{field_name} -> NetBox.{field_name}",
-                selectable=True,
-                selected=bool(source_value),
+                provenance=_provenance(field_name),
+                selectable=selectable,
+                selected=selectable and bool(source_value),
             )
         )
     previews.extend(_unsupported_placeholders())
@@ -437,6 +456,11 @@ def _device_index(
 def _observation_id(source: InventorySource, device: InventoryDevice) -> str:
     key = device.source_id.strip() or device.name.strip() or "unnamed"
     return f"{source}:{key}"
+
+
+def _provenance(field_name: str) -> str:
+    target = "custom_fields.firmware" if field_name == FIRMWARE else field_name
+    return f"UniFi.{field_name} -> NetBox.{target}"
 
 
 def _value(device: InventoryDevice, field_name: str) -> str:
