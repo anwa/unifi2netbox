@@ -107,6 +107,15 @@ configured speed, so neither is used as configuration. `poe_caps` is an
 undocumented bit mask; PoE capability is taken from the official
 `poe.standard` instead.
 
+NetBox mapping of the site-level details (slice 6, NetBox 4.7.3; wireless LAN
+scope needs NetBox 4.2 or later):
+
+| UniFi | NetBox object | Fields |
+| --- | --- | --- |
+| `rest/wlanconf` | `wireless/wireless-lans` | `ssid`; `status` active/disabled; `auth_type` from `security` (`open`, `wep`, `wpapsk` = `wpa-personal`, `wpaeap` = `wpa-enterprise`); `auth_cipher` from `wpa_enc` (`ccmp`/`gcmp` = `aes`, `tkip`, `auto`); `vlan` from the site VLAN group; `scope_type`/`scope_id` the site |
+| `rest/networkconf` DHCP pool | `ipam/ip-ranges` | `start_address`/`end_address` with the network prefix length, `status` active, `description` `DHCP <network>` |
+| `rest/user` fixed IP | `ipam/ip-addresses` | `address` with the prefix length of the containing UniFi network, `status` reserved, `dns_name`, `description`; never assigned |
+
 ## UniFi Protect Connection Gate (M7)
 
 Protect runs on its own console with its own local API key; the Network

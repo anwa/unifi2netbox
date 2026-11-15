@@ -831,3 +831,11 @@ interface `SFP+ 7`, read back as verified; a refreshed preview showed
 exactly one item of that name, in sync, the other 22 modules still pending,
 and a second apply had nothing to write. The run is in the write history;
 the item stays in NetBox as approved.
+
+On 2026-11-15 the assistant ran a live dry run of M11 slice 6 (application
+1.0.6 working tree on top of commit ec93204) with snapshots in a scratch
+folder and no write history: 6 wireless LANs (all with their VLAN from the
+site VLAN group), 15 DHCP IP ranges and 139 reserved IP addresses (3 with a
+DNS name) were planned as preselected creates; NetBox 4.7.3 had none of
+them. The dry run passed the UniFi and NetBox re-read checks for all 160 and
+wrote nothing.

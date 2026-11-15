@@ -165,6 +165,8 @@ class InventoryWirelessLan:
     auth_type: str = ""
     auth_cipher: str = ""
     description: str = ""
+    scope_type: str = ""
+    scope_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -514,6 +516,8 @@ def _normalize_netbox_wireless_lan(
         auth_type=_choice_value(row.get("auth_type")),
         auth_cipher=_choice_value(row.get("auth_cipher")),
         description=_text(row.get("description")),
+        scope_type=_text(row.get("scope_type")),
+        scope_id=_identifier(row.get("scope_id")),
     )
 
 

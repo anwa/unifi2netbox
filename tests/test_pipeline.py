@@ -401,6 +401,12 @@ def test_run_write_execution_runs_networks_first_and_records_them(
         return ()
 
     monkeypatch.setattr(pipeline, "execute_cable_plan", fake_cables)
+
+    def fake_details(detail_plan, backend, *, kinds, **kwargs):
+        order.append("+".join(kinds))
+        return ()
+
+    monkeypatch.setattr(pipeline, "execute_site_detail_plan", fake_details)
     monkeypatch.setattr(pipeline, "execute_write_plan", fake_execute)
     path = tmp_path / "write-journal.sqlite3"
 
@@ -418,7 +424,14 @@ def test_run_write_execution_runs_networks_first_and_records_them(
         network_plan=object(),
     )
 
-    assert order == ["networks", "interfaces", "cables", "devices"]
+    assert order == [
+        "networks",
+        "wlan+range",
+        "interfaces",
+        "cables",
+        "devices",
+        "reservation",
+    ]
     assert "1 success" in report.details and "1 verified" in report.details
     assert report.outcomes[0].device_key == "network:n1"
     stored = JournalStore(path).recent()[0].outcomes[0]

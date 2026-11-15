@@ -52,6 +52,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	modules are kept. The detail panel lists them with checkboxes; they are
 	written last with a UniFi module re-read. Drive items and SFP items now
 	share one inventory-item writer.
+- M11 slice 6 (pipeline only; the review window offers these rows from slice
+	7 on): wireless LANs (SSID, status, authentication type and cipher, the
+	VLAN of the site VLAN group, site scope; never a passphrase; disabled
+	WLANs not preselected), DHCP pools as IP ranges (`DHCP <network>`, prefix
+	length of the network) and fixed client IPs as unassigned reserved IP
+	addresses (DNS name only from an enabled local DNS record, description
+	from the client name or hostname). Existing objects are only completed:
+	authentication and status follow UniFi, empty fields are filled, a
+	different VLAN, scope, DNS name or reservation description is a
+	conflict, overlapping ranges and duplicates are conflicts. Wireless LANs
+	and ranges are written after networks, reservations after management
+	IPs, with UniFi and NetBox re-reads and read-back. Inventory items and
+	the new objects share one object writer.
 
 ## v1.0.0
 

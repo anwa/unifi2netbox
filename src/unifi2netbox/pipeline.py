@@ -73,6 +73,17 @@ from unifi2netbox.preview import (
 from unifi2netbox.refresh import refresh_snapshots
 from unifi2netbox.sfp import SfpPlan, build_sfp_plan
 from unifi2netbox.sfp_execute import execute_sfp_plan
+from unifi2netbox.site_details import (
+    RANGE,
+    RESERVATION,
+    WLAN,
+    SiteDetailPlan,
+    build_site_detail_plan,
+)
+from unifi2netbox.site_details_execute import (
+    execute_site_detail_plan,
+    source_items,
+)
 from unifi2netbox.snapshots import SnapshotStore
 from unifi2netbox.write_execute import (
     RequestsNetBoxWriteBackend,
@@ -146,6 +157,7 @@ class InventoryPreviewResult:
     custom_field_plan: CustomFieldPlan | None = None
     mgmt_ip_plan: MgmtIpPlan | None = None
     sfp_plan: SfpPlan | None = None
+    site_detail_plan: SiteDetailPlan | None = None
 
 
 @dataclass(frozen=True)
@@ -375,6 +387,23 @@ def build_inventory_preview(
             netbox_snapshot.manufacturers,
             item_error=netbox_snapshot.inventory_item_error,
         ),
+        site_detail_plan=build_site_detail_plan(
+            wlans=mapped_unifi.wlans,
+            dhcp_ranges=mapped_unifi.dhcp_ranges,
+            reservations=mapped_unifi.reservations,
+            networks=mapped_unifi.networks,
+            sites=netbox_snapshot.sites,
+            vlan_groups=netbox_snapshot.vlan_groups,
+            vlans=netbox_snapshot.vlans,
+            wireless_lans=netbox_snapshot.wireless_lans,
+            ip_ranges=netbox_snapshot.ip_ranges,
+            ip_addresses=netbox_snapshot.ip_addresses,
+            site_name=netbox_site_name,
+            client_error=mapped_unifi.client_error,
+            ipam_error=netbox_snapshot.ipam_error,
+            address_error=netbox_snapshot.address_error,
+            wireless_error=netbox_snapshot.wireless_error,
+        ),
     )
 
 
@@ -557,16 +586,18 @@ def run_write_execution(
     custom_field_plan: CustomFieldPlan | None = None,
     mgmt_ip_plan: MgmtIpPlan | None = None,
     sfp_plan: SfpPlan | None = None,
+    site_detail_plan: SiteDetailPlan | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
     With ``unifi_config`` the UniFi inventory is re-read once first; devices and
     networks whose UniFi values changed since the preview are skipped. The
     Custom Field ``firmware`` is created first when selected, then network
-    writes (VLAN group, VLANs, prefixes), then interface configuration and
-    cables of matched devices, then device writes (firmware only when the
-    field is available), then management IPs (primary IPv4), then inventory
-    items: drive bays of matched UNAS devices and SFP modules.
+    writes (VLAN group, VLANs, prefixes), wireless LANs and DHCP IP ranges,
+    then interface configuration and cables of matched devices, then device
+    writes (firmware only when the field is available), then management IPs
+    (primary IPv4) and reserved IP addresses, then inventory items: drive bays
+    of matched UNAS devices and SFP modules.
     """
     started = _now()
     snapshot, source_error = (
@@ -596,6 +627,11 @@ def run_write_execution(
         if snapshot is not None
         else None
     )
+    fresh_details = (
+        source_items(snapshot.wlans, snapshot.dhcp_ranges, snapshot.reservations)
+        if snapshot is not None
+        else None
+    )
     backend = RequestsNetBoxWriteBackend(netbox_config)
     field_outcomes, firmware_writable = execute_custom_field_plan(
         custom_field_plan, backend, dry_run=dry_run
@@ -607,6 +643,14 @@ def run_write_execution(
             backend,
             dry_run=dry_run,
             source_networks=source_networks,
+            source_error=source_error,
+        )
+        + execute_site_detail_plan(
+            site_detail_plan,
+            backend,
+            kinds=(WLAN, RANGE),
+            dry_run=dry_run,
+            source_items=fresh_details,
             source_error=source_error,
         )
         + execute_interface_plan(
@@ -648,6 +692,14 @@ def run_write_execution(
         source_devices=(
             {d.source_id: d for d in snapshot.devices} if snapshot is not None else None
         ),
+        source_error=source_error,
+    )
+    network_outcomes += execute_site_detail_plan(
+        site_detail_plan,
+        backend,
+        kinds=(RESERVATION,),
+        dry_run=dry_run,
+        source_items=fresh_details,
         source_error=source_error,
     )
     network_outcomes += execute_disk_plan(
