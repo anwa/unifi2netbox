@@ -116,8 +116,8 @@ This is not a substitute for live NetBox acceptance on the target PC.
 ## Linux Packages
 
 Linux packages are built on Ubuntu, normally by the **Packages** GitHub Actions
-workflow (`.github/workflows/package.yml`, on pushes to `main`, this
-milestone branch and `v*` tags, or manually). Locally on Ubuntu with Python
+workflow (`.github/workflows/package.yml`, on pushes to `main` and `v*` tags,
+or manually). Locally on Ubuntu with Python
 3.15 in an activated `.venv`:
 
 ```bash
