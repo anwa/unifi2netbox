@@ -228,3 +228,33 @@ def test_draft_without_unifi_ports_or_specs():
     assert dump_yaml(plain).startswith(
         "---\nmanufacturer: Ubiquiti\nmodel: UA Intercom\n"
     )
+
+
+def test_single_port_without_count_and_mbe_speed():
+    camera = page(
+        "uvc-g5-bullet",
+        "UVC-G5-Bullet",
+        "G5 Bullet",
+        [
+            text("Networking Interface", "10/100 MbE RJ45 port"),
+            text("Power Method", "PoE"),
+        ],
+        category="physical-security",
+    )
+    spec = parse_page(camera, "u")
+
+    assert [(p.count, p.kind, p.speed_mbps) for p in spec.ports] == [(1, "RJ45", 100)]
+    device = InventoryDevice("c", "Cam", model="UVC G5 Bullet", manufacturer="Ubiquiti")
+    doc, _ = draft_from_unifi(device, (), spec)
+    assert doc["interfaces"] == [
+        {"name": "eth0", "type": "100base-tx", "poe_mode": "pd"}
+    ]
+
+
+def test_draft_without_manufacturer_asks_for_it():
+    doc, notes = draft_from_unifi(
+        InventoryDevice("p", "Cam", model="CAM-PT2"), (), None
+    )
+
+    assert doc["manufacturer"] == "" and doc["slug"] == ""
+    assert notes[0] == "UniFi reports no manufacturer: enter it before saving."

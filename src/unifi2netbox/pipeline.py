@@ -28,6 +28,7 @@ from unifi2netbox.custom_fields import (
     execute_custom_field_plan,
 )
 from unifi2netbox.details import InventorySfp
+from unifi2netbox.devicetype_import import TypeImportPlan, execute_import_plan
 from unifi2netbox.disk_execute import execute_disk_plan
 from unifi2netbox.disks import DiskPlan, build_disk_plan
 from unifi2netbox.interface_execute import execute_interface_plan
@@ -42,6 +43,7 @@ from unifi2netbox.inventory import (
     InventoryDisk,
     InventoryError,
     InventoryInterface,
+    InventoryManufacturer,
     InventoryPort,
     InventorySnapshot,
     InventorySource,
@@ -148,6 +150,7 @@ class InventoryPreviewResult:
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
     # Full NetBox type records (part numbers) for the type picker.
     netbox_type_records: tuple[InventoryDeviceType, ...] = ()
+    netbox_manufacturers: tuple[InventoryManufacturer, ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
     netbox_sites: tuple[str, ...] = ()
     netbox_device_statuses: tuple[str, ...] = ()
@@ -368,6 +371,7 @@ def build_inventory_preview(
         drive_status=drive_note,
         netbox_device_types=_device_type_catalog(netbox_snapshot),
         netbox_type_records=netbox_snapshot.device_types,
+        netbox_manufacturers=netbox_snapshot.manufacturers,
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),
         netbox_device_statuses=tuple(
@@ -591,6 +595,7 @@ def run_write_execution(
     mgmt_ip_plan: MgmtIpPlan | None = None,
     sfp_plan: SfpPlan | None = None,
     site_detail_plan: SiteDetailPlan | None = None,
+    type_import_plan: TypeImportPlan | None = None,
 ) -> WriteExecutionReport:
     """Execute approved network and device writes and summarize them.
 
@@ -640,6 +645,11 @@ def run_write_execution(
     field_outcomes, firmware_writable = execute_custom_field_plan(
         custom_field_plan, backend, dry_run=dry_run
     )
+    type_outcomes, imported_types = execute_import_plan(
+        type_import_plan, backend, dry_run=dry_run
+    )
+    field_outcomes += type_outcomes
+    device_type_overrides = {**device_type_overrides, **imported_types}
     network_outcomes = (
         field_outcomes
         + execute_network_plan(

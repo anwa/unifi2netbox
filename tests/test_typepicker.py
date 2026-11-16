@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt, QThreadPool
-from PySide6.QtWidgets import QDialog, QLabel, QPushButton
+from PySide6.QtWidgets import QCheckBox, QDialog, QLabel, QPushButton
 
 from unifi2netbox.devicetypes import LocalTypeStore, new_document
 from unifi2netbox.gui_typepicker import DeviceTypePicker, candidate_line
@@ -176,3 +176,46 @@ def test_main_window_uses_the_picker_and_new_drafts(qtbot, tmp_path, monkeypatch
     assert window.review.type_by_key[key].startswith("local:")
     assert window.review.type_by_key[key].endswith("AC-Pro.yaml")
     assert window.pending_type_key == ""
+
+
+def test_imported_type_is_ready_counted_and_passed_to_the_job(
+    qtbot, tmp_path, monkeypatch
+):
+    from dataclasses import replace
+
+    from test_gui import fake_runner, preview_result, review_window, select_row
+
+    from unifi2netbox.inventory import InventoryManufacturer
+
+    result = replace(
+        preview_result(),
+        netbox_manufacturers=(InventoryManufacturer("41", "Ubiquiti"),),
+    )
+    window = review_window(qtbot, tmp_path, QThreadPool(), result)
+    key = select_row(window, "ap-2")
+    store = LocalTypeStore(tmp_path / "devicetype-library")
+    doc = new_document("Ubiquiti", "AC Pro Local")
+    doc["part_number"] = "UAP-AC-PRO-L"
+    doc["interfaces"] = [{"name": "eth0", "type": "1000base-t"}]
+    path = store.write(doc)
+
+    window.set_device_type_choice(key, from_document(doc, "local", str(path)))
+
+    assert not window.review.row(key).attention
+    box = window.detail.findChild(QCheckBox, "typeImport")
+    assert box is not None and box.isChecked()
+    assert (
+        "imported into NetBox on apply"
+        in window.detail.findChild(QLabel, "typeImportStatus").text()
+    )
+    assert "1 device type" in window.selection_label.text()
+
+    started = fake_runner(monkeypatch, window)
+    window.execute_plan_button.click()
+    plan = started["type_import_plan"]
+    assert plan.operation_count == 1 and plan.rows[0].device_keys == (key,)
+    assert key not in started["type"]
+
+    box.setChecked(False)
+    assert window.review.row(key).attention
+    assert "not selected" in window.review.row(key).note

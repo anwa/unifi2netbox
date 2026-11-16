@@ -84,8 +84,9 @@ from unifi2netbox.connections import (
     check_unifi_connection,
 )
 from unifi2netbox.custom_fields import select_custom_field
-from unifi2netbox.devicetypes import LocalTypeStore
+from unifi2netbox.devicetypes import LocalTypeStore, load_yaml
 from unifi2netbox.gui_devicetypes import DeviceTypeSettingsPage
+from unifi2netbox.gui_jobs import TaskRunner
 from unifi2netbox.gui_manual import ManualWindow
 from unifi2netbox.gui_review import (
     COL_CHANGE,
@@ -110,7 +111,13 @@ from unifi2netbox.gui_typeeditor import DeviceTypeEditor
 from unifi2netbox.gui_typepicker import DeviceTypePicker
 from unifi2netbox.inventory import InventoryDevice
 from unifi2netbox.journal_store import JOURNAL_FILENAME, JournalStore, JournalStoreError
-from unifi2netbox.library import LibraryCache, cache_folder, refresh_index
+from unifi2netbox.library import (
+    LibraryCache,
+    cache_folder,
+    fetch_text,
+    refresh_index,
+)
+from unifi2netbox.library import client as library_client
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
@@ -251,9 +258,11 @@ class WriteExecutionJob(QRunnable):
         mgmt_ip_plan=None,
         sfp_plan=None,
         site_detail_plan=None,
+        type_import_plan=None,
     ) -> None:
         super().__init__()
         self.site_detail_plan = site_detail_plan
+        self.type_import_plan = type_import_plan
         self.custom_field_plan = custom_field_plan
         self.mgmt_ip_plan = mgmt_ip_plan
         self.sfp_plan = sfp_plan
@@ -303,6 +312,7 @@ class WriteExecutionJob(QRunnable):
                 mgmt_ip_plan=self.mgmt_ip_plan,
                 sfp_plan=self.sfp_plan,
                 site_detail_plan=self.site_detail_plan,
+                type_import_plan=self.type_import_plan,
             )
         except Exception as error:
             result = WriteExecutionReport(
@@ -360,6 +370,7 @@ class WriteExecutionRunner(QObject):
         mgmt_ip_plan=None,
         sfp_plan=None,
         site_detail_plan=None,
+        type_import_plan=None,
     ) -> bool:
         if self.busy:
             return False
@@ -386,6 +397,7 @@ class WriteExecutionRunner(QObject):
             mgmt_ip_plan=mgmt_ip_plan,
             sfp_plan=sfp_plan,
             site_detail_plan=site_detail_plan,
+            type_import_plan=type_import_plan,
         )
         self.job.signals.finished.connect(self._finished)
         self.pool.start(self.job)
@@ -1309,6 +1321,8 @@ class MainWindow(QMainWindow):
         self.type_editor: DeviceTypeEditor | None = None
         # Create row waiting for a type saved in the editor (picker New).
         self.pending_type_key = ""
+        self.type_download = TaskRunner(pool, self)
+        self.type_download.finished.connect(self._type_downloaded)
         # Aliases to the NetBox connection, used by older callers and tests.
         self.runner = self.netbox.runner
         self.state = self.netbox.state
@@ -2082,6 +2096,7 @@ class MainWindow(QMainWindow):
         ip_ops = self.review.mgmt_ip_operation_count()
         sfp_ops = self.review.sfp_operation_count()
         detail_ops = self.review.site_detail_operation_count()
+        type_ops = self.review.type_import_count()
         operations = (
             (len(plan.operations) if plan is not None else 0)
             + network_ops
@@ -2092,12 +2107,15 @@ class MainWindow(QMainWindow):
             + ip_ops
             + sfp_ops
             + detail_ops
+            + type_ops
         )
         selectable = self.review.selectable_count()
         selected = self.review.selected_count()
         parts = []
         if field_ops:
             parts.append("1 Custom Field")
+        if type_ops:
+            parts.append(f"{type_ops} device type{'s' if type_ops != 1 else ''}")
         if selectable:
             parts.append(f"{selected} of {selectable} devices selected")
         if network_ops:
@@ -2299,6 +2317,10 @@ class MainWindow(QMainWindow):
         network_ops += sfp_plan.operation_count if sfp_plan else 0
         site_detail_plan = self.review.site_detail_plan if device_key is None else None
         network_ops += site_detail_plan.operation_count if site_detail_plan else 0
+        type_import_plan = self.review.type_import_plan(
+            [device_key] if device_key is not None else None
+        )
+        network_ops += type_import_plan.operation_count
         if plan is None or (not plan.operations and not network_ops):
             self.statusBar().showMessage(
                 "This device has nothing selected to write."
@@ -2321,6 +2343,7 @@ class MainWindow(QMainWindow):
             mgmt_ip_plan=mgmt_ip_plan,
             sfp_plan=sfp_plan,
             site_detail_plan=site_detail_plan,
+            type_import_plan=type_import_plan,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -2352,6 +2375,7 @@ class MainWindow(QMainWindow):
             mgmt_ip_plan=mgmt_ip_plan,
             sfp_plan=sfp_plan,
             site_detail_plan=site_detail_plan,
+            type_import_plan=type_import_plan,
         )
         self.update_check_action()
 
@@ -2397,6 +2421,11 @@ class MainWindow(QMainWindow):
         self.manual_window.raise_()
         self.manual_window.activateWindow()
 
+    def _hook_editor(self, editor: DeviceTypeEditor) -> None:
+        if not editor.property("typeSavedHooked"):
+            editor.saved.connect(self._type_saved)
+            editor.setProperty("typeSavedHooked", True)
+
     def type_store(self) -> LocalTypeStore:
         return LocalTypeStore(local_type_folder(self.device_types_config, self.path))
 
@@ -2416,6 +2445,7 @@ class MainWindow(QMainWindow):
         if editor is None:
             editor = DeviceTypeEditor(store, self.device_types_config, self.pool, self)
             self.type_editor = editor
+            self._hook_editor(editor)
         editor.show()
         editor.raise_()
         editor.activateWindow()
@@ -2474,14 +2504,57 @@ class MainWindow(QMainWindow):
 
     def set_device_type_choice(self, key: str, candidate: TypeCandidate) -> None:
         if candidate.source == "netbox":
-            value = candidate.netbox_id
-        else:
-            value = f"{candidate.source}:{candidate.path}"
-            name = candidate.model or candidate.part_number or candidate.path
-            self.review.type_labels[value] = (
-                f"{candidate.manufacturer} {name} "
-                f"({SOURCE_LABELS[candidate.source].lower()}, imported on apply)"
-            )
+            self._apply_type_choice(key, candidate.netbox_id)
+            return
+        value = f"{candidate.source}:{candidate.path}"
+        name = candidate.model or candidate.part_number or candidate.path
+        self.review.type_labels[value] = (
+            f"{candidate.manufacturer} {name} "
+            f"({SOURCE_LABELS[candidate.source].lower()}, imported on apply)"
+        )
+        if candidate.source == "local":
+            try:
+                self.review.import_docs[value] = self.type_store().read(
+                    Path(candidate.path)
+                )
+            except Exception as error:  # noqa: BLE001 - shown to the user
+                self.statusBar().showMessage(f"Cannot read the definition: {error}")
+                return
+            self._apply_type_choice(key, value)
+            return
+        entry = candidate.entry
+        cache = LibraryCache(cache_folder(self.path))
+        text = cache.cached_text(entry) if entry is not None else None
+        if text is not None:
+            self.review.import_docs[value] = load_yaml(text)
+            self._apply_type_choice(key, value)
+            return
+        if entry is None or self.type_download.busy:
+            return
+        config = self.device_types_config
+
+        def download():
+            with library_client() as http:
+                return fetch_text(config, entry, http, cache)
+
+        self.statusBar().showMessage(f"Downloading {entry.path} from the library...")
+        self._pending_download = (key, value)
+        self.type_download.start(download)
+
+    def _type_downloaded(self, result: object) -> None:
+        key, value = getattr(self, "_pending_download", ("", ""))
+        if isinstance(result, Exception) or not isinstance(result, str):
+            self.statusBar().showMessage(f"Library file not downloaded: {result}")
+            return
+        try:
+            self.review.import_docs[value] = load_yaml(result)
+        except ValueError as error:
+            self.statusBar().showMessage(f"The library file is invalid: {error}")
+            return
+        self.statusBar().showMessage("Library definition downloaded.")
+        self._apply_type_choice(key, value)
+
+    def _apply_type_choice(self, key: str, value: str) -> None:
         self.review.set_choice("type", key, value)
         self.on_detail_changed()
         self.show_detail(key)
@@ -2497,7 +2570,7 @@ class MainWindow(QMainWindow):
             item.source_value("name") or item.name,
             serial=item.source_value("serial"),
             model=item.source_value("model"),
-            manufacturer=item.source_value("manufacturer") or "Ubiquiti",
+            manufacturer=item.source_value("manufacturer"),
         )
         ports = [p for p in self.review.unifi_ports if p.device_id == unifi_id]
         doc, notes = draft_from_unifi(device, ports)
@@ -2505,9 +2578,7 @@ class MainWindow(QMainWindow):
         if not editor.open_new(doc, notes):
             return
         self.pending_type_key = key
-        if not editor.property("pendingTypeHooked"):
-            editor.saved.connect(self._type_saved)
-            editor.setProperty("pendingTypeHooked", True)
+        self._hook_editor(editor)
         if (
             self.device_types_config.use_techspecs
             and device.manufacturer.lower() == "ubiquiti"
@@ -2515,6 +2586,14 @@ class MainWindow(QMainWindow):
             editor.look_up_specs()
 
     def _type_saved(self, path: Path) -> None:
+        # Keep chosen local definitions current when they are edited.
+        value = f"local:{path}"
+        if value in self.review.import_docs:
+            try:
+                self.review.import_docs[value] = self.type_store().read(path)
+            except Exception:  # noqa: BLE001 - the previous version stays
+                pass
+            self.on_detail_changed()
         key = self.pending_type_key
         if not key or self.review.row(key) is None:
             return

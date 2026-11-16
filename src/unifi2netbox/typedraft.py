@@ -63,13 +63,17 @@ def draft_from_unifi(
     """A definition for ``device`` plus notes about guesses and differences."""
     notes: list[str] = []
     ports = sorted(ports, key=lambda p: p.idx)
-    manufacturer = device.manufacturer.strip() or "Ubiquiti"
+    manufacturer = device.manufacturer.strip()
+    if not manufacturer:
+        notes.append("UniFi reports no manufacturer: enter it before saving.")
     model = (spec.title if spec else "") or device.model.strip() or device.name
     part_number = (spec.part_number if spec else "") or "-".join(device.model.split())
     doc = CommentedMap()
     doc["manufacturer"] = manufacturer
     doc["model"] = model
-    doc["slug"] = device_slug(manufacturer, part_number or model)
+    doc["slug"] = (
+        device_slug(manufacturer, part_number or model) if manufacturer else ""
+    )
     if part_number:
         doc["part_number"] = part_number
     doc["u_height"] = (

@@ -49,8 +49,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	library** loads the library index; **New** opens the editor with a draft
 	from the device's UniFi data (and a techspecs lookup for Ubiquiti), and
 	the saved file becomes the device's type. Local and library types are
-	marked "imported on apply"; until the import step exists they block the
-	apply with a clear reason.
+	marked "imported on apply".
+- M12 slice 6: a chosen local or library definition is imported into NetBox
+	as a visible, selectable write step right after the Custom Field: the
+	device type and its component templates (interfaces, console and power
+	ports, outlets, module and device bays, inventory items) are created,
+	an existing slug or an equal manufacturer/model or part number is reused
+	instead, a missing manufacturer or front/rear ports block the import (the
+	app never creates manufacturers). Interrupted creates are looked up, the
+	type is read back and its templates counted; device creates that depend
+	on a type that was not imported are skipped with the reason. The detail
+	panel offers "Import this device type into NetBox", the apply bar and
+	confirmation count device types. techspecs also reads single ports
+	without a count ("10/100 MbE RJ45 port"); drafts without a UniFi
+	manufacturer leave it empty.
 
 ## v1.1.2
 

@@ -8,6 +8,7 @@ the selection changes, so the GUI only renders what this class reports.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import datetime
 
@@ -15,6 +16,7 @@ from unifi2netbox.cables import CablePlan, CablePlanRow, select_cable
 from unifi2netbox.config import BehaviorConfig
 from unifi2netbox.custom_fields import CustomFieldPlan, select_custom_field
 from unifi2netbox.details import InventorySfp
+from unifi2netbox.devicetype_import import TypeImportPlan, build_import_plan
 from unifi2netbox.disks import DiskPlan, DiskPlanRow, select_disk
 from unifi2netbox.interface_plan import (
     InterfacePlan,
@@ -232,6 +234,9 @@ class ReviewState:
         self.type_by_key: dict[str, str] = {}
         # Display names of chosen local or library definitions.
         self.type_labels: dict[str, str] = {}
+        # Loaded definitions of import choices and deselected imports.
+        self.import_docs: dict[str, object] = {}
+        self.import_deselected: set[str] = set()
         self.role_by_key: dict[str, str] = {}
         self.site_by_key: dict[str, str] = {}
         self.status_by_key: dict[str, str] = {}
@@ -407,8 +412,12 @@ class ReviewState:
             elif category == CREATE and is_import_choice(
                 self.type_by_key.get(row.device_key, "")
             ):
-                note = "Device type import is not available yet"
-                attention = True
+                state, message = self.type_import_plan().device_status(
+                    self.type_by_key[row.device_key]
+                )
+                if state != "ready":
+                    note = message
+                    attention = True
         if category == CREATE and selected and not self.role_by_key.get(row.device_key):
             attention = True
             note = note or "Choose a device role"
@@ -966,17 +975,58 @@ class ReviewState:
             reasons.append(
                 f"Choose a NetBox device role for {_count_names(missing_role)}."
             )
-        imports = [
-            op.source_label
-            for op in plan.operations
-            if op.operation_type == OperationType.CREATE_DEVICE
-            and is_import_choice(self.type_by_key.get(op.device_key, ""))
-        ]
-        if imports:
-            reasons.append(
-                f"Device type import is not available yet for {_count_names(imports)}."
-            )
+        import_plan = self.type_import_plan()
+        for op in plan.operations:
+            choice = self.type_by_key.get(op.device_key, "")
+            if op.operation_type != OperationType.CREATE_DEVICE or not (
+                is_import_choice(choice)
+            ):
+                continue
+            state, message = import_plan.device_status(choice)
+            if state != "ready":
+                reasons.append(f"{op.source_label}: {message}")
         return tuple(reasons)
+
+    # -- device type imports -----------------------------------------------------
+
+    def type_import_plan(self, keys: Iterable[str] | None = None) -> TypeImportPlan:
+        """Imports for the import choices of selected create rows.
+
+        ``keys`` limits the plan to those device keys (single-device apply).
+        """
+        wanted = set(keys) if keys is not None else None
+        choices = {
+            key: value
+            for key, value in self.type_by_key.items()
+            if is_import_choice(value)
+            and (wanted is None or key in wanted)
+            and self._create_selected(key)
+        }
+        result = self.result
+        return build_import_plan(
+            choices,
+            self.import_docs,
+            self.type_labels,
+            result.netbox_manufacturers if result else (),
+            result.netbox_type_records if result else (),
+            self.import_deselected,
+        )
+
+    def set_import_selected(self, choice: str, selected: bool) -> None:
+        if selected:
+            self.import_deselected.discard(choice)
+        else:
+            self.import_deselected.add(choice)
+        self._recompute()
+
+    def type_import_count(self) -> int:
+        return self.type_import_plan().operation_count
+
+    def _create_selected(self, key: str) -> bool:
+        if self.diff is None:
+            return False
+        device = next((d for d in self.diff.devices if d.device_key == key), None)
+        return device is not None and device.selected
 
     def plan_warnings(self, plan: WritePlan) -> tuple[str, ...]:
         warnings = [

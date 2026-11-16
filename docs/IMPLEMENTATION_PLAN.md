@@ -628,8 +628,12 @@ Slices:
 - [x] 5. Picker dialog replacing the drop-down.
   (1.1.7, 2026-11-16: offline tests and offscreen rendering with the live
   library index; local/library choices block the apply until slice 6.)
-- [ ] 6. Import of picked definitions into NetBox as a write step (preflight,
+- [x] 6. Import of picked definitions into NetBox as a write step (preflight,
   re-read, interrupted-create lookup, read-back, journal, dry run).
+  (1.1.8, 2026-11-16: offline tests and a live dry run: 6 create rows
+  without a NetBox type (UA-Intercom, UAH, UVC G5 Bullet, 3x CAM-PT2), none
+  in the library; techspecs drafts for UA-Intercom and UVC G5 Bullet; the
+  import dry run passed the NetBox re-read for all four definitions.)
 - [ ] 7. Documentation, manual chapter, live read-only check, dry run and an
   approved import test.
 

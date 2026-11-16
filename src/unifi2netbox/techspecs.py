@@ -248,6 +248,9 @@ def _ports(features, value) -> tuple[SpecPorts, ...]:
     ):
         for count, speed, kind in _PORTS_IN_TEXT.findall(text):
             result.append(SpecPorts(int(count), _kind(kind), _speed(speed or kind)))
+        if not result and (kind := _kind(text)):
+            # "10/100 MbE RJ45 port": one port without a count in brackets.
+            result.append(SpecPorts(1, kind, _speed(text)))
         if result:
             break
     return tuple(result)
@@ -260,6 +263,9 @@ def _kind(text: str) -> str:
 
 def _speed(text: str) -> int:
     upper = text.upper().replace(" ", "")
+    if m := re.search(r"([\d./]+)MBE", upper):
+        # "10/100 MbE" -> the highest listed speed in Mbit/s.
+        return max(int(n) for n in re.findall(r"\d+", m.group(1)))
     if m := re.search(r"([\d.]+)G(BE)?", upper):
         return int(float(m.group(1)) * 1000)
     if "GBE" in upper:

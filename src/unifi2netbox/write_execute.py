@@ -123,6 +123,16 @@ def execute_write_plan(
                 "nothing was written.",
             )
             continue
+        type_override = resolved_device_type_overrides.get(operation.device_key, "")
+        if type_override.startswith("skip:"):
+            # The chosen device type definition was not imported.
+            journal = record_operation_result(
+                journal,
+                operation.sequence,
+                OperationOutcomeStatus.SKIPPED,
+                type_override.removeprefix("skip:"),
+            )
+            continue
         if source_devices is not None:
             try:
                 _verify_source_unchanged(operation, device, source_devices)

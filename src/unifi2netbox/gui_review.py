@@ -64,6 +64,7 @@ from unifi2netbox.review import (
     ObjectRow,
     ReviewRow,
     ReviewState,
+    is_import_choice,
 )
 from unifi2netbox.write_plan import OperationType, WritePlan
 
@@ -853,6 +854,22 @@ class DetailPanel(QScrollArea):
         type_row.addWidget(type_text, 1)
         type_row.addWidget(type_button)
         form.addRow("Device type", type_row)
+        choice = self.state.type_by_key.get(item.key, "")
+        if is_import_choice(choice):
+            row = self.state.type_import_plan().row_for_choice(choice)
+            state, message = self.state.type_import_plan().device_status(choice)
+            if row is not None and row.selectable:
+                box = QCheckBox("Import this device type into NetBox")
+                box.setObjectName("typeImport")
+                box.setChecked(row.selected)
+                box.toggled.connect(
+                    lambda checked, c=choice: self._toggle_import(c, checked)
+                )
+                form.addRow("", box)
+            status = label(message, "caption" if state == "ready" else "secondary")
+            status.setObjectName("typeImportStatus")
+            status.setWordWrap(True)
+            form.addRow("", status)
         for kind, title, values, chosen in (
             ("role", "Role", self.state.roles, self.state.role_by_key),
             ("site", "Site", self.state.sites, self.state.site_by_key),
@@ -879,6 +896,10 @@ class DetailPanel(QScrollArea):
                 combo.setEnabled(False)
             form.addRow(title, combo)
         self.layout_.addLayout(form)
+
+    def _toggle_import(self, choice: str, checked: bool) -> None:
+        self.state.set_import_selected(choice, checked)
+        self.changed.emit()
 
     def _choose(self, kind: str, value: str) -> None:
         self.state.set_choice(kind, self.key, value)
@@ -1079,8 +1100,10 @@ class ConfirmDialog(QDialog):
         mgmt_ip_plan=None,
         sfp_plan=None,
         site_detail_plan=None,
+        type_import_plan=None,
     ) -> None:
         super().__init__(parent)
+        type_ops = type_import_plan.operation_count if type_import_plan else 0
         field_ops = custom_field_plan.operation_count if custom_field_plan else 0
         detail_counts = (
             {
@@ -1111,6 +1134,7 @@ class ConfirmDialog(QDialog):
             + ip_ops
             + sfp_ops
             + sum(detail_counts.values())
+            + type_ops
         )
         self.setWindowTitle("Dry run" if dry_run else "Apply to NetBox")
         self.setMinimumWidth(460)
@@ -1124,6 +1148,8 @@ class ConfirmDialog(QDialog):
         parts = []
         if field_ops:
             parts.append("1 Custom Field (firmware)")
+        if type_ops:
+            parts.append(f"{type_ops} device type{'s' if type_ops != 1 else ''}")
         if creates:
             parts.append(f"{creates} new device{'s' if creates != 1 else ''}")
         if updates:

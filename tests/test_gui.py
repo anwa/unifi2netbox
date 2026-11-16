@@ -579,10 +579,12 @@ def fake_runner(monkeypatch, window):
         mgmt_ip_plan=None,
         sfp_plan=None,
         site_detail_plan=None,
+        type_import_plan=None,
     ):
         started.update(
             sfp_plan=sfp_plan,
             site_detail_plan=site_detail_plan,
+            type_import_plan=type_import_plan,
             custom_field_plan=custom_field_plan,
             mgmt_ip_plan=mgmt_ip_plan,
             plan=write_plan,
