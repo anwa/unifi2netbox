@@ -34,4 +34,4 @@ stale; stale data can be reviewed but never authorizes a write.
 
 - Understand the window: [The review window](../03-review/index.md).
 - Decide what to write: [Devices](../03-review/01-devices.md).
-- Try it safely: [Dry run and apply](../04-applying/01-dry-run-and-apply.md).
+- Try it safely: [Dry run and apply](../05-applying/01-dry-run-and-apply.md).

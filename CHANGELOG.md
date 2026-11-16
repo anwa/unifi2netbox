@@ -63,6 +63,16 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	confirmation count device types. techspecs also reads single ports
 	without a count ("10/100 MbE RJ45 port"); drafts without a UniFi
 	manufacturer leave it empty.
+- M12 slice 7: manual chapter **Device types** (choosing, editor, local folder
+	and library with contribution steps, import) plus a Settings page, updated
+	reference pages and new demo screenshots.
+
+### Fixed
+
+- The header no longer overflows on narrow windows: when space is short the
+	connection chips show only the service name (version and details in the
+	tooltip), **Manual** and **Device types** become icons and the app name
+	gives way to the logo.
 
 ## v1.1.2
 

@@ -11,6 +11,6 @@ results.
   read-back and the message. Hover a message to see the read-back details.
 
 The history is stored in `write-journal.sqlite3` next to the configuration
-(see [Files and data](../05-reference/03-files-and-data.md)). It keeps the
+(see [Files and data](../06-reference/03-files-and-data.md)). It keeps the
 record of what the app wrote and why something was skipped, so keep it when
 you upgrade.

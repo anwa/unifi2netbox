@@ -9,6 +9,8 @@ Open **Settings** with the settings button in the header, right of
   and [UniFi Drive](05-unifi-drive.md): optional.
 - [Sync defaults](06-sync-defaults.md): NetBox site, default role and the
   scope of NetBox-only devices.
+- [Device types](07-device-types.md): local type folder, devicetype-library
+  and techspecs lookups.
 
 ## Buttons
 
@@ -38,4 +40,4 @@ Use `https://` wherever possible: with `http://` tokens travel unencrypted.
 - Linux: `~/.config/unifi2netbox/config.toml`
 
 Tokens are stored there in plain text. Protect the file and never share it.
-See [Files and data](../05-reference/03-files-and-data.md).
+See [Files and data](../06-reference/03-files-and-data.md).

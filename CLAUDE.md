@@ -163,6 +163,15 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
   `window_frame.py` sets the app icon (`resources/`, rebuilt by
   `tools/build_icons.py`) and themes native Windows title bars via DWM. Render the
   GUI offscreen for screenshots with `QT_QPA_FONTDIR=C:/Windows/Fonts`.
+- **Device types** (`devicetypes.py`, `library.py`, `typesearch.py`,
+  `techspecs.py`, `typedraft.py`, `devicetype_import.py`): devicetype-library
+  YAML (ruamel round-trip, bundled schema in `resources/devicetype-schema`,
+  CONTRIBUTING checks), the local type folder, the GitHub library index,
+  techspecs.ui.com lookups, drafts from UniFi data and the import of chosen
+  definitions as a write step (before networks; device creates whose type is
+  not imported get a `skip:` override). GUI: `gui_typeeditor.py` (editor),
+  `gui_typepicker.py` (picker), `gui_devicetypes.py` (Settings page),
+  `gui_jobs.py` (one background task).
 - **Diagnostics** (`capabilities.py`, `reporting.py`): installed-version field
   capability matrix and opt-in sanitized (pseudonymized) fixture/report export.
 

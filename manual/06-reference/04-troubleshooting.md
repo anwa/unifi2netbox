@@ -36,7 +36,20 @@ in the review says which read failed.
 ## Review
 
 **A new device shows "Needs attention".** Choose a device type and a role.
-If no device type fits, add it in NetBox and refresh.
+If no device type fits, use **Choose...** > **New...** to draft one; see
+[Device types](../04-device-types/index.md).
+
+**"Manufacturer ... is not in NetBox".** The chosen definition cannot be
+imported until the manufacturer exists in NetBox; create it there and
+refresh.
+
+**The picker says the library index is not loaded.** Click **Refresh
+library** (or Settings > Device types > **Refresh index**). "GitHub rate limit
+reached" means too many requests from your address in the last hour; try
+again later.
+
+**techspecs finds no page.** Paste the product page URL from
+techspecs.ui.com in the editor and click **Look up specs** again.
 
 **A device is not matched.** Matching uses name, serial and MAC. Align the
 name or serial in NetBox, or check for duplicates (two hits are a conflict).

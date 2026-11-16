@@ -144,6 +144,15 @@ header), and the app has its own icon in title bars, taskbar and executable.
   last check and **Check again**. **Refresh** (F5) reads both inventories;
   **Manual** (F1), **Settings** and a **More** menu (write history, UniFi API
   dump, copy summary) sit next to it.
+- **Device types** opens the device type editor: the local type folder
+  (`device-types/<Manufacturer>/<model>.yaml`, devicetype-library format) as a
+  tree, each definition as a table with field explanations or raw YAML,
+  validated against the library schema and `CONTRIBUTING.md`; Ubiquiti models
+  can be completed from techspecs.ui.com. New devices choose their type in a
+  picker modeled on NetBox's (filters, search across NetBox, the local folder
+  and netbox-community/devicetype-library, **New** from UniFi data); a chosen
+  definition that NetBox lacks is imported as a visible write step
+  (manufacturers are never created).
 - **Manual** opens the user manual from [`manual/`](manual/index.md): the
   chapter tree on the left, the page with screenshots on the right, starting
   at the overview. The same Markdown pages can be read on GitHub.

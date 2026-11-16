@@ -191,3 +191,21 @@ def test_main_window_opens_the_editor_on_the_configured_folder(qtbot, tmp_path):
     assert editor is not None and editor.isVisible()
     assert editor.store.root == tmp_path / "devicetype-library"
     assert load_yaml("---\na: 1\n")["a"] == 1
+
+
+def test_header_turns_compact_when_narrow(qtbot, tmp_path):
+    from unifi2netbox.gui import MainWindow
+
+    window = MainWindow(tmp_path / "config.toml", QThreadPool(), open_first_run=False)
+    qtbot.addWidget(window)
+    window.show()
+    window.resize(1600, 700)
+    window.update_header_mode()
+    assert window.manual_button.text() == "Manual" and not window.netbox_chip.compact
+
+    window.resize(500, 700)
+    window.update_header_mode()
+    assert window.manual_button.text() == "" and window.types_button.text() == ""
+    assert window.netbox_chip.compact and not window.app_title.isVisible()
+    assert window.netbox_chip.text() == "●  NetBox"
+    assert window.netbox_chip.toolTip().startswith("NetBox · Not set")

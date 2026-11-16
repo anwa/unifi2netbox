@@ -24,6 +24,7 @@ def test_manual_is_found_and_starts_with_the_overview():
         "Getting started",
         "Settings",
         "The review window",
+        "Device types",
         "Applying changes",
         "Reference",
     ]

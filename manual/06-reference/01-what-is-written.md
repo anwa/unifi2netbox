@@ -7,6 +7,7 @@ aligned as described.
 | NetBox object | Create | Update | Fields |
 | --- | --- | --- | --- |
 | Custom Field `firmware` | yes | no | text, for devices |
+| Device type (chosen definition) | yes | no | model, slug, part number, height, depth, airflow, weight, description, comments, component templates |
 | Device | yes | yes | name, serial, site (update); name, device type, role, site, status, serial, firmware (create) |
 | Device Custom Field | – | yes | `firmware` |
 | VLAN group `UniFi <site>` | yes | no | scoped to the site |
@@ -21,6 +22,6 @@ aligned as described.
 | Inventory item (drive) | yes | yes | `Disk <slot>`: part ID, serial, description |
 | Inventory item (SFP) | yes | yes | `Transceiver <interface>`: part ID, serial, description, manufacturer, interface |
 
-Never written: anything in UniFi; deletions of any kind; sites, device types,
-roles, manufacturers, tags; the live link state and speed of ports; LAGs;
-Wi-Fi passphrases.
+Never written: anything in UniFi; deletions of any kind; sites, roles,
+manufacturers, tags; device types you did not choose; the live link state and
+speed of ports; LAGs; Wi-Fi passphrases.

@@ -147,6 +147,7 @@ class ComponentTable(QWidget):
         layout.setContentsMargins(0, 6, 0, 0)
         self.table = QTableWidget(0, len(self.columns))
         self.table.setObjectName(f"component_{section}")
+        self.table.setMinimumHeight(170)
         self.table.setHorizontalHeaderLabels(
             [f"{c} *" if field_spec(section, c).required else c for c in self.columns]
         )
@@ -250,7 +251,7 @@ class TableView(QWidget):
             2, QHeaderView.ResizeMode.Stretch
         )
         self.attributes.setWordWrap(True)
-        self.attributes.setMinimumHeight(300)
+        self.attributes.setMinimumHeight(240)
         self.cells = _Cells(self.attributes)
         for row, name in enumerate(_TABLE_ATTRIBUTES):
             spec = field_spec(None, name)

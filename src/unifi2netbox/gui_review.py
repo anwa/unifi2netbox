@@ -101,6 +101,9 @@ def type_name(state: ReviewState, type_id: str) -> str:
 
 
 def type_model(state: ReviewState, type_id: str) -> str:
+    if is_import_choice(type_id):
+        label_text = state.type_labels.get(type_id, "")
+        return label_text.split(" (", 1)[0] if label_text else "To import"
     for item_id, _manufacturer, model in state.device_types:
         if item_id == type_id:
             return model

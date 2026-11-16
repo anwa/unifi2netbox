@@ -7,7 +7,7 @@
 - **API token**: create it in NetBox under your user profile (**API
   Tokens**). For reviewing only, read access is enough. To apply changes the
   token needs write access to the objects the app writes; the full list is in
-  [Permissions](../05-reference/02-permissions.md).
+  [Permissions](../06-reference/02-permissions.md).
 - **Verify TLS certificate**, **CA bundle**, **Request timeout**: see
   [Settings](index.md#common-fields).
 

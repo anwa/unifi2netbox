@@ -21,6 +21,7 @@ from PySide6.QtGui import (
     QActionGroup,
     QCloseEvent,
     QFontMetrics,
+    QIcon,
     QKeySequence,
 )
 from PySide6.QtWidgets import (
@@ -1201,6 +1202,10 @@ class ConnectionChip(QToolButton):
     def __init__(self, panel: ConnectionPanel, parent=None) -> None:
         super().__init__(parent)
         self.panel = panel
+        # Compact chips show only the service name (state by color, details in
+        # the tooltip) when the header is too narrow for the full text.
+        self.compact = False
+        self.full_width = 0
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.popup = QFrame(self, Qt.WindowType.Popup)
         popup_layout = QVBoxLayout(self.popup)
@@ -1215,7 +1220,9 @@ class ConnectionChip(QToolButton):
         tone = state_tone(state)
         if tone == "success" and self.panel.config.security_warning:
             tone = "warning"
-        self.setText(f"●  {self.panel.summary()}")
+        summary = self.panel.summary()
+        short = summary.split(" ", 1)[0]
+        self.setText(f"●  {short if self.compact else summary}")
         # Optional services (Protect, Access) only take header space once set.
         self.setVisible(self.panel.service is None or self.panel.config.configured)
         self.updateGeometry()
@@ -1226,6 +1233,8 @@ class ConnectionChip(QToolButton):
             tip = f"Site: {site}\n{tip}"
         if self.panel.config.security_warning:
             tip += f"\n{self.panel.config.security_warning}"
+        if self.compact:
+            tip = f"{summary}\n{tip}"
         self.setToolTip(tip)
         theme.set_variant(self, "chip", tone)
         # The style sheet draws the text bold, but the size hint is measured
@@ -1233,8 +1242,15 @@ class ConnectionChip(QToolButton):
         # so the layout never squeezes the text (e.g. "UniFi 11.0.99 · Default").
         bold = self.font()
         bold.setBold(True)
-        text_width = QFontMetrics(bold).horizontalAdvance(self.text())
+        metrics = QFontMetrics(bold)
+        text_width = metrics.horizontalAdvance(self.text())
+        self.full_width = metrics.horizontalAdvance(f"●  {summary}") + 2 * 14 + 8
         self.setMinimumWidth(max(self.sizeHint().width(), text_width + 2 * 14 + 8))
+
+    def set_compact(self, compact: bool) -> None:
+        if compact != self.compact:
+            self.compact = compact
+            self.update_chip()
 
     def show_details(self) -> None:
         self.popup.adjustSize()
@@ -1413,7 +1429,13 @@ class MainWindow(QMainWindow):
         )
         self.manual_action.setToolTip("Open the user manual (F1)")
         self.manual_action.triggered.connect(lambda: self.show_manual())
-        self.types_action = QAction("Device types...", self)
+        self.types_action = QAction(
+            theme.icon(
+                "x-office-document", QStyle.StandardPixmap.SP_FileDialogListView
+            ),
+            "Device types...",
+            self,
+        )
         self.types_action.setToolTip(
             "Edit device type definitions in the local type folder"
         )
@@ -1437,6 +1459,7 @@ class MainWindow(QMainWindow):
         title = QLabel("unifi2netbox")
         title.setObjectName("appTitle")
         layout.addWidget(title)
+        self.app_title = title
         layout.addSpacing(8)
         self.netbox_chip = ConnectionChip(self.netbox, header)
         self.netbox_chip.setObjectName("netboxChip")
@@ -1477,6 +1500,9 @@ class MainWindow(QMainWindow):
         self.types_button.setToolTip(self.types_action.toolTip())
         self.types_button.clicked.connect(self.types_action.trigger)
         layout.addWidget(self.types_button)
+        self.header = header
+        for chip in self._chips():
+            chip.panel.status_changed.connect(self.update_header_mode)
         settings = QToolButton()
         settings.setDefaultAction(self.settings_action)
         settings.setProperty("variant", "ghost")
@@ -2425,6 +2451,51 @@ class MainWindow(QMainWindow):
         if not editor.property("typeSavedHooked"):
             editor.saved.connect(self._type_saved)
             editor.setProperty("typeSavedHooked", True)
+
+    def _chips(self) -> tuple[ConnectionChip, ...]:
+        return (
+            self.netbox_chip,
+            self.unifi_chip,
+            self.protect_chip,
+            self.access_chip,
+            self.drive_chip,
+        )
+
+    def update_header_mode(self) -> None:
+        """Compact chips and icon-only buttons when the header would not fit."""
+        header = getattr(self, "header", None)
+        if header is None or not self.isVisible():
+            return  # decided once the window is shown (with its theme)
+        chips = [chip for chip in self._chips() if chip.isVisibleTo(self)]
+        current = sum(chip.minimumWidth() for chip in chips)
+        full = sum(chip.full_width for chip in chips)
+        buttons = (self.manual_button, self.types_button)
+        button_now = sum(button.sizeHint().width() for button in buttons)
+        button_full = sum(
+            button.fontMetrics().horizontalAdvance(text) + 32
+            for button, text in zip(buttons, ("Manual", "Device types"), strict=True)
+        )
+        title = self.app_title.sizeHint().width() if self.app_title.isHidden() else 0
+        rest = header.minimumSizeHint().width() - current - button_now + title
+        compact = rest + full + button_full > self.width()
+        # The logo stays; the name gives way first on narrow windows.
+        self.app_title.setVisible(not compact)
+        for chip in chips:
+            chip.set_compact(compact)
+        for button, text, icon in (
+            (self.manual_button, "Manual", self.manual_action.icon()),
+            (self.types_button, "Device types", self.types_action.icon()),
+        ):
+            button.setText("" if compact else text)
+            button.setIcon(icon if compact else QIcon())
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self.update_header_mode()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        self.update_header_mode()
 
     def type_store(self) -> LocalTypeStore:
         return LocalTypeStore(local_type_folder(self.device_types_config, self.path))

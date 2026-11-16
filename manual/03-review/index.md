@@ -15,10 +15,15 @@ between light and dark, and its arrow menu offers **Follow system**.
 - **Check connections** (round arrows): checks all connections again.
 - **Refresh** (F5): reads all inventories and rebuilds the review.
 - **Manual** (F1): opens this manual.
+- **Device types**: opens the [device type editor](../04-device-types/02-editor.md).
 - **Settings**: see [Settings](../02-settings/index.md).
 - **Light/dark** button.
 - **⋯ More**: **Write history**, **Export UniFi API dump**, **Copy summary**,
-  **Manual** and **Exit**.
+  **Device types...**, **Manual** and **Exit**.
+
+On a narrow window the header gets compact: the chips show only the service
+name (the color still shows the state; hover for version and details), and
+**Manual** and **Device types** become icons.
 
 ## Summary cards and filters
 
@@ -62,4 +67,4 @@ run, the result.
 At the bottom the bar sums up the selection (for example *1 Custom Field,
 5 of 5 devices selected, 7 network writes …*), offers **Select all** and
 **Select none** for the visible list, the **Dry run (no changes)** switch and
-**Apply N changes**. See [Applying changes](../04-applying/index.md).
+**Apply N changes**. See [Applying changes](../05-applying/index.md).
