@@ -97,6 +97,10 @@ start-up, so the smoke test covers their presence. The Offline Tests and
 Packages workflows passed for main and the tag. Not verified: installer
 upgrade/uninstall for this version, and validating, importing or fetching
 device types inside the packaged app. The Windows build is not code-signed.
+The Packages workflow built `unifi2netbox_1.2.0_amd64.deb` and the Linux
+tarball (which contains the schema) from the same tag. All three files and
+`SHA256SUMS.txt` are attached to the public GitHub release v1.2.0 (approved by
+the user on 2026-11-16).
 
 ```powershell
 python -m pip install -r requirements-build.txt
