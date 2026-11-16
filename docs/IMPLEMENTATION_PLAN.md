@@ -618,7 +618,10 @@ Slices:
   and the Settings page "Device types".
   (1.1.4, 2026-11-16: live index read: 14,433 files of 455 manufacturers in
   under a second; UA-Intercom is not in the library.)
-- [ ] 3. techspecs.ui.com lookup and drafts from UniFi data.
+- [x] 3. techspecs.ui.com lookup and drafts from UniFi data.
+  (1.1.5, 2026-11-16: live lookups found USW Pro 24, U6 Lite, UDM Pro,
+  USW Lite 8 PoE, UA Intercom and U6+; an invalid category redirects, so the
+  lookup uses a valid one and keeps the page's own category for links.)
 - [ ] 4. Device type editor window (tree, YAML/table toggle, validation).
 - [ ] 5. Picker dialog replacing the drop-down.
 - [ ] 6. Import of picked definitions into NetBox as a write step (preflight,

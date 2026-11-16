@@ -24,6 +24,13 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	weight and components. New Settings page **Device types**: local type
 	folder, library on/off with repository, branch and **Refresh index**,
 	techspecs lookups on/off (`[device_types]`).
+- M12 slice 3: UniFi product specifications from techspecs.ui.com (found by
+	part number or model, or from a page URL the user enters; only the product
+	slug is sent): SKU without regional suffix, title, rack height,
+	dimensions, weight, power, PoE and port layout. Drafts of device type
+	definitions from a UniFi device: interfaces from its UniFi ports
+	(`Port N`, `SFP+ N`, ... with NetBox types and PoE), else from techspecs
+	(`eth0`, PoE powered), with notes about differences and missing data.
 
 ## v1.1.2
 
