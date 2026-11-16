@@ -24,10 +24,16 @@ if sys.platform == "win32":
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QThreadPool  # noqa: E402
-from PySide6.QtWidgets import QApplication, QLabel, QStatusBar  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QApplication,
+    QLabel,
+    QLineEdit,
+    QStatusBar,
+)
 
 from unifi2netbox import pipeline, theme  # noqa: E402
 from unifi2netbox.config import (  # noqa: E402
+    DEFAULT_LIBRARY_REPOSITORY,
     BehaviorConfig,
     NetBoxConfig,
     UiConfig,
@@ -47,9 +53,11 @@ from unifi2netbox.details import (  # noqa: E402
     InventorySfp,
     InventoryWlan,
 )
+from unifi2netbox.devicetypes import LocalTypeStore  # noqa: E402
 from unifi2netbox.gui import MainWindow, SettingsDialog  # noqa: E402
 from unifi2netbox.gui_manual import ManualWindow  # noqa: E402
 from unifi2netbox.gui_review import ConfirmDialog, HistoryDialog  # noqa: E402
+from unifi2netbox.gui_typepicker import DeviceTypePicker  # noqa: E402
 from unifi2netbox.inventory import (  # noqa: E402
     InventoryDevice,
     InventoryDeviceRole,
@@ -64,10 +72,18 @@ from unifi2netbox.inventory import (  # noqa: E402
     InventorySource,
 )
 from unifi2netbox.journal_store import StoredOutcome, StoredRun  # noqa: E402
+from unifi2netbox.library import (  # noqa: E402
+    LibraryCache,
+    LibraryEntry,
+    LibraryIndex,
+    cache_folder,
+)
 from unifi2netbox.links import UPLINK, InventoryLink  # noqa: E402
 from unifi2netbox.netbox import ConnectionResult, ConnectionState  # noqa: E402
 from unifi2netbox.port_config import ACCESS, TAGGED, InventoryPortConfig  # noqa: E402
 from unifi2netbox.refresh import RefreshResult, RefreshStatus  # noqa: E402
+from unifi2netbox.techspecs import SpecPorts, TechSpec  # noqa: E402
+from unifi2netbox.typedraft import draft_from_unifi  # noqa: E402
 
 SITE = "Example Lab"
 WHEN = "2026-11-15T09:30:00+00:00"
@@ -153,6 +169,19 @@ def unifi_snapshot() -> InventorySnapshot:
             "ONLINE",
             "10.20.0.12",
             "6.7.31",
+        ),
+        InventoryDevice(
+            "door",
+            "Door Intercom",
+            "DEMO0006",
+            "UA Intercom",
+            "Ubiquiti",
+            _mac(6),
+            SITE,
+            "",
+            "ONLINE",
+            "10.20.0.40",
+            "1.4.2",
         ),
     )
     ports = (
@@ -357,6 +386,46 @@ def unifi_online(_config) -> ConnectionResult:
     return ConnectionResult(ConnectionState.ONLINE, "Demo data.", "11.0.99", "Default")
 
 
+DEMO_SPEC = TechSpec(
+    url="https://techspecs.ui.com/unifi/door-access/ua-intercom",
+    slug="ua-intercom",
+    sku="UA-Intercom",
+    title="Access Intercom",
+    dimensions="324.8 x 113.7 x 28.3 mm",
+    weight=965.0,
+    weight_unit="g",
+    poe_powered=True,
+    poe_type="type2-ieee802.3at",
+    ports=(SpecPorts(1, "RJ45", 1000),),
+)
+LIBRARY_NAMES = (
+    ("Ubiquiti", "U6-Lite"),
+    ("Ubiquiti", "U6-Pro"),
+    ("Ubiquiti", "UDM-Pro"),
+    ("Ubiquiti", "USW-Lite-8-PoE"),
+    ("Ubiquiti", "USW-Pro-24"),
+    ("Ubiquiti", "UA-Hub"),
+    ("Cisco", "C9300-24P"),
+)
+
+
+def write_demo_types(folder: Path, config_path: Path) -> None:
+    """A local definition (UA-Intercom) and a small fake library index."""
+    device = InventoryDevice(
+        "door", "Door Intercom", model="UA Intercom", manufacturer="Ubiquiti"
+    )
+    doc, _notes = draft_from_unifi(device, (), DEMO_SPEC)
+    doc["airflow"] = "passive"
+    LocalTypeStore(folder / "devicetype-library").write(doc)
+    entries = tuple(
+        LibraryEntry(maker, name, f"{maker}/{name}.yaml", f"{index:040x}")
+        for index, (maker, name) in enumerate(LIBRARY_NAMES, start=1)
+    )
+    LibraryCache(cache_folder(config_path)).save_index(
+        LibraryIndex(DEFAULT_LIBRARY_REPOSITORY, "master", WHEN, entries)
+    )
+
+
 def write_demo_config(folder: Path) -> Path:
     path = folder / "config.toml"
     save_connections(
@@ -366,6 +435,7 @@ def write_demo_config(folder: Path) -> Path:
         BehaviorConfig(default_device_role_name="Access Point", netbox_site_name=SITE),
     )
     save_ui_config(path, UiConfig(theme="light"))
+    write_demo_types(folder, path)
     return path
 
 
@@ -417,6 +487,13 @@ class Shooter:
         for label in widget.findChildren(QLabel):
             if any(item in label.text() for item in real):
                 label.setText(clean(label.text()))
+        for edit in widget.findChildren(QLineEdit):
+            for getter, setter in (
+                (edit.text, edit.setText),
+                (edit.placeholderText, edit.setPlaceholderText),
+            ):
+                if any(item in getter() for item in real):
+                    setter(clean(getter()))
         for bar in widget.findChildren(QStatusBar):
             message = bar.currentMessage()
             if any(item in message for item in real):
@@ -486,6 +563,39 @@ class Shooter:
             window.set_filter(name)
             self.save(window, f"review-{name}")
 
+        # Device types: a new device without a type, the picker, the editor
+        # and the chosen local definition that is imported on apply.
+        window.set_filter("create")
+        self.select_device(window, "Door Intercom")
+        self.save(window, "review-new-device-type")
+        door = "create:unifi_network:door"
+        candidates, note = window.type_candidates()
+        picker = DeviceTypePicker(
+            candidates,
+            hint="UA Intercom",
+            hint_manufacturer="Ubiquiti",
+            note=note,
+            refresh_library=lambda: [],
+            pool=self.pool,
+            parent=window,
+        )
+        picker.resize(980, 660)
+        picker.show()
+        self.save(picker, "type-picker")
+        picker.close()
+        editor = window.show_type_editor()
+        editor.resize(WIDTH, HEIGHT)
+        local = next(c for c in candidates if c.source == "local")
+        editor.open_path(Path(local.path))
+        self.save(editor, "type-editor-table")
+        editor.set_mode("yaml")
+        self.save(editor, "type-editor-yaml")
+        editor.set_mode("table")
+        editor.close()
+        window.set_device_type_choice(door, local)
+        self.select_device(window, "Door Intercom")
+        self.save(window, "review-device-type-import")
+
         window.set_filter("all")
         dialog = ConfirmDialog(
             window.review,
@@ -498,6 +608,7 @@ class Shooter:
             mgmt_ip_plan=window.review.mgmt_ip_plan,
             sfp_plan=window.review.sfp_plan,
             site_detail_plan=window.review.site_detail_plan,
+            type_import_plan=window.review.type_import_plan(),
         )
         dialog.show()
         self.save(dialog, "confirm-apply")
@@ -525,6 +636,7 @@ class Shooter:
             ("UniFi Access", "settings-unifi-access"),
             ("UniFi Drive", "settings-unifi-drive"),
             ("Sync defaults", "settings-sync"),
+            ("Device types", "settings-device-types"),
         ):
             settings.show_page(page)
             self.save(settings, name)

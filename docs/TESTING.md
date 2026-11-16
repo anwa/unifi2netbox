@@ -851,6 +851,33 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-16 the assistant checked M12 (application 1.1.9 working tree on
+`feature/device-types`) read-only against the live systems, nothing written:
+the devicetype-library index was read from GitHub (14,433 files, 455
+manufacturers); techspecs lookups resolved the real models listed in
+`API_CAPABILITIES.md`; a refresh found 6 create rows without a NetBox type
+(UA-Intercom, UAH, UVC G5 Bullet, three third-party CAM-PT2), none in the
+library; drafts came from techspecs for UA-Intercom and UVC G5 Bullet; the
+import dry run passed the NetBox re-read for all four definitions (Ubiquiti
+exists as manufacturer). Offline: library files round-trip byte-identical,
+schema and CONTRIBUTING validation, search and filters, techspecs parsing,
+drafts, editor views, picker, import plan and execution (reuse, blockers,
+interrupted creates, template failures, read-back), skipped dependent device
+creates, the pipeline order and the compact header. Screenshots for the manual
+chapter come from demo data only.
+
+Then, with the user's explicit approval (role Camera chosen by the user), the
+assistant ran the M12 write test against the NetBox developer instance
+(commit 128e479, application 1.1.9) through the real pipeline; UniFi was only
+read. A techspecs draft for UA-Intercom (part number UA-Intercom, one PoE
+powered `eth0`, weight, techspecs link) was saved to the local type folder
+without validation errors. Results, all passed (5/5): the device type was
+imported with its one interface template and read back as verified; the
+UniFi device "Haustür" was created with that type and verified; after a
+refresh NetBox had exactly one type with part number UA-Intercom, the device
+was matched (in sync) and a second apply had nothing to write for it. The
+type, the device and the local file stay as real data, as approved.
+
 On 2026-11-15 the assistant checked the reopened-window title bar fix
 (application 1.1.2 working tree on top of v1.1.1) natively on the developer
 workstation (Windows 11, Qt windows platform): opening the manual window,

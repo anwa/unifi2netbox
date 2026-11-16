@@ -31,6 +31,6 @@ Include:
 - the NetBox and UniFi versions shown in the connection chips,
 - the operating system,
 - what you did, what you expected and the exact message (the detail panel
-  and the [write history](../04-applying/03-write-history.md) show messages).
+  and the [write history](../05-applying/03-write-history.md) show messages).
 
 Never include `config.toml`, tokens or unreviewed exports.

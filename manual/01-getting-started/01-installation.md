@@ -17,7 +17,7 @@ Download the current release from the
 keeps your settings. **Uninstalling** (Windows Settings > Apps) keeps your
 settings, snapshots and write history in `%LOCALAPPDATA%\unifi2netbox`;
 delete that folder yourself to remove everything, including the stored
-tokens. See [Files and data](../05-reference/03-files-and-data.md).
+tokens. See [Files and data](../06-reference/03-files-and-data.md).
 
 ## Ubuntu (.deb)
 

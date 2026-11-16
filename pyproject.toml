@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unifi2netbox"
-version = "1.1.2"
+version = "1.2.0"
 description = "Review UniFi inventory differences before applying selected changes to NetBox"
 readme = "README.md"
 requires-python = ">=3.15.1"
@@ -17,6 +17,8 @@ dependencies = [
     "requests==2.34.2",
     "packaging==26.3",
     "httpx==0.28.1",
+    "ruamel.yaml==0.19.1",
+    "jsonschema==4.26.0",
 ]
 
 [project.scripts]
@@ -26,7 +28,12 @@ unifi2netbox = "unifi2netbox.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-unifi2netbox = ["resources/*.png", "resources/*.svg", "resources/*.ico"]
+unifi2netbox = [
+    "resources/*.png",
+    "resources/*.svg",
+    "resources/*.ico",
+    "resources/devicetype-schema/*.json",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -13,7 +13,14 @@
   GUI thread. Bound concurrency and network timeouts.
 - UniFi is read-only. NetBox mutations require an explicit preview and approval.
   Support field, device and batch approval without per-field repeated prompts.
-- Do not implement automatic deletions or silently create Custom Fields.
+- Do not implement automatic deletions or silently create Custom Fields or
+  device types. The only Custom Field the app may create is `firmware`;
+  device types are created only from a chosen local or devicetype-library
+  definition, as a visible, selected and confirmed write step. Never create
+  manufacturers, sites or roles.
+- Public internet sources (techspecs.ui.com, the GitHub devicetype-library)
+  are read-only, used only on a user action or a Settings opt-in, and never
+  receive data about the user's network beyond a model name or slug.
 - Separate configuration from observed operational state. Missing source fields
   must not clear NetBox values. Conflicting identifiers require manual resolution.
 - Prefer official local UniFi APIs. Internal endpoints require a demonstrated

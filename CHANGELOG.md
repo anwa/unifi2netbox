@@ -6,6 +6,97 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.2.0
+
+### Summary
+
+- Milestone M12 (device types): new devices choose their NetBox device type
+	in a picker modeled on NetBox's that searches NetBox, a local type folder
+	and netbox-community/devicetype-library; a device type editor writes
+	definitions in the library format (validated against its schema and
+	CONTRIBUTING rules) with data from UniFi and techspecs.ui.com; a chosen
+	definition that NetBox lacks is imported as a visible, selectable write
+	step. Manufacturers, sites and roles are still never created.
+
+### Added
+
+- M12 slice 1: device type definitions in the netbox-community
+	devicetype-library format: YAML load and save in the library style (an
+	existing library file is written back byte for byte), validation against
+	the library's JSON schema (bundled, CC0) and its CONTRIBUTING rules (file
+	name, folder, slug, empty values, duplicates; weight, weight unit and
+	airflow as recommendations), and a local type folder
+	`device-types/<Manufacturer>/<model or part number>.yaml`. New
+	dependencies: ruamel.yaml and jsonschema.
+- M12 slice 2: device type search across NetBox, the local type folder and
+	netbox-community/devicetype-library (index of `device-types/` read from
+	GitHub on request and cached next to the configuration, files downloaded
+	on demand and cached by blob SHA), ranked by UniFi model aliases and
+	filterable by manufacturer, source, part number, rack height, airflow,
+	weight and components. New Settings page **Device types**: local type
+	folder, library on/off with repository, branch and **Refresh index**,
+	techspecs lookups on/off (`[device_types]`).
+- M12 slice 3: UniFi product specifications from techspecs.ui.com (found by
+	part number or model, or from a page URL the user enters; only the product
+	slug is sent): SKU without regional suffix, title, rack height,
+	dimensions, weight, power, PoE and port layout. Drafts of device type
+	definitions from a UniFi device: interfaces from its UniFi ports
+	(`Port N`, `SFP+ N`, ... with NetBox types and PoE), else from techspecs
+	(`eth0`, PoE powered), with notes about differences and missing data.
+- M12 slice 4: device type editor (**Device types** in the header and the
+	More menu), laid out like the manual: the local type folder as a tree on
+	the left, the definition on the right as **Table** (attributes with
+	explanations, comments, one tab per component kind with choice lists from
+	the library schema) or raw **YAML**; unchanged values keep their original
+	spelling. New, Save (library file name, renames when the model changes),
+	Revert, Delete, Validate, Open folder, and for Ubiquiti models **Look up
+	specs** on techspecs.ui.com (by part number or model, or from a page URL),
+	which only fills gaps.
+- M12 slice 5: the long device type drop-down of new devices is replaced by
+	**Choose...**, which opens a picker modeled on NetBox's: filter criteria
+	on the left (search, manufacturer, source, part number, rack height,
+	full depth, airflow, components, weight), filter rows with operators,
+	**Search**, and results from NetBox, the local type folder and the
+	devicetype-library with the UniFi model's matches first. **Refresh
+	library** loads the library index; **New** opens the editor with a draft
+	from the device's UniFi data (and a techspecs lookup for Ubiquiti), and
+	the saved file becomes the device's type. Local and library types are
+	marked "imported on apply".
+- M12 slice 6: a chosen local or library definition is imported into NetBox
+	as a visible, selectable write step right after the Custom Field: the
+	device type and its component templates (interfaces, console and power
+	ports, outlets, module and device bays, inventory items) are created,
+	an existing slug or an equal manufacturer/model or part number is reused
+	instead, a missing manufacturer or front/rear ports block the import (the
+	app never creates manufacturers). Interrupted creates are looked up, the
+	type is read back and its templates counted; device creates that depend
+	on a type that was not imported are skipped with the reason. The detail
+	panel offers "Import this device type into NetBox", the apply bar and
+	confirmation count device types. techspecs also reads single ports
+	without a count ("10/100 MbE RJ45 port"); drafts without a UniFi
+	manufacturer leave it empty.
+- M12 slice 7: manual chapter **Device types** (choosing, editor, local folder
+	and library with contribution steps, import) plus a Settings page, updated
+	reference pages and new demo screenshots.
+
+### Fixed
+
+- The header no longer overflows on narrow windows: when space is short the
+	connection chips show only the service name (version and details in the
+	tooltip), **Manual** and **Device types** become icons and the app name
+	gives way to the logo.
+
+### Validation
+
+- Offline gate: 668 passed, 2 skipped; Ruff lint and format pass.
+- Live on the developer workstation (NetBox 4.7.3, UniFi Network 11.0.99,
+	2026-11-16): library index and techspecs lookups read-only, an import dry
+	run for four definitions, and an approved write test: the UA-Intercom
+	device type imported and the device created with it, both verified, a
+	second apply a no-op. The data stays in NetBox as real data.
+- Packaged builds of this version are not verified yet (new dependencies
+	ruamel.yaml and jsonschema; bundled schema resources).
+
 ## v1.1.2
 
 ### Summary

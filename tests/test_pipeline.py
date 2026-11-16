@@ -407,6 +407,12 @@ def test_run_write_execution_runs_networks_first_and_records_them(
         return ()
 
     monkeypatch.setattr(pipeline, "execute_site_detail_plan", fake_details)
+
+    def fake_types(type_plan, backend, **kwargs):
+        order.append("device types")
+        return (), {}
+
+    monkeypatch.setattr(pipeline, "execute_import_plan", fake_types)
     monkeypatch.setattr(pipeline, "execute_write_plan", fake_execute)
     path = tmp_path / "write-journal.sqlite3"
 
@@ -425,6 +431,7 @@ def test_run_write_execution_runs_networks_first_and_records_them(
     )
 
     assert order == [
+        "device types",
         "networks",
         "wlan+range",
         "interfaces",

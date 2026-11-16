@@ -1,11 +1,11 @@
 # unifi2netbox
 
-Latest main release: **v1.1.2** (M11 extended UniFi details plus the
-in-app [user manual](manual/index.md)). Download the Windows installer or the
+Latest main release: **v1.2.0** (M12 device types: picker, editor, local
+folder and devicetype-library, import). Download the Windows installer or the
 Ubuntu `.deb` from the
 [GitHub releases](https://github.com/anwa/unifi2netbox/releases).
 
-Release **v1.1.2** compares UniFi Network inventory with NetBox in a modern
+Release **v1.2.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
@@ -20,7 +20,7 @@ version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v1.1.2; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v1.2.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities
@@ -144,6 +144,15 @@ header), and the app has its own icon in title bars, taskbar and executable.
   last check and **Check again**. **Refresh** (F5) reads both inventories;
   **Manual** (F1), **Settings** and a **More** menu (write history, UniFi API
   dump, copy summary) sit next to it.
+- **Device types** opens the device type editor: the local type folder
+  (`device-types/<Manufacturer>/<model>.yaml`, devicetype-library format) as a
+  tree, each definition as a table with field explanations or raw YAML,
+  validated against the library schema and `CONTRIBUTING.md`; Ubiquiti models
+  can be completed from techspecs.ui.com. New devices choose their type in a
+  picker modeled on NetBox's (filters, search across NetBox, the local folder
+  and netbox-community/devicetype-library, **New** from UniFi data); a chosen
+  definition that NetBox lacks is imported as a visible write step
+  (manufacturers are never created).
 - **Manual** opens the user manual from [`manual/`](manual/index.md): the
   chapter tree on the left, the page with screenshots on the right, starting
   at the overview. The same Markdown pages can be read on GitHub.

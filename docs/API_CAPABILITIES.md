@@ -76,6 +76,31 @@ The official API therefore leaves a demonstrated coverage gap for M6. Internal
 endpoints are used read-only, gated to the validated 11.0 series and covered by
 version-specific fixtures; see the M6 decision in `IMPLEMENTATION_PLAN.md`.
 
+## Device Type Sources (M12)
+
+Public, read-only sources, used only on a user action (Settings switches in
+`[device_types]`); only a model slug or library file path is sent.
+
+| Source | Access | Data used |
+| --- | --- | --- |
+| GitHub API `repos/{repo}/git/trees/{branch}` and the `device-types` subtree (`?recursive=1`) | on **Refresh index** | file paths and blob SHAs of `device-types/<Manufacturer>/<file>.yaml`; the index is cached as `library-index.json` |
+| `raw.githubusercontent.com/{repo}/{branch}/device-types/...` | when a library type is chosen | the definition YAML, cached by blob SHA |
+| `techspecs.ui.com/unifi/{category}/{slug}` | **Look up specs** / **New** for Ubiquiti | `__NEXT_DATA__` `props.pageProps.product`: `slug`, `title`, `variants[].sku`, `technicalSpecification.sections[].features[]` (Dimensions, Form Factor, Weight, Max. Power Consumption, Power Method, Port Layout, Networking Interface) |
+
+Live check (2026-11-16, read-only): the library index lists 14,433 files of
+455 manufacturers (one request, not truncated); techspecs pages resolve for
+USW-Pro-24, U6-Lite, UDM-Pro, USW-Lite-8-POE, UA-Intercom, U6+ and
+UVC-G5-Bullet. An invalid category in the URL redirects to a category page and
+an unknown slug serves the home page, so a hit requires a product page whose
+slug equals the request. SKUs may carry a regional suffix (`U6-Lite-US`),
+which is dropped for the part number. The bundled JSON schema comes from
+`schema/` of the library (CC0, see `resources/devicetype-schema/SOURCE.txt`).
+
+NetBox writes for imports: `dcim/device-types` and the template endpoints
+`interface-`, `console-port-`, `console-server-port-`, `power-port-`,
+`power-outlet-`, `module-bay-`, `device-bay-` and `inventory-item-templates`;
+reads `dcim/manufacturers` by name.
+
 ## Extended UniFi Details (M11)
 
 Read-only probe on 2026-11-15 against Network 11.0.99, assistant-executed on

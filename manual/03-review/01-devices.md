@@ -36,9 +36,11 @@ port list. See [Firmware and management IP](02-firmware-and-management-ip.md).
 
 A UniFi device without a NetBox match can be created. Choose:
 
-- **Device type**: a matching NetBox device type is suggested and preselected
-  when it is unambiguous. The app never creates device types; add missing ones
-  in NetBox (for example from the community device type library) and refresh.
+- **Device type**: a matching NetBox device type is preselected when it is
+  unambiguous. **Choose...** opens the [device type picker](../04-device-types/01-choosing.md),
+  which also finds definitions in your local type folder and the
+  devicetype-library, or drafts a new one; those are
+  [imported on apply](../04-device-types/04-import.md).
 - **Role**: the default role from [Sync defaults](../02-settings/06-sync-defaults.md)
   or any NetBox role.
 - **Site** and **Status**.

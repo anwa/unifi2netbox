@@ -540,3 +540,12 @@ def _similarity(left: str, right: str) -> float:
 
 def _norm(value: str) -> str:
     return "".join(character.lower() for character in value if character.isalnum())
+
+
+def model_keys(model: str) -> frozenset[str]:
+    """Normalized spellings of a model or part number used for matching.
+
+    ``USW Pro 24`` and ``USW-Pro-24`` share a key; UniFi aliases such as
+    ``AC Pro`` -> ``uapacpro`` are included.
+    """
+    return frozenset(_alias_keys(model) | {_norm(model)}) - {""}

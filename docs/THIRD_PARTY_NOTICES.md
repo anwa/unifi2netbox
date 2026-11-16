@@ -14,6 +14,12 @@ the application's MIT license does not relicense Qt or other components.
 - [Packaging](https://github.com/pypa/packaging): Apache-2.0 / BSD-2-Clause.
 - [TOML Kit](https://github.com/python-poetry/tomlkit): MIT.
 - [platformdirs](https://github.com/tox-dev/platformdirs): MIT.
+- [ruamel.yaml](https://sourceforge.net/projects/ruamel-yaml/): MIT.
+- [jsonschema](https://github.com/python-jsonschema/jsonschema),
+  [referencing](https://github.com/python-jsonschema/referencing),
+  [jsonschema-specifications](https://github.com/python-jsonschema/jsonschema-specifications),
+  [rpds-py](https://github.com/crate-py/rpds) and
+  [attrs](https://github.com/python-attrs/attrs): MIT.
 - [Python](https://www.python.org/): Python Software Foundation license.
 - [PyInstaller](https://pyinstaller.org/): GPL-2.0 with a bootloader exception
   that allows distributing the bundled executables under other licenses.
@@ -22,6 +28,11 @@ the application's MIT license does not relicense Qt or other components.
 
 The application icon (`src/unifi2netbox/resources/`) is original work of this
 project and covered by its MIT license.
+
+The device type JSON schema in `src/unifi2netbox/resources/devicetype-schema/`
+is copied from [netbox-community/devicetype-library](https://github.com/netbox-community/devicetype-library)
+(CC0-1.0; source and date in `SOURCE.txt` there). Device type files fetched
+from that library at run time are CC0-1.0 as well.
 
 Transitive dependencies have additional notices. The build recipe copies runtime
 distribution metadata recursively, including available license files. Inspect the

@@ -21,6 +21,7 @@ that part of the review; it shows a note.
 | --- | --- |
 | Devices | DCIM device: add, change |
 | Firmware Custom Field (once) | Extras custom field: add |
+| Device type imports | DCIM device type: add; DCIM interface, console port, console server port, power port, power outlet, module bay, device bay and inventory item templates: add |
 | Networks | IPAM VLAN group, VLAN, prefix: add, change |
 | Interfaces | DCIM interface: change (add for the `Management` interface) |
 | Management IPs | IPAM IP address: add, change; DCIM device: change |

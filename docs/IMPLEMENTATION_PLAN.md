@@ -53,7 +53,9 @@ passed on 2026-10-25. Linux/exact-platform verification remains open.
 4. Only unmatched devices receive Device Type suggestions, ranked by manufacturer,
   exact model, aliases and explainable fuzzy similarity using NetBox Device
   Templates (dcim device types). No type match means an explicit missing-type
-  state, not an invented type or external catalog import.
+  state, not an invented type. Since M12 the user can pick a definition from
+  the local type folder or the devicetype-library, or write one in the
+  device type editor; it is imported only as a selected write step.
 5. Select existing NetBox site, role, type, VLAN group and IP scope as needed.
    Missing prerequisite taxonomy blocks creation with an actionable message.
 6. Keep configured values separate from operational values. Link down must not
@@ -581,6 +583,68 @@ Slices:
 
 Acceptance: every new field is previewed with provenance, written only when
 selected, verified by read-back, and a second apply is a no-op.
+
+## M12: Device Types -> v1.2.0
+
+Branch `feature/device-types`. New UniFi devices often have no NetBox device
+type, and the create row's drop-down is far too long. Decisions (2026-11-16,
+user):
+
+- Device type YAML follows the netbox-community/devicetype-library format,
+  its `CONTRIBUTING.md` and `schema/`, so files can be merged there.
+- A local type folder shaped like the library
+  (`device-types/<Manufacturer>/<model or part number>.yaml`), default next to
+  the configuration, changeable in Settings (for example a fork clone).
+- A device type editor (like the manual window): folder tree left, the file
+  right as raw YAML or as a table with field explanations. Any manufacturer;
+  techspecs.ui.com lookup (automatic or by URL) only for UniFi devices.
+- The create-row drop-down is replaced by a picker dialog modeled on
+  NetBox's: filter criteria list, filter rows, search, results from NetBox,
+  the local folder and the devicetype-library (switchable in Settings), and
+  **New** (editor prefilled from UniFi data).
+- A picked type that is not in NetBox is imported by the app as a visible,
+  selectable and confirmed write step before device writes; manufacturers are
+  never created (a missing one blocks the import).
+- New dependencies: ruamel.yaml and jsonschema.
+
+Slices:
+
+- [x] 1. Device type model: bundled library schema, YAML load/dump in library
+  style, validation (schema plus CONTRIBUTING rules), local type store, field
+  help texts.
+  (1.1.3, 2026-11-16: ruamel.yaml instead of PyYAML, which has no Python 3.15
+  wheel; six real library files round-trip byte-identical and validate.)
+- [x] 2. Search sources (NetBox, local, devicetype-library index from GitHub)
+  and the Settings page "Device types".
+  (1.1.4, 2026-11-16: live index read: 14,433 files of 455 manufacturers in
+  under a second; UA-Intercom is not in the library.)
+- [x] 3. techspecs.ui.com lookup and drafts from UniFi data.
+  (1.1.5, 2026-11-16: live lookups found USW Pro 24, U6 Lite, UDM Pro,
+  USW Lite 8 PoE, UA Intercom and U6+; an invalid category redirects, so the
+  lookup uses a valid one and keeps the page's own category for links.)
+- [x] 4. Device type editor window (tree, YAML/table toggle, validation).
+  (1.1.6, 2026-11-16: offline tests and offscreen rendering of a real
+  library file in both views.)
+- [x] 5. Picker dialog replacing the drop-down.
+  (1.1.7, 2026-11-16: offline tests and offscreen rendering with the live
+  library index; local/library choices block the apply until slice 6.)
+- [x] 6. Import of picked definitions into NetBox as a write step (preflight,
+  re-read, interrupted-create lookup, read-back, journal, dry run).
+  (1.1.8, 2026-11-16: offline tests and a live dry run: 6 create rows
+  without a NetBox type (UA-Intercom, UAH, UVC G5 Bullet, 3x CAM-PT2), none
+  in the library; techspecs drafts for UA-Intercom and UVC G5 Bullet; the
+  import dry run passed the NetBox re-read for all four definitions.)
+- [x] 7. Documentation, manual chapter, live read-only check, dry run and an
+  approved import test.
+  (1.1.9, 2026-11-16: documentation, manual chapter, live read-only checks,
+  dry run and an approved live write test, 5/5: UA-Intercom imported as
+  device type and the device created with it; no test objects removed, the
+  data stays as real data.)
+
+- [x] Obtain explicit merge approval; prepare version 1.2.0. (Approved
+  2026-11-16.)
+- [ ] Complete the approved main merge and tag v1.2.0; build the Windows exe
+  and installer from the tag.
 
 ## Security and Configuration
 

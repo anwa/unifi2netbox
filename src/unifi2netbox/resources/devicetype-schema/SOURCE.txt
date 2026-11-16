@@ -1,0 +1,2 @@
+https://github.com/netbox-community/devicetype-library/tree/master/schema
+Retrieved 2026-11-16; license CC0-1.0.

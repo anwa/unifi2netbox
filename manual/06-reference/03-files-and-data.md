@@ -10,6 +10,8 @@ All files live in one folder per user, outside the program folder:
 | `config.toml` | settings of all connections, **including tokens in plain text** |
 | `snapshots.sqlite3` | the current and previous inventory of each source |
 | `write-journal.sqlite3` | the write history |
+| `devicetype-library/` | your local device type definitions (default location) |
+| `devicetype-library-cache/` | the library index and downloaded library files |
 
 `python -m unifi2netbox --config PATH` (or the installed program with
 `--config PATH`) uses another configuration file; the two databases are

@@ -3,13 +3,15 @@
 ## Order within one run
 
 1. Custom Field `firmware` (if missing and checked)
-2. VLAN group, VLANs and prefixes
-3. Wireless LANs and IP ranges
-4. Interfaces (mode, VLANs, description, speed, PoE)
-5. Cables
-6. Devices (creates first, then updates, including firmware)
-7. Management IPs (interface, IP, primary IPv4) and reserved IPs
-8. Inventory items: UNAS drives and SFP modules
+2. Device types chosen from the local folder or the library, with their
+   component templates
+3. VLAN group, VLANs and prefixes
+4. Wireless LANs and IP ranges
+5. Interfaces (mode, VLANs, description, speed, PoE)
+6. Cables
+7. Devices (creates first, then updates, including firmware)
+8. Management IPs (interface, IP, primary IPv4) and reserved IPs
+9. Inventory items: UNAS drives and SFP modules
 
 ## Before each write
 
@@ -44,6 +46,6 @@ The app never writes again on its own.
 - write to UniFi,
 - delete anything in NetBox,
 - clear a NetBox value because UniFi has none,
-- create sites, device types, roles, manufacturers or Custom Fields other
-  than `firmware`,
+- create sites, roles, manufacturers or Custom Fields other than
+  `firmware`, or a device type you did not choose,
 - overwrite another primary IPv4, a prefix VLAN, a WLAN VLAN or a cable.
