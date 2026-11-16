@@ -6,6 +6,18 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.2.0
+
+### Summary
+
+- Milestone M12 (device types): new devices choose their NetBox device type
+	in a picker modeled on NetBox's that searches NetBox, a local type folder
+	and netbox-community/devicetype-library; a device type editor writes
+	definitions in the library format (validated against its schema and
+	CONTRIBUTING rules) with data from UniFi and techspecs.ui.com; a chosen
+	definition that NetBox lacks is imported as a visible, selectable write
+	step. Manufacturers, sites and roles are still never created.
+
 ### Added
 
 - M12 slice 1: device type definitions in the netbox-community
@@ -73,6 +85,17 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	connection chips show only the service name (version and details in the
 	tooltip), **Manual** and **Device types** become icons and the app name
 	gives way to the logo.
+
+### Validation
+
+- Offline gate: 668 passed, 2 skipped; Ruff lint and format pass.
+- Live on the developer workstation (NetBox 4.7.3, UniFi Network 11.0.99,
+	2026-11-16): library index and techspecs lookups read-only, an import dry
+	run for four definitions, and an approved write test: the UA-Intercom
+	device type imported and the device created with it, both verified, a
+	second apply a no-op. The data stays in NetBox as real data.
+- Packaged builds of this version are not verified yet (new dependencies
+	ruamel.yaml and jsonschema; bundled schema resources).
 
 ## v1.1.2
 

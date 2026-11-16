@@ -641,7 +641,8 @@ Slices:
   device type and the device created with it; no test objects removed, the
   data stays as real data.)
 
-- [ ] Obtain explicit merge approval; prepare version 1.2.0.
+- [x] Obtain explicit merge approval; prepare version 1.2.0. (Approved
+  2026-11-16.)
 - [ ] Complete the approved main merge and tag v1.2.0; build the Windows exe
   and installer from the tag.
 
