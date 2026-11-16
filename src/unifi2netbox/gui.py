@@ -107,7 +107,10 @@ from unifi2netbox.gui_review import (
     device_summary,
 )
 from unifi2netbox.gui_typeeditor import DeviceTypeEditor
+from unifi2netbox.gui_typepicker import DeviceTypePicker
+from unifi2netbox.inventory import InventoryDevice
 from unifi2netbox.journal_store import JOURNAL_FILENAME, JournalStore, JournalStoreError
+from unifi2netbox.library import LibraryCache, cache_folder, refresh_index
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
@@ -134,6 +137,15 @@ from unifi2netbox.review import (
     ReviewState,
     humanize_timestamp,
     single_operation_plan,
+)
+from unifi2netbox.typedraft import draft_from_unifi
+from unifi2netbox.typesearch import (
+    SOURCE_LABELS,
+    TypeCandidate,
+    from_document,
+    library_candidates,
+    local_candidates,
+    netbox_candidates,
 )
 from unifi2netbox.window_frame import app_icon
 from unifi2netbox.write_plan import WritePlan
@@ -1295,6 +1307,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(860, 560)
         self.manual_window: ManualWindow | None = None
         self.type_editor: DeviceTypeEditor | None = None
+        # Create row waiting for a type saved in the editor (picker New).
+        self.pending_type_key = ""
         # Aliases to the NetBox connection, used by older callers and tests.
         self.runner = self.netbox.runner
         self.state = self.netbox.state
@@ -1789,6 +1803,7 @@ class MainWindow(QMainWindow):
         self.detail.apply_requested.connect(self.execute_selected_preview_row)
         self.detail.export_requested.connect(self.export_unifi_row_dump)
         self.detail.copy_requested.connect(self.copy_device_details)
+        self.detail.type_requested.connect(self.choose_device_type)
         detail_frame = QFrame()
         detail_frame.setProperty("card", True)
         detail_layout = QVBoxLayout(detail_frame)
@@ -2405,6 +2420,111 @@ class MainWindow(QMainWindow):
         editor.raise_()
         editor.activateWindow()
         return editor
+
+    # -- device type picker ---------------------------------------------------
+
+    def type_candidates(self) -> tuple[list[TypeCandidate], str]:
+        """NetBox, local and (when enabled) library candidates plus a note."""
+        records = self.last_result.netbox_type_records if self.last_result else ()
+        if records:
+            candidates = netbox_candidates(records)
+        else:
+            candidates = [
+                TypeCandidate("netbox", manufacturer, model, netbox_id=type_id)
+                for type_id, manufacturer, model in self.review.device_types
+            ]
+        store = self.type_store()
+        candidates += local_candidates(store.files(), store.read)
+        note = ""
+        if self.device_types_config.use_library:
+            cache = LibraryCache(cache_folder(self.path))
+            index = cache.load_index(self.device_types_config)
+            candidates += library_candidates(index, cache)
+        else:
+            note = "The devicetype-library is switched off in Settings."
+        return candidates, note
+
+    def choose_device_type(self, key: str) -> None:
+        item = self.review.row(key)
+        if item is None:
+            return
+        candidates, note = self.type_candidates()
+        config = self.device_types_config
+        path = self.path
+
+        def refresh():
+            index = refresh_index(config, path)
+            return library_candidates(index, LibraryCache(cache_folder(path)))
+
+        picker = DeviceTypePicker(
+            candidates,
+            hint=item.source_value("model"),
+            hint_manufacturer=item.source_value("manufacturer"),
+            note=note,
+            refresh_library=refresh if config.use_library else None,
+            pool=self.pool,
+            parent=self,
+        )
+        if picker.exec() == QDialog.DialogCode.Accepted:
+            if picker.new_requested:
+                self.new_device_type_for(key)
+            elif picker.selected is not None:
+                self.set_device_type_choice(key, picker.selected)
+        picker.deleteLater()
+
+    def set_device_type_choice(self, key: str, candidate: TypeCandidate) -> None:
+        if candidate.source == "netbox":
+            value = candidate.netbox_id
+        else:
+            value = f"{candidate.source}:{candidate.path}"
+            name = candidate.model or candidate.part_number or candidate.path
+            self.review.type_labels[value] = (
+                f"{candidate.manufacturer} {name} "
+                f"({SOURCE_LABELS[candidate.source].lower()}, imported on apply)"
+            )
+        self.review.set_choice("type", key, value)
+        self.on_detail_changed()
+        self.show_detail(key)
+
+    def new_device_type_for(self, key: str) -> None:
+        """Open the editor with a draft from the create row's UniFi data."""
+        item = self.review.row(key)
+        if item is None:
+            return
+        unifi_id = _unifi_source_id_from_device_key(key)
+        device = InventoryDevice(
+            unifi_id,
+            item.source_value("name") or item.name,
+            serial=item.source_value("serial"),
+            model=item.source_value("model"),
+            manufacturer=item.source_value("manufacturer") or "Ubiquiti",
+        )
+        ports = [p for p in self.review.unifi_ports if p.device_id == unifi_id]
+        doc, notes = draft_from_unifi(device, ports)
+        editor = self.show_type_editor()
+        if not editor.open_new(doc, notes):
+            return
+        self.pending_type_key = key
+        if not editor.property("pendingTypeHooked"):
+            editor.saved.connect(self._type_saved)
+            editor.setProperty("pendingTypeHooked", True)
+        if (
+            self.device_types_config.use_techspecs
+            and device.manufacturer.lower() == "ubiquiti"
+        ):
+            editor.look_up_specs()
+
+    def _type_saved(self, path: Path) -> None:
+        key = self.pending_type_key
+        if not key or self.review.row(key) is None:
+            return
+        store = self.type_store()
+        try:
+            doc = store.read(path)
+        except Exception:  # noqa: BLE001 - keep the choice open if unreadable
+            return
+        self.pending_type_key = ""
+        self.set_device_type_choice(key, from_document(doc, "local", str(path)))
 
     def show_history(self) -> None:
         try:

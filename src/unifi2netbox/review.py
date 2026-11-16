@@ -62,6 +62,14 @@ from unifi2netbox.write_plan import (
 
 CREATE = "create"
 UPDATE = "update"
+# Device type choices that are not NetBox IDs: definitions to import.
+IMPORT_PREFIXES = ("local:", "library:")
+
+
+def is_import_choice(value: str) -> bool:
+    return value.startswith(IMPORT_PREFIXES)
+
+
 IN_SYNC = "in_sync"
 NETBOX_ONLY = "netbox_only"
 ATTENTION = "attention"
@@ -222,6 +230,8 @@ class ReviewState:
         self.sites: tuple[str, ...] = result.netbox_sites if result else ()
         self.statuses: tuple[str, ...] = result.netbox_device_statuses if result else ()
         self.type_by_key: dict[str, str] = {}
+        # Display names of chosen local or library definitions.
+        self.type_labels: dict[str, str] = {}
         self.role_by_key: dict[str, str] = {}
         self.site_by_key: dict[str, str] = {}
         self.status_by_key: dict[str, str] = {}
@@ -393,6 +403,11 @@ class ReviewState:
                 note = row.blocked_reason
             elif category == CREATE and not self.type_by_key.get(row.device_key):
                 note = "Choose a device type"
+                attention = True
+            elif category == CREATE and is_import_choice(
+                self.type_by_key.get(row.device_key, "")
+            ):
+                note = "Device type import is not available yet"
                 attention = True
         if category == CREATE and selected and not self.role_by_key.get(row.device_key):
             attention = True
@@ -864,6 +879,18 @@ class ReviewState:
             if field.name == FIRMWARE and field.selectable and field.selected
         )
 
+    def type_choice_label(self, key: str) -> str:
+        """Display text of the chosen device type of a create row."""
+        value = self.type_by_key.get(key, "")
+        if not value:
+            return ""
+        if is_import_choice(value):
+            return self.type_labels.get(value, value.split(":", 1)[1])
+        for type_id, manufacturer, model in self.device_types:
+            if type_id == value:
+                return f"{manufacturer} {model}"
+        return f"NetBox device type {value}"
+
     def set_choice(self, kind: str, key: str, value: str) -> None:
         target = {
             "type": self.type_by_key,
@@ -911,11 +938,15 @@ class ReviewState:
         def limit(values: dict[str, str]) -> dict[str, str]:
             return {k: v for k, v in values.items() if k in create_keys and v.strip()}
 
+        types = {
+            k: v for k, v in limit(self.type_by_key).items() if not is_import_choice(v)
+        }
+
         return {
             "role": limit(self.role_by_key),
             "site": limit(self.site_by_key),
             "status": limit(self.status_by_key),
-            "type": limit(self.type_by_key),
+            "type": types,
         }
 
     def plan_blockers(self, plan: WritePlan) -> tuple[str, ...]:
@@ -934,6 +965,16 @@ class ReviewState:
         if missing_role:
             reasons.append(
                 f"Choose a NetBox device role for {_count_names(missing_role)}."
+            )
+        imports = [
+            op.source_label
+            for op in plan.operations
+            if op.operation_type == OperationType.CREATE_DEVICE
+            and is_import_choice(self.type_by_key.get(op.device_key, ""))
+        ]
+        if imports:
+            reasons.append(
+                f"Device type import is not available yet for {_count_names(imports)}."
             )
         return tuple(reasons)
 

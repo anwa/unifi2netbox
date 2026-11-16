@@ -689,7 +689,7 @@ def test_detail_field_checkbox_controls_update(qtbot, tmp_path, pool):
     assert window.execute_plan_button.text() == "Apply 2 changes..."
 
 
-def test_detail_create_choices_update_review_state(qtbot, tmp_path, pool):
+def test_detail_create_choices_update_review_state(qtbot, tmp_path, pool, monkeypatch):
     window = review_window(qtbot, tmp_path, pool)
     key = select_row(window, "ap-1")
 
@@ -700,8 +700,26 @@ def test_detail_create_choices_update_review_state(qtbot, tmp_path, pool):
     role.setCurrentText("Switch")
     assert window.review.role_by_key[key] == "Switch"
 
-    type_combo = window.detail.findChild(QComboBox, "choiceType")
-    type_combo.setCurrentIndex(type_combo.findData("102"))
+    from unifi2netbox import gui as gui_module
+
+    assert window.detail.findChild(QLabel, "choiceTypeText").text() == (
+        "Ubiquiti U6 Lite"
+    )
+
+    class PickAcPro:
+        def __init__(self, candidates, **kwargs):
+            self.candidates = candidates
+            self.new_requested = False
+            self.selected = next(c for c in candidates if c.netbox_id == "102")
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr(gui_module, "DeviceTypePicker", PickAcPro)
+    window.detail.findChild(QPushButton, "choiceTypeButton").click()
     assert window.review.type_by_key[key] == "102"
     row = table_names(window).index("ap-1")
     assert window.table_model.data(window.table_model.index(row, 4)) == (

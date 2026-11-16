@@ -113,7 +113,7 @@ def from_document(
 
     counts = {
         "interfaces": len(interfaces),
-        "poe": sum(1 for i in interfaces if i.get("poe_mode") == "pse"),
+        "poe": sum(1 for i in interfaces if i.get("poe_mode") in ("pse", "pd")),
         "sfp": sum(1 for i in interfaces if "sfp" in str(i.get("type", ""))),
         "console": count("console-ports"),
         "power": count("power-ports"),

@@ -625,7 +625,9 @@ Slices:
 - [x] 4. Device type editor window (tree, YAML/table toggle, validation).
   (1.1.6, 2026-11-16: offline tests and offscreen rendering of a real
   library file in both views.)
-- [ ] 5. Picker dialog replacing the drop-down.
+- [x] 5. Picker dialog replacing the drop-down.
+  (1.1.7, 2026-11-16: offline tests and offscreen rendering with the live
+  library index; local/library choices block the apply until slice 6.)
 - [ ] 6. Import of picked definitions into NetBox as a write step (preflight,
   re-read, interrupted-create lookup, read-back, journal, dry run).
 - [ ] 7. Documentation, manual chapter, live read-only check, dry run and an

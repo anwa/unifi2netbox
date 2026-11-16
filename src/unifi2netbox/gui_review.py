@@ -308,6 +308,7 @@ class DetailPanel(QScrollArea):
     apply_requested = Signal(str)
     export_requested = Signal(str)
     copy_requested = Signal(str)
+    type_requested = Signal(str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -841,18 +842,17 @@ class DetailPanel(QScrollArea):
         )
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-        type_combo = QComboBox()
-        type_combo.setObjectName("choiceType")
-        type_combo.addItem("Choose a device type", "")
-        for type_id, manufacturer, model in self.state.device_types:
-            type_combo.addItem(f"{manufacturer} {model}", type_id)
-        type_combo.setCurrentIndex(
-            max(0, type_combo.findData(self.state.type_by_key.get(item.key, "")))
-        )
-        type_combo.currentIndexChanged.connect(
-            lambda _i, c=type_combo: self._choose("type", str(c.currentData() or ""))
-        )
-        form.addRow("Device type", type_combo)
+        chosen = self.state.type_choice_label(item.key)
+        type_text = label(chosen or "No device type chosen", "secondary")
+        type_text.setObjectName("choiceTypeText")
+        type_text.setWordWrap(True)
+        type_button = QPushButton("Choose..." if chosen else "Choose device type...")
+        type_button.setObjectName("choiceTypeButton")
+        type_button.clicked.connect(lambda: self.type_requested.emit(self.key))
+        type_row = QHBoxLayout()
+        type_row.addWidget(type_text, 1)
+        type_row.addWidget(type_button)
+        form.addRow("Device type", type_row)
         for kind, title, values, chosen in (
             ("role", "Role", self.state.roles, self.state.role_by_key),
             ("site", "Site", self.state.sites, self.state.site_by_key),

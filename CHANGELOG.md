@@ -40,6 +40,17 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	Revert, Delete, Validate, Open folder, and for Ubiquiti models **Look up
 	specs** on techspecs.ui.com (by part number or model, or from a page URL),
 	which only fills gaps.
+- M12 slice 5: the long device type drop-down of new devices is replaced by
+	**Choose...**, which opens a picker modeled on NetBox's: filter criteria
+	on the left (search, manufacturer, source, part number, rack height,
+	full depth, airflow, components, weight), filter rows with operators,
+	**Search**, and results from NetBox, the local type folder and the
+	devicetype-library with the UniFi model's matches first. **Refresh
+	library** loads the library index; **New** opens the editor with a draft
+	from the device's UniFi data (and a techspecs lookup for Ubiquiti), and
+	the saved file becomes the device's type. Local and library types are
+	marked "imported on apply"; until the import step exists they block the
+	apply with a clear reason.
 
 ## v1.1.2
 

@@ -38,6 +38,7 @@ from unifi2netbox.interface_plan import (
 )
 from unifi2netbox.inventory import (
     InventoryDevice,
+    InventoryDeviceType,
     InventoryDisk,
     InventoryError,
     InventoryInterface,
@@ -145,6 +146,8 @@ class InventoryPreviewResult:
     drive_status: str = ""
     network_plan: NetworkPlan | None = None
     netbox_device_types: tuple[tuple[str, str, str], ...] = ()
+    # Full NetBox type records (part numbers) for the type picker.
+    netbox_type_records: tuple[InventoryDeviceType, ...] = ()
     netbox_device_roles: tuple[str, ...] = ()
     netbox_sites: tuple[str, ...] = ()
     netbox_device_statuses: tuple[str, ...] = ()
@@ -364,6 +367,7 @@ def build_inventory_preview(
         drive_disks=drive_snapshot.disks if drive_snapshot else (),
         drive_status=drive_note,
         netbox_device_types=_device_type_catalog(netbox_snapshot),
+        netbox_type_records=netbox_snapshot.device_types,
         netbox_device_roles=_sorted_names(netbox_snapshot.device_roles),
         netbox_sites=_sorted_names(netbox_snapshot.sites),
         netbox_device_statuses=tuple(
