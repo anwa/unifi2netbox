@@ -6,6 +6,17 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Added
+
+- M12 slice 1: device type definitions in the netbox-community
+	devicetype-library format: YAML load and save in the library style (an
+	existing library file is written back byte for byte), validation against
+	the library's JSON schema (bundled, CC0) and its CONTRIBUTING rules (file
+	name, folder, slug, empty values, duplicates; weight, weight unit and
+	airflow as recommendations), and a local type folder
+	`device-types/<Manufacturer>/<model or part number>.yaml`. New
+	dependencies: ruamel.yaml and jsonschema.
+
 ## v1.1.2
 
 ### Summary

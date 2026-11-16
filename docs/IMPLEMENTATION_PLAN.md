@@ -605,13 +605,15 @@ user):
 - A picked type that is not in NetBox is imported by the app as a visible,
   selectable and confirmed write step before device writes; manufacturers are
   never created (a missing one blocks the import).
-- New dependencies: PyYAML and jsonschema.
+- New dependencies: ruamel.yaml and jsonschema.
 
 Slices:
 
-- [ ] 1. Device type model: bundled library schema, YAML load/dump in library
+- [x] 1. Device type model: bundled library schema, YAML load/dump in library
   style, validation (schema plus CONTRIBUTING rules), local type store, field
   help texts.
+  (1.1.3, 2026-11-16: ruamel.yaml instead of PyYAML, which has no Python 3.15
+  wheel; six real library files round-trip byte-identical and validate.)
 - [ ] 2. Search sources (NetBox, local, devicetype-library index from GitHub)
   and the Settings page "Device types".
 - [ ] 3. techspecs.ui.com lookup and drafts from UniFi data.
