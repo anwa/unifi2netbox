@@ -31,6 +31,15 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	definitions from a UniFi device: interfaces from its UniFi ports
 	(`Port N`, `SFP+ N`, ... with NetBox types and PoE), else from techspecs
 	(`eth0`, PoE powered), with notes about differences and missing data.
+- M12 slice 4: device type editor (**Device types** in the header and the
+	More menu), laid out like the manual: the local type folder as a tree on
+	the left, the definition on the right as **Table** (attributes with
+	explanations, comments, one tab per component kind with choice lists from
+	the library schema) or raw **YAML**; unchanged values keep their original
+	spelling. New, Save (library file name, renames when the model changes),
+	Revert, Delete, Validate, Open folder, and for Ubiquiti models **Look up
+	specs** on techspecs.ui.com (by part number or model, or from a page URL),
+	which only fills gaps.
 
 ## v1.1.2
 

@@ -168,3 +168,39 @@ def _describe(counts: Counter) -> str:
 def _canonical(url: str) -> str:
     """Drop the region query (``?s=eu``) from techspecs links."""
     return url.split("?", 1)[0]
+
+
+def merge_spec(doc: CommentedMap, spec: TechSpec) -> tuple[str, ...]:
+    """Fill gaps in ``doc`` from techspecs; never overwrite entered values."""
+    notes: list[str] = []
+    filled: list[str] = []
+    if not doc.get("part_number") and spec.part_number:
+        doc["part_number"] = spec.part_number
+        filled.append("part number")
+    if not doc.get("model"):
+        doc["model"] = spec.title
+        filled.append("model")
+    if not doc.get("u_height") and spec.u_height:
+        doc["u_height"] = (
+            int(spec.u_height) if spec.u_height.is_integer() else spec.u_height
+        )
+        filled.append("rack height")
+    if doc.get("weight") is None and spec.weight is not None:
+        doc["weight"] = spec.weight
+        doc["weight_unit"] = spec.weight_unit
+        filled.append("weight")
+    link = _canonical(spec.url)
+    comments = str(doc.get("comments") or "")
+    if link not in comments:
+        line = f"[{spec.title} Techspecs]({link})"
+        doc["comments"] = f"{comments.rstrip()}\n\n{line}" if comments.strip() else line
+        filled.append("techspecs link")
+    if not doc.get("interfaces") and spec.ports:
+        doc["interfaces"] = _from_spec_ports(spec.ports, spec)
+        filled.append("interfaces")
+    notes.append(
+        f"Filled from techspecs: {', '.join(filled)}."
+        if filled
+        else "techspecs had nothing to add; existing values were kept."
+    )
+    return tuple(notes)

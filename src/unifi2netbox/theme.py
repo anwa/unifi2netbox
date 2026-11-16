@@ -110,6 +110,11 @@ def tone_colors(tone: str, palette: Colors | None = None) -> tuple[str, str]:
     }.get(tone, (c.text_secondary, c.neutral_soft))
 
 
+def tone_qcolor(tone: str) -> QColor:
+    """Foreground color of a semantic tone, for item views."""
+    return QColor(tone_colors(tone)[0])
+
+
 def dark_for(choice: str) -> bool | None:
     """Map a saved theme choice to apply_theme's ``dark`` argument."""
     return {"light": False, "dark": True}.get(choice)

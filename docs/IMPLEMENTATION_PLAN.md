@@ -622,7 +622,9 @@ Slices:
   (1.1.5, 2026-11-16: live lookups found USW Pro 24, U6 Lite, UDM Pro,
   USW Lite 8 PoE, UA Intercom and U6+; an invalid category redirects, so the
   lookup uses a valid one and keeps the page's own category for links.)
-- [ ] 4. Device type editor window (tree, YAML/table toggle, validation).
+- [x] 4. Device type editor window (tree, YAML/table toggle, validation).
+  (1.1.6, 2026-11-16: offline tests and offscreen rendering of a real
+  library file in both views.)
 - [ ] 5. Picker dialog replacing the drop-down.
 - [ ] 6. Import of picked definitions into NetBox as a write step (preflight,
   re-read, interrupted-create lookup, read-back, journal, dry run).

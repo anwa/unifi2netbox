@@ -504,3 +504,55 @@ class LocalTypeStore:
         if root != resolved and root not in resolved.parents:
             raise DeviceTypeError("The file is outside the local type folder.")
         return resolved
+
+
+# -- field kinds for editors ---------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    kind: str  # string, number, integer, boolean or enum
+    choices: tuple[str, ...] = ()
+    required: bool = False
+
+
+def _resolve(node: Mapping) -> Mapping:
+    """Follow ``$ref`` across the bundled schema files."""
+    seen = 0
+    while isinstance(node, Mapping) and "$ref" in node and seen < 10:
+        seen += 1
+        base, _, pointer = str(node["$ref"]).partition("#")
+        schema = next(
+            (s for s in _schemas().values() if s.get("$id") == base),
+            None,
+        )
+        if schema is None:
+            return {}
+        target: object = schema
+        for part in pointer.strip("/").split("/"):
+            if not part:
+                continue
+            target = target.get(part, {}) if isinstance(target, Mapping) else {}
+        node = target if isinstance(target, Mapping) else {}
+    return node
+
+
+def field_spec(section: str | None, name: str) -> FieldSpec:
+    """Kind and choices of a device type attribute or component column."""
+    if section is None:
+        schema = _schemas()["devicetype.json"]
+        node = schema["properties"].get(name, {})
+        required = name in schema.get("required", ())
+    else:
+        definition = _schemas()["components.json"]["definitions"][
+            COMPONENT_DEFINITIONS[section]
+        ]
+        node = definition.get("properties", {}).get(name, {})
+        required = name in definition.get("required", ())
+    node = _resolve(node)
+    if node.get("enum"):
+        return FieldSpec("enum", tuple(str(v) for v in node["enum"]), required)
+    kind = node.get("type", "string")
+    if kind not in ("string", "number", "integer", "boolean"):
+        kind = "string"
+    return FieldSpec(kind, (), required)

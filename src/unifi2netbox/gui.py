@@ -71,6 +71,7 @@ from unifi2netbox.config import (
     load_protect_config,
     load_ui_config,
     load_unifi_config,
+    local_type_folder,
     save_connections,
     save_ui_config,
 )
@@ -83,6 +84,7 @@ from unifi2netbox.connections import (
     check_unifi_connection,
 )
 from unifi2netbox.custom_fields import select_custom_field
+from unifi2netbox.devicetypes import LocalTypeStore
 from unifi2netbox.gui_devicetypes import DeviceTypeSettingsPage
 from unifi2netbox.gui_manual import ManualWindow
 from unifi2netbox.gui_review import (
@@ -104,6 +106,7 @@ from unifi2netbox.gui_review import (
     banner,
     device_summary,
 )
+from unifi2netbox.gui_typeeditor import DeviceTypeEditor
 from unifi2netbox.journal_store import JOURNAL_FILENAME, JournalStore, JournalStoreError
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
 from unifi2netbox.pipeline import (
@@ -1291,6 +1294,7 @@ class MainWindow(QMainWindow):
         self.resize(1180, 760)
         self.setMinimumSize(860, 560)
         self.manual_window: ManualWindow | None = None
+        self.type_editor: DeviceTypeEditor | None = None
         # Aliases to the NetBox connection, used by older callers and tests.
         self.runner = self.netbox.runner
         self.state = self.netbox.state
@@ -1381,6 +1385,11 @@ class MainWindow(QMainWindow):
         )
         self.manual_action.setToolTip("Open the user manual (F1)")
         self.manual_action.triggered.connect(lambda: self.show_manual())
+        self.types_action = QAction("Device types...", self)
+        self.types_action.setToolTip(
+            "Edit device type definitions in the local type folder"
+        )
+        self.types_action.triggered.connect(lambda: self.show_type_editor())
         self.exit_action = QAction("Exit", self)
         self.exit_action.triggered.connect(self.close)
         for action in (self.preview_action, self.settings_action, self.manual_action):
@@ -1434,6 +1443,12 @@ class MainWindow(QMainWindow):
         self.manual_button.setToolTip(self.manual_action.toolTip())
         self.manual_button.clicked.connect(self.manual_action.trigger)
         layout.addWidget(self.manual_button)
+        self.types_button = QPushButton("Device types")
+        self.types_button.setObjectName("typesButton")
+        self.types_button.setProperty("variant", "ghost")
+        self.types_button.setToolTip(self.types_action.toolTip())
+        self.types_button.clicked.connect(self.types_action.trigger)
+        layout.addWidget(self.types_button)
         settings = QToolButton()
         settings.setDefaultAction(self.settings_action)
         settings.setProperty("variant", "ghost")
@@ -1450,6 +1465,7 @@ class MainWindow(QMainWindow):
         menu.addAction(self.history_action)
         menu.addAction(self.export_action)
         menu.addAction(self.copy_summary_action)
+        menu.addAction(self.types_action)
         menu.addAction(self.manual_action)
         menu.addSeparator()
         menu.addAction(self.exit_action)
@@ -2365,6 +2381,30 @@ class MainWindow(QMainWindow):
         self.manual_window.show()
         self.manual_window.raise_()
         self.manual_window.activateWindow()
+
+    def type_store(self) -> LocalTypeStore:
+        return LocalTypeStore(local_type_folder(self.device_types_config, self.path))
+
+    def show_type_editor(self) -> DeviceTypeEditor:
+        """Open (or raise) the device type editor for the local type folder."""
+        store = self.type_store()
+        editor = self.type_editor
+        if editor is not None and (
+            editor.store.root != store.root or editor.config != self.device_types_config
+        ):
+            if editor.dirty:
+                editor.config = self.device_types_config
+            else:
+                editor.close()
+                editor.deleteLater()
+                editor = None
+        if editor is None:
+            editor = DeviceTypeEditor(store, self.device_types_config, self.pool, self)
+            self.type_editor = editor
+        editor.show()
+        editor.raise_()
+        editor.activateWindow()
+        return editor
 
     def show_history(self) -> None:
         try:
