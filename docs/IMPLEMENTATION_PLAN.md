@@ -643,8 +643,8 @@ Slices:
 
 - [x] Obtain explicit merge approval; prepare version 1.2.0. (Approved
   2026-11-16.)
-- [ ] Complete the approved main merge and tag v1.2.0; build the Windows exe
-  and installer from the tag.
+- [x] Complete the approved main merge and tag v1.2.0; build the Windows exe
+  and installer from the tag. (2026-11-16; see `docs/DEPLOYMENT.md`.)
 
 ## Security and Configuration
 

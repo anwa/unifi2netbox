@@ -84,6 +84,20 @@ files and `SHA256SUMS.txt` are attached to the public GitHub release v1.1.2
 (requested by the user). Not verified: installer upgrade/uninstall for this
 version. The Windows build is not code-signed.
 
+Release v1.2.0 (tag v1.2.0 on merge commit 5420357, milestone M12 device
+types) was built on 2026-11-16 the same way from a clean detached worktree at
+the tag: bundle check (including `manual/index.md`) and native smoke test
+passed (1 passed, 1 skipped), the exe reports `1.2.0`, the directory is about
+136 MB and the installer `unifi2netbox-1.2.0-setup.exe` is 46.6 MB (SHA-256
+`1716D1035B14561001833278274607055EC65A999051C3F529C771933436222A`). The
+bundle contains the device type schema
+(`_internal/unifi2netbox/resources/devicetype-schema`) and the
+`jsonschema_specifications` data; ruamel.yaml and jsonschema are imported at
+start-up, so the smoke test covers their presence. The Offline Tests and
+Packages workflows passed for main and the tag. Not verified: installer
+upgrade/uninstall for this version, and validating, importing or fetching
+device types inside the packaged app. The Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
