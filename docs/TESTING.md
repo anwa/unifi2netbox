@@ -864,7 +864,19 @@ schema and CONTRIBUTING validation, search and filters, techspecs parsing,
 drafts, editor views, picker, import plan and execution (reuse, blockers,
 interrupted creates, template failures, read-back), skipped dependent device
 creates, the pipeline order and the compact header. Screenshots for the manual
-chapter come from demo data only. Not verified yet: an approved live import.
+chapter come from demo data only.
+
+Then, with the user's explicit approval (role Camera chosen by the user), the
+assistant ran the M12 write test against the NetBox developer instance
+(commit 128e479, application 1.1.9) through the real pipeline; UniFi was only
+read. A techspecs draft for UA-Intercom (part number UA-Intercom, one PoE
+powered `eth0`, weight, techspecs link) was saved to the local type folder
+without validation errors. Results, all passed (5/5): the device type was
+imported with its one interface template and read back as verified; the
+UniFi device "Haustür" was created with that type and verified; after a
+refresh NetBox had exactly one type with part number UA-Intercom, the device
+was matched (in sync) and a second apply had nothing to write for it. The
+type, the device and the local file stay as real data, as approved.
 
 On 2026-11-15 the assistant checked the reopened-window title bar fix
 (application 1.1.2 working tree on top of v1.1.1) natively on the developer

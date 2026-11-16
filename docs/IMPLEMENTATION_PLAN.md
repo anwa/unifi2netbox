@@ -634,10 +634,12 @@ Slices:
   without a NetBox type (UA-Intercom, UAH, UVC G5 Bullet, 3x CAM-PT2), none
   in the library; techspecs drafts for UA-Intercom and UVC G5 Bullet; the
   import dry run passed the NetBox re-read for all four definitions.)
-- [ ] 7. Documentation, manual chapter, live read-only check, dry run and an
+- [x] 7. Documentation, manual chapter, live read-only check, dry run and an
   approved import test.
-  (1.1.9, 2026-11-16: documentation, manual chapter, live read-only checks
-  and dry run done; the approved import test is pending.)
+  (1.1.9, 2026-11-16: documentation, manual chapter, live read-only checks,
+  dry run and an approved live write test, 5/5: UA-Intercom imported as
+  device type and the device created with it; no test objects removed, the
+  data stays as real data.)
 
 - [ ] Obtain explicit merge approval; prepare version 1.2.0.
 - [ ] Complete the approved main merge and tag v1.2.0; build the Windows exe
