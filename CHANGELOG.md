@@ -16,6 +16,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	airflow as recommendations), and a local type folder
 	`device-types/<Manufacturer>/<model or part number>.yaml`. New
 	dependencies: ruamel.yaml and jsonschema.
+- M12 slice 2: device type search across NetBox, the local type folder and
+	netbox-community/devicetype-library (index of `device-types/` read from
+	GitHub on request and cached next to the configuration, files downloaded
+	on demand and cached by blob SHA), ranked by UniFi model aliases and
+	filterable by manufacturer, source, part number, rack height, airflow,
+	weight and components. New Settings page **Device types**: local type
+	folder, library on/off with repository, branch and **Refresh index**,
+	techspecs lookups on/off (`[device_types]`).
 
 ## v1.1.2
 

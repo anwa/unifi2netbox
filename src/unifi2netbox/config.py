@@ -1,5 +1,6 @@
 import math
 import os
+import re
 import tempfile
 import tomllib
 from dataclasses import dataclass, field, fields
@@ -153,6 +154,49 @@ class BehaviorConfig:
             )
 
 
+DEFAULT_LIBRARY_REPOSITORY = "netbox-community/devicetype-library"
+DEFAULT_LIBRARY_BRANCH = "master"
+LOCAL_TYPES_FOLDER = "devicetype-library"
+_REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+_BRANCH = re.compile(r"[A-Za-z0-9_./-]+")
+
+
+@dataclass(frozen=True)
+class DeviceTypesConfig:
+    """Device type sources: local folder, devicetype-library, techspecs."""
+
+    local_folder: str = ""
+    use_library: bool = True
+    library_repository: str = DEFAULT_LIBRARY_REPOSITORY
+    library_branch: str = DEFAULT_LIBRARY_BRANCH
+    use_techspecs: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.local_folder, str) or any(
+            ord(character) < 32 for character in self.local_folder
+        ):
+            raise ConfigError("The local type folder must be a path.")
+        if type(self.use_library) is not bool or type(self.use_techspecs) is not bool:
+            raise ConfigError("Library and techspecs lookups must be on or off.")
+        if not isinstance(self.library_repository, str) or not _REPOSITORY.fullmatch(
+            self.library_repository
+        ):
+            raise ConfigError("Enter the library repository as owner/name.")
+        if (
+            not isinstance(self.library_branch, str)
+            or not _BRANCH.fullmatch(self.library_branch)
+            or ".." in self.library_branch
+        ):
+            raise ConfigError("Enter a valid library branch name.")
+
+
+def local_type_folder(config: DeviceTypesConfig, config_path: Path) -> Path:
+    """The configured folder, or ``devicetype-library`` next to the config."""
+    if config.local_folder.strip():
+        return Path(config.local_folder.strip()).expanduser()
+    return config_path.parent / LOCAL_TYPES_FOLDER
+
+
 THEME_CHOICES = ("system", "light", "dark")
 
 
@@ -234,6 +278,14 @@ def save_behavior_config(path: Path, config: BehaviorConfig) -> None:
     _save_sections(path, {"behavior": config})
 
 
+def load_device_types_config(path: Path) -> DeviceTypesConfig:
+    return _load_section(path, "device_types", DeviceTypesConfig)
+
+
+def save_device_types_config(path: Path, config: DeviceTypesConfig) -> None:
+    _save_sections(path, {"device_types": config})
+
+
 def load_ui_config(path: Path) -> UiConfig:
     return _load_section(path, "ui", UiConfig)
 
@@ -250,6 +302,7 @@ def save_connections(
     protect: ProtectConfig | None = None,
     access: AccessConfig | None = None,
     drive: DriveConfig | None = None,
+    device_types: DeviceTypesConfig | None = None,
 ) -> None:
     sections: dict[str, object] = {"netbox": netbox, "unifi_network": unifi}
     if behavior is not None:
@@ -260,6 +313,8 @@ def save_connections(
         sections["unifi_access"] = access
     if drive is not None:
         sections["unifi_drive"] = drive
+    if device_types is not None:
+        sections["device_types"] = device_types
     _save_sections(path, sections)
 
 

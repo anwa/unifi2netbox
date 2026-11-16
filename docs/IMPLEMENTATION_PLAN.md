@@ -614,8 +614,10 @@ Slices:
   help texts.
   (1.1.3, 2026-11-16: ruamel.yaml instead of PyYAML, which has no Python 3.15
   wheel; six real library files round-trip byte-identical and validate.)
-- [ ] 2. Search sources (NetBox, local, devicetype-library index from GitHub)
+- [x] 2. Search sources (NetBox, local, devicetype-library index from GitHub)
   and the Settings page "Device types".
+  (1.1.4, 2026-11-16: live index read: 14,433 files of 455 manufacturers in
+  under a second; UA-Intercom is not in the library.)
 - [ ] 3. techspecs.ui.com lookup and drafts from UniFi data.
 - [ ] 4. Device type editor window (tree, YAML/table toggle, validation).
 - [ ] 5. Picker dialog replacing the drop-down.

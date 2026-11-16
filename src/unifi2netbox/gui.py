@@ -57,6 +57,7 @@ from unifi2netbox.config import (
     AccessConfig,
     BehaviorConfig,
     ConfigError,
+    DeviceTypesConfig,
     DriveConfig,
     NetBoxConfig,
     ProtectConfig,
@@ -65,6 +66,7 @@ from unifi2netbox.config import (
     load_access_config,
     load_behavior_config,
     load_config,
+    load_device_types_config,
     load_drive_config,
     load_protect_config,
     load_ui_config,
@@ -81,6 +83,7 @@ from unifi2netbox.connections import (
     check_unifi_connection,
 )
 from unifi2netbox.custom_fields import select_custom_field
+from unifi2netbox.gui_devicetypes import DeviceTypeSettingsPage
 from unifi2netbox.gui_manual import ManualWindow
 from unifi2netbox.gui_review import (
     COL_CHANGE,
@@ -688,6 +691,7 @@ class SettingsDialog(QDialog):
         "UniFi Access",
         "UniFi Drive",
         "Sync defaults",
+        "Device types",
     )
 
     def __init__(
@@ -716,6 +720,7 @@ class SettingsDialog(QDialog):
         self.saved_access_config: AccessConfig | None = None
         self.saved_drive_config: DriveConfig | None = None
         self.saved_behavior_config: BehaviorConfig | None = None
+        self.saved_device_types_config: DeviceTypesConfig | None = None
         self.close_pending = False
         try:
             self.behavior = load_behavior_config(path)
@@ -805,6 +810,13 @@ class SettingsDialog(QDialog):
             plain_label("Tokens are stored locally as plain text.", "caption")
         )
 
+        try:
+            device_types_config = load_device_types_config(path)
+        except ConfigError:
+            device_types_config = DeviceTypesConfig()
+        self.device_types = DeviceTypeSettingsPage(device_types_config, path, pool)
+        self.device_types.changed.connect(self.update_activity)
+
         self.nav = QListWidget()
         self.nav.setObjectName("settingsNav")
         self.nav.setFixedWidth(170)
@@ -817,6 +829,7 @@ class SettingsDialog(QDialog):
             self.access,
             self.drive,
             sync_page,
+            self.device_types,
         ):
             self.pages.addWidget(page)
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
@@ -872,6 +885,7 @@ class SettingsDialog(QDialog):
             or self.protect.runner.busy
             or self.access.runner.busy
             or self.drive.runner.busy
+            or self.device_types.busy
         )
 
     def save(self) -> None:
@@ -898,7 +912,17 @@ class SettingsDialog(QDialog):
                 default_device_role_name=self.default_device_role_name.text().strip(),
                 netbox_site_name=self.netbox_site_name.text().strip(),
             )
-            save_connections(self.path, netbox, unifi, behavior, protect, access, drive)
+            device_types = self.device_types.config_from_fields()
+            save_connections(
+                self.path,
+                netbox,
+                unifi,
+                behavior,
+                protect,
+                access,
+                drive,
+                device_types,
+            )
         except ConfigError as error:
             self.outcome.setText(str(error))
             return
@@ -908,6 +932,7 @@ class SettingsDialog(QDialog):
         self.saved_access_config = access
         self.saved_drive_config = drive
         self.saved_behavior_config = behavior
+        self.saved_device_types_config = device_types
         self.accept()
 
     def test_connections(self) -> None:
@@ -1244,6 +1269,10 @@ class MainWindow(QMainWindow):
             self.behavior = load_behavior_config(config_path)
         except ConfigError:
             self.behavior = BehaviorConfig()
+        try:
+            self.device_types_config = load_device_types_config(config_path)
+        except ConfigError:
+            self.device_types_config = DeviceTypesConfig()
         try:
             self.ui = load_ui_config(config_path)
         except ConfigError:
@@ -2143,6 +2172,8 @@ class MainWindow(QMainWindow):
             if dialog.saved_behavior_config is not None:
                 self.behavior = dialog.saved_behavior_config
                 self.review.behavior = self.behavior
+            if dialog.saved_device_types_config is not None:
+                self.device_types_config = dialog.saved_device_types_config
             self.update_empty_state()
         dialog.deleteLater()
 
