@@ -130,6 +130,11 @@ copied to the local `dist\installer\`. The bundle contains the new manual
 page and the NetBox metadata. Not verified: installer upgrade/uninstall for
 this version, and the editor's NetBox comparison or sync inside the packaged
 app. The Windows build is not code-signed.
+The Offline Tests and Packages workflows passed for main and the tag; the
+Packages workflow built `unifi2netbox_1.4.0_amd64.deb` and the Linux tarball
+(which contains the new manual page) from the same tag. All three files and
+`SHA256SUMS.txt` are attached to the public GitHub release v1.4.0 (approved
+by the user on 2026-11-17).
 
 ```powershell
 python -m pip install -r requirements-build.txt

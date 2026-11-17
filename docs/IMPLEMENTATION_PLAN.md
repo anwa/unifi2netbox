@@ -713,8 +713,9 @@ Slices:
 
 - [x] Obtain explicit merge approval; prepare version 1.4.0. (Approved
   2026-11-17.)
-- [ ] Complete the approved main merge and tag v1.4.0; build the Windows exe
-  and installer from the tag.
+- [x] Complete the approved main merge and tag v1.4.0; build the Windows exe
+  and installer from the tag. (Done 2026-11-17: merge f555ada,
+  release v1.4.0 published.)
 
 ## M15: NetBox Backup and Restore -> v1.5.0 (outline)
 
