@@ -587,3 +587,75 @@ def test_copy_yaml_puts_the_definition_on_the_clipboard(editor, store):
     assert QGuiApplication.clipboard().text() == path.read_text(encoding="utf-8")
     assert dump_yaml(editor.doc) == path.read_text(encoding="utf-8")
     assert "clipboard" in editor.notes.text()
+
+
+# -- M14 slice 4: New from NetBox, the library or by hand --------------------------
+
+from unifi2netbox.typesearch import TypeCandidate  # noqa: E402
+
+
+def choose(window, monkeypatch, wanted):
+    seen = []
+
+    def exec_picker(picker):
+        seen.append(picker)
+        assert picker.new_button.isHidden()
+        picker.selected = next(c for c in picker.candidates if wanted(c))
+        return True
+
+    monkeypatch.setattr(window, "exec_picker", exec_picker)
+    return seen
+
+
+def test_new_menu_offers_netbox_library_and_manual(editor):
+    menu = editor.buttons["new"].menu()
+    assert [a.text() for a in menu.actions()] == [
+        "From NetBox...",
+        "From the devicetype-library...",
+        "Manual",
+    ]
+    editor.new_from("manual")
+    assert editor.path is None and editor.dirty
+    editor.new_from("netbox")
+    assert "not loaded" in editor.notes.text()
+
+
+def test_new_from_netbox_opens_the_netbox_definition(synced, monkeypatch):
+    seen = choose(synced, monkeypatch, lambda c: c.model == "U6 Lite")
+    synced.new_from("netbox")
+    assert {c.source for c in seen[0].candidates} == {"netbox"}
+    assert synced.path is None and synced.dirty
+    assert synced.doc["weight"] == 310
+    assert "From NetBox (device type 5, used by 2 devices)" in synced.notes.text()
+
+
+def test_new_from_the_library_downloads_in_the_background(qtbot, store, monkeypatch):
+    text = (store.folder / "Ubiquiti" / "UNVR.yaml").read_text(encoding="utf-8")
+    fetched = []
+
+    class Library:
+        def candidates(self):
+            return [
+                TypeCandidate("library", "Ubiquiti", "UNVR", path="Ubiquiti/UNVR.yaml"),
+                TypeCandidate("netbox", "Ubiquiti", "Other", netbox_id="1"),
+            ], ""
+
+        def refresh(self):
+            return []
+
+        def fetch(self, candidate):
+            fetched.append(candidate.path)
+            return text
+
+    window = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), library=Library()
+    )
+    qtbot.addWidget(window)
+    seen = choose(window, monkeypatch, lambda c: c.model == "UNVR")
+    with qtbot.waitSignal(window.fetch_runner.finished, timeout=5000):
+        window.new_from("library")
+    assert [c.source for c in seen[0].candidates] == ["library"]
+    assert fetched == ["Ubiquiti/UNVR.yaml"]
+    assert window.doc.get("model") and window.dirty
+    assert "devicetype-library (Ubiquiti/UNVR.yaml)" in window.notes.text()
+    window.dirty = False

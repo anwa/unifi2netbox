@@ -16,9 +16,10 @@ be completed from techspecs.ui.com.
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
+from typing import Protocol
 
 from PySide6.QtCore import (
     QByteArray,
@@ -111,6 +112,7 @@ from unifi2netbox.gui_typefields import (
     TagEditor,
     list_text,
 )
+from unifi2netbox.gui_typepicker import DeviceTypePicker
 from unifi2netbox.library import client
 from unifi2netbox.netbox_catalog import NetBoxCatalog, reference_issues
 from unifi2netbox.netbox_types import (
@@ -128,12 +130,25 @@ from unifi2netbox.netbox_types import (
 )
 from unifi2netbox.techspecs import TechSpec, fetch_url, lookup
 from unifi2netbox.typedraft import merge_spec
+from unifi2netbox.typesearch import TypeCandidate
 
 PATH_ROLE = Qt.ItemDataRole.UserRole + 1
 STATUS_ROLE = Qt.ItemDataRole.UserRole + 2
 # Shown in their own editors: comments, tags, custom fields and images.
 _OWN_EDITORS = ("comments", "tags", "custom_fields", "front_image", "rear_image")
 _TABLE_ATTRIBUTES = tuple(name for name in ATTRIBUTES if name not in _OWN_EDITORS)
+
+
+class TypeLibrary(Protocol):
+    """The devicetype-library as offered by the main window."""
+
+    def candidates(self) -> tuple[list[TypeCandidate], str]: ...
+
+    def refresh(self) -> Sequence[TypeCandidate]: ...  # thread pool
+
+    def fetch(self, candidate: TypeCandidate) -> str: ...  # thread pool
+
+
 # (section, column) -> (options, catalog kind for New... or "").
 References = Callable[[str | None, str], tuple[tuple[str, ...], str] | None]
 
@@ -888,6 +903,7 @@ class DeviceTypeEditor(QDialog):
         catalog_loader: Callable[[], NetBoxCatalog] | None = None,
         creator: Creator | None = None,
         types_loader: Callable[[], NetBoxTypes] | None = None,
+        library: TypeLibrary | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings_path = settings_path
@@ -896,6 +912,7 @@ class DeviceTypeEditor(QDialog):
         self.catalog_loader = catalog_loader
         self.creator = creator
         self.types_loader = types_loader
+        self.library = library
         self.netbox_types = NetBoxTypes()
         self.comparison: TypeComparison | None = None
         self.statuses: dict[str, tuple[str, str]] = {}
@@ -919,6 +936,8 @@ class DeviceTypeEditor(QDialog):
         self.catalog_runner.finished.connect(self._catalog_finished)
         self.types_runner = TaskRunner(pool, self)
         self.types_runner.finished.connect(self._types_finished)
+        self.fetch_runner = TaskRunner(pool, self)
+        self.fetch_runner.finished.connect(self._library_fetched)
         self.status_runner = TaskRunner(pool, self)
         self.status_runner.finished.connect(self._statuses_finished)
         self._statuses_stale = False
@@ -955,6 +974,21 @@ class DeviceTypeEditor(QDialog):
             button.clicked.connect(slot)
             self.buttons[name] = button
             bar.addWidget(button)
+        new_menu = QMenu(self.buttons["new"])
+        new_menu.setObjectName("typeEditorNewMenu")
+        for source, text in (
+            ("netbox", "From NetBox..."),
+            ("library", "From the devicetype-library..."),
+            ("manual", "Manual"),
+        ):
+            action = new_menu.addAction(text)
+            action.setObjectName(f"typeEditorNew_{source}")
+            action.triggered.connect(lambda _c=False, s=source: self.new_from(s))
+        self.buttons["new"].clicked.disconnect()
+        self.buttons["new"].setMenu(new_menu)
+        self.buttons["new"].setToolTip(
+            "Create a definition from NetBox, the devicetype-library or by hand"
+        )
         self.buttons["catalog"].setEnabled(
             catalog_loader is not None or types_loader is not None
         )
@@ -1174,6 +1208,94 @@ class DeviceTypeEditor(QDialog):
             target.set_text(created.slug if kind == "tags" else created.name)
 
     # -- actions -------------------------------------------------------------------
+
+    def new_from(self, source: str) -> None:
+        """New definition from NetBox, the devicetype-library or by hand."""
+        if source == "manual":
+            self.new_type()
+            return
+        if source == "netbox":
+            if not self.netbox_types.loaded:
+                self.notes.setText(
+                    "The NetBox device types are not loaded yet; try again when "
+                    "they are (Reload from NetBox)."
+                )
+                self.load_types()
+                return
+            by_id = {t.id: t for t in self.netbox_types.types}
+            candidates = [
+                TypeCandidate(
+                    "netbox",
+                    t.manufacturer,
+                    t.model,
+                    str(t.doc.get("part_number") or ""),
+                    netbox_id=t.id,
+                )
+                for t in self.netbox_types.types
+            ]
+            picker = self._picker(candidates, "")
+            if picker is None or picker.selected is None:
+                return
+            found = by_id.get(picker.selected.netbox_id)
+            if found is not None:
+                self.open_new(
+                    copy.deepcopy(found.doc),
+                    (
+                        f"From NetBox (device type {found.id}, used by "
+                        f"{found.device_count} devices). Save to keep it in the "
+                        "local folder.",
+                    ),
+                )
+            return
+        if self.library is None:
+            self.notes.setText("The devicetype-library is not available here.")
+            return
+        candidates, note = self.library.candidates()
+        picker = self._picker(
+            [c for c in candidates if c.source == "library"],
+            note,
+            self.library.refresh,
+        )
+        if picker is None or picker.selected is None:
+            return
+        self.notes.setText(f"Loading {picker.selected.path} from the library...")
+        library, chosen = self.library, picker.selected
+        self.fetch_runner.start(lambda: (chosen, library.fetch(chosen)))
+
+    def _picker(self, candidates, note, refresh=None) -> DeviceTypePicker | None:
+        picker = DeviceTypePicker(
+            candidates,
+            note=note,
+            refresh_library=refresh,
+            pool=self.pool,
+            parent=self,
+            allow_new=False,
+        )
+        accepted = self.exec_picker(picker)
+        picker.deleteLater()
+        return picker if accepted else None
+
+    def exec_picker(self, picker: DeviceTypePicker) -> bool:
+        """Run the picker modally (replaced in tests)."""
+        return picker.exec() == QDialog.DialogCode.Accepted
+
+    def _library_fetched(self, result: object) -> None:
+        if not isinstance(result, tuple):
+            self.notes.setText(f"Library file not loaded: {result}")
+            return
+        chosen, text = result
+        try:
+            doc = load_yaml(text)
+        except DeviceTypeError as error:
+            self.notes.setText(f"The library file is invalid: {error}")
+            return
+        self.open_new(
+            doc,
+            (
+                f"From the devicetype-library ({chosen.path}). Save to keep it in "
+                "the local folder.",
+            ),
+        )
 
     def new_type(self) -> None:
         manufacturer = ""

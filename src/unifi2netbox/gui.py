@@ -185,6 +185,35 @@ def state_tone(state: str) -> str:
     return "danger"
 
 
+class EditorLibrary:
+    """The devicetype-library for the editor's New menu (main window settings)."""
+
+    def __init__(self, window: MainWindow) -> None:
+        self.window = window
+
+    def candidates(self) -> tuple[list[TypeCandidate], str]:
+        config = self.window.device_types_config
+        if not config.use_library:
+            return [], "The devicetype-library is switched off in Settings."
+        cache = LibraryCache(cache_folder(self.window.path))
+        index = cache.load_index(config)
+        return library_candidates(index, cache), ""
+
+    def refresh(self) -> list[TypeCandidate]:  # thread pool
+        config, path = self.window.device_types_config, self.window.path
+        index = refresh_index(config, path)
+        return library_candidates(index, LibraryCache(cache_folder(path)))
+
+    def fetch(self, candidate: TypeCandidate) -> str:  # thread pool
+        config, path = self.window.device_types_config, self.window.path
+        cache = LibraryCache(cache_folder(path))
+        text = cache.cached_text(candidate.entry)
+        if text is None:
+            with library_client() as http:
+                text = fetch_text(config, candidate.entry, http, cache)
+        return text
+
+
 class InventoryJobSignals(QObject):
     finished = Signal(object)
 
@@ -2533,6 +2562,7 @@ class MainWindow(QMainWindow):
                 catalog_loader=self.type_catalog,
                 creator=self.create_netbox_object,
                 types_loader=self.netbox_device_types,
+                library=EditorLibrary(self),
             )
             self.type_editor = editor
             self._hook_editor(editor)

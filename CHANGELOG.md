@@ -24,6 +24,11 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	NetBox are shown greyed out (**Add to the definition**), rows only in the
 	file are marked red; tabs with differences carry a dot. **Copy YAML**
 	copies the definition to the clipboard.
+- M14 slice 4: **New** in the device type editor asks for the source: **From
+	NetBox...** (a picker limited to the NetBox device types; the type opens
+	as an unsaved definition), **From the devicetype-library...** (picker
+	limited to the library, the file is downloaded in the background) or
+	**Manual**.
 
 ### Fixed
 
