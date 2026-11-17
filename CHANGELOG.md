@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.3.0
+
+### Summary
+
+- Milestone M13 (NetBox-complete device types): local definitions keep the
+	devicetype-library form but may carry every NetBox 4.7 device type field
+	and template kind (owner, default platform, tags, custom fields, cooling,
+	end of life, images, front/rear port mappings, cooling intakes and
+	outflows). The editor offers NetBox objects as drop-downs read from
+	NetBox, with **New...** dialogs that create manufacturers, platforms,
+	owners, owner groups, tags and inventory item roles after confirmation.
+	The import writes all fields, templates and images. The library is only
+	read; sites and device roles are never created.
+
 ### Added
 
 - M13 slice 1: local device type files may carry every NetBox 4.7 device type
@@ -52,6 +66,18 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	Validation are set by dragging the lines between them; the section
 	heights, the tree width and the window size and position are remembered
 	(`[ui]` in the configuration). Saving the theme keeps these values.
+
+### Validation
+
+- Offline gate: 690 passed, 2 skipped; Ruff lint and format pass.
+- Live on the developer workstation (NetBox 4.7.3, 2026-11-17): read-only
+	catalog check, then an approved write test: owner group, owner and tag
+	created through the New dialog functions, and a test device type imported
+	with owner, tag, image, power outlet, interface parent and a front/rear
+	port mapping, all verified; a second run reused the slug. UniFi was not
+	touched. The test objects stay in NetBox.
+- Not imported: module bay types (a note says so).
+- Packaged builds of this version are not verified yet.
 
 ## v1.2.0
 
