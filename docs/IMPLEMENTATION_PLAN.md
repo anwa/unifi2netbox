@@ -711,7 +711,8 @@ Slices:
 - [x] 6. Documentation, screenshots, live checks and approved tests.
   (2026-11-17: live sync test on type 378 passed; see TESTING.)
 
-- [ ] Obtain explicit merge approval; prepare version 1.4.0.
+- [x] Obtain explicit merge approval; prepare version 1.4.0. (Approved
+  2026-11-17.)
 - [ ] Complete the approved main merge and tag v1.4.0; build the Windows exe
   and installer from the tag.
 

@@ -6,6 +6,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.4.0
+
+### Summary
+
+- Milestone M14 (device types synced with NetBox): the device type editor
+	compares every local definition with the NetBox device types (tree green,
+	yellow or red; differing values marked with the NetBox value and taken
+	over by right-click), creates definitions from NetBox, the
+	devicetype-library or by hand, and syncs definitions with NetBox per
+	value or by overwriting NetBox, after a drift check and a preflight that
+	protects racked devices, with dry run, read-back and write history.
+	Values missing in the file are never cleared in NetBox, NetBox-only
+	templates are never deleted and existing devices are not changed. Files
+	copied into the type folder by hand now appear without a restart.
+
 ### Added
 
 - M14 slice 2: NetBox device types as local definitions: all types and
@@ -65,6 +80,16 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	re-read when the editor is shown again, by the new **Refresh** button and
 	automatically when the folder changes. An open file that changed on disk
 	is reloaded; with unsaved edits the editor asks first.
+
+### Validation
+
+- Offline gate: 714 passed, 2 skipped; Ruff lint and format pass.
+- Live on the developer workstation (NetBox 4.7.3, 2026-11-17): read-only
+	bulk read of 377 device types (all valid definitions), comparisons and
+	dry-run syncs of the local files; then an approved write test on test
+	type 378: overwrite and per-value sync verified, local-only change saved,
+	dry run wrote nothing, second comparison equal. UniFi was not touched.
+- Packaged builds of this version are not verified yet.
 
 ## v1.3.0
 
