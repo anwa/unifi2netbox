@@ -111,10 +111,14 @@ and the installer `unifi2netbox-1.3.0-setup.exe` is 44.6 MB (SHA-256
 bundle contains the NetBox field metadata
 (`_internal/unifi2netbox/resources/netbox-metadata/netbox-4.7.json`), the
 device type schema and the new manual page. The Offline Tests workflow passed
-for main; the Packages workflow and the tag runs were still running when this
-was recorded. Not verified: installer upgrade/uninstall for this version, and
-the editor's NetBox drop-downs, New dialogs or an import inside the packaged
-app. The Windows build is not code-signed.
+for main and the tag, and the Packages workflow passed for both. Not
+verified: installer upgrade/uninstall for this version, and the editor's
+NetBox drop-downs, New dialogs or an import inside the packaged app. The
+Windows build is not code-signed. The Packages workflow built
+`unifi2netbox_1.3.0_amd64.deb` and the Linux tarball (which contains the
+NetBox metadata and the new manual page) from the same tag. All three files
+and `SHA256SUMS.txt` are attached to the public GitHub release v1.3.0
+(approved by the user on 2026-11-17).
 
 ```powershell
 python -m pip install -r requirements-build.txt
