@@ -6,7 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Added
+
+- M14 slice 2: NetBox device types as local definitions: all types and
+	their templates are read in bulk (read-only) and converted into the
+	library form (references by name, port mappings, inventory components,
+	NetBox defaults left out). A comparison matches a local definition with
+	its NetBox type (slug, else manufacturer and model or part number) and
+	lists differing fields and templates (local only, NetBox only, differing
+	columns).
+
 ### Fixed
+
+- Validation no longer rejects decimal weights such as 2.3 kg as "not a
+	multiple of 0.01" (floating point); multiples are checked exactly.
 
 - Device type editor: files copied into, changed in or removed from the local
 	type folder by hand now show up without restarting the app: the tree is
