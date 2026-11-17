@@ -665,7 +665,9 @@ Slices:
 - [x] 1. NetBox metadata (bundled from OPTIONS) and the extended schema.
   (1.2.2, 2026-11-17: metadata of NetBox 4.7.3, 19 endpoints; library files
   still round-trip byte-identical.)
-- [ ] 2. NetBox catalog reader and "New" dialogs.
+- [x] 2. NetBox catalog reader and "New" dialogs.
+  (1.2.3, 2026-11-17: live catalog read: 3 manufacturers, no platforms,
+  owners, owner groups, tags, roles or device type custom fields yet.)
 - [ ] 3. Editor: NetBox fields, drop-downs, tags, custom fields, images,
   all component tabs.
 - [ ] 4. Import of all fields, references, templates and images.

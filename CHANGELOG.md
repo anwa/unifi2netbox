@@ -16,6 +16,12 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	devicetype-library schema extended with NetBox field metadata, bundled
 	from the API of NetBox 4.7.3 (`tools/update_netbox_metadata.py`). The
 	library itself is only read.
+- M13 slice 2: the NetBox catalog for the editor's drop-downs
+	(manufacturers, platforms, owners, owner groups, tags, inventory item
+	roles and the custom fields of device types, read-only and paginated) and
+	"New ..." dialogs that create such an object in NetBox right away: no
+	duplicates (an existing object is selected instead), interrupted creates
+	looked up, read back and saved to the write history.
 
 ### Changed
 
