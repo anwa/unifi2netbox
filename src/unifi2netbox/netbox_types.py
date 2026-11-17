@@ -452,3 +452,19 @@ def _norm(section: str | None, name: str, value):
         return float(text) if name in ("u_height", "weight") else text
     except ValueError:
         return text
+
+
+def type_statuses(store, types: NetBoxTypes) -> dict[str, tuple[str, str]]:
+    """Status and summary per local file (resolved path) against NetBox."""
+    result: dict[str, tuple[str, str]] = {}
+    if not types.loaded:
+        return result
+    for item in store.files():
+        key = str(item.path.resolve())
+        try:
+            comparison = compare(store.read(item.path), types)
+        except Exception as error:  # noqa: BLE001 - an unreadable file is shown
+            result[key] = ("invalid", f"Cannot read the file: {error}")
+            continue
+        result[key] = (comparison.status, comparison.summary())
+    return result

@@ -482,3 +482,108 @@ def test_open_file_changed_on_disk_is_reloaded_or_asks_when_edited(
     path.unlink()
     editor.refresh_tree()
     assert editor.path is None and "removed" in editor.notes.text()
+
+
+# -- M14 slice 3: NetBox status and values ----------------------------------------
+
+from unifi2netbox.gui_typediff import cell_mark  # noqa: E402
+from unifi2netbox.gui_typeeditor import STATUS_ROLE  # noqa: E402
+from unifi2netbox.netbox_types import NetBoxType, NetBoxTypes  # noqa: E402
+
+
+def netbox_types(store):
+    lite = store.read(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    lite["weight"] = 310
+    lite["interfaces"][0]["poe_type"] = "type2-ieee802.3at"
+    del lite["interfaces"][2]  # wlan1 is only local
+    lite["interfaces"].append({"name": "eth9", "type": "1000base-t"})
+    pro = store.read(store.folder / "Ubiquiti" / "USW-Pro-24.yaml")
+    return NetBoxTypes((NetBoxType("5", lite, 2), NetBoxType("6", pro, 0)), loaded=True)
+
+
+@pytest.fixture
+def synced(qtbot, store):
+    types = netbox_types(store)
+    window = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), types_loader=lambda: types
+    )
+    # Not qtbot.addWidget: it closes (and would ask) before this teardown.
+    with qtbot.waitSignal(window.status_runner.finished, timeout=5000):
+        window.show()
+    yield window
+    window.dirty = False
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+
+
+def test_tree_shows_equal_differing_and_missing_types(synced):
+    from unifi2netbox import theme
+
+    folder = synced.tree.topLevelItem(0)
+    states = {
+        folder.child(i).text(0): folder.child(i).data(0, STATUS_ROLE)
+        for i in range(folder.childCount())
+    }
+    assert states == {
+        "U6+": "missing",
+        "U6-Lite": "differs",
+        "UNVR": "missing",
+        "USW-Pro-24": "same",
+    }
+    lite = next(
+        folder.child(i) for i in range(4) if folder.child(i).text(0) == "U6-Lite"
+    )
+    assert lite.foreground(0).color() == theme.tone_qcolor("warning")
+    assert "Differs from NetBox" in lite.toolTip(0)
+    assert folder.foreground(0).color() == theme.tone_qcolor("danger")
+    assert "377" not in synced.catalog_status.text()
+    assert "2 NetBox device types." in synced.catalog_status.text()
+
+
+def test_editor_marks_netbox_values_and_takes_them_over(synced, store):
+    from unifi2netbox.gui_typeeditor import _TABLE_ATTRIBUTES
+
+    synced.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    view = synced.table_view
+    row = _TABLE_ATTRIBUTES.index("weight")
+    assert cell_mark(view.attributes, row, 1) == "warning"
+    assert "NetBox: 310" in view.attributes.item(row, 1).toolTip()
+    assert "Differs from NetBox" in synced.netbox_note.text()
+
+    interfaces = view.sections["interfaces"]
+    columns = interfaces.columns
+    assert cell_mark(interfaces.table, 0, columns.index("poe_type")) == "warning"
+    assert cell_mark(interfaces.table, 2, 0) == "danger"  # wlan1: only local
+    assert interfaces.real_rows() == 3 and interfaces.table.rowCount() == 4
+    assert interfaces.table.verticalHeaderItem(3).text() == "NetBox"
+    assert [i["name"] for i in view.document()["interfaces"]] == [
+        "lan0",
+        "wlan0",
+        "wlan1",
+    ]
+    assert "●" in view.tabs.tabText(view.tabs.indexOf(interfaces))
+
+    view.use_netbox_attribute("weight")
+    interfaces.use_netbox(0, ["poe_type"])
+    interfaces.use_netbox(3)  # adds eth9
+    doc = synced.table_view.document()
+    assert doc["weight"] == 310
+    assert doc["interfaces"][0]["poe_type"] == "type2-ieee802.3at"
+    assert [i["name"] for i in doc["interfaces"]] == ["lan0", "wlan0", "wlan1", "eth9"]
+    assert synced.dirty
+    assert cell_mark(view.attributes, row, 1) == ""
+    assert interfaces.table.rowCount() == 4  # no NetBox-only row left
+
+
+def test_copy_yaml_puts_the_definition_on_the_clipboard(editor, store):
+    from PySide6.QtGui import QGuiApplication
+
+    from unifi2netbox.devicetypes import dump_yaml
+
+    path = store.folder / "Ubiquiti" / "U6-Lite.yaml"
+    editor.open_path(path)
+    editor.buttons["copy"].click()
+    assert QGuiApplication.clipboard().text() == path.read_text(encoding="utf-8")
+    assert dump_yaml(editor.doc) == path.read_text(encoding="utf-8")
+    assert "clipboard" in editor.notes.text()

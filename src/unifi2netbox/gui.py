@@ -127,6 +127,7 @@ from unifi2netbox.library import client as library_client
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
 from unifi2netbox.netbox_catalog import NetBoxCatalog, read_catalog
 from unifi2netbox.netbox_objects import CreateResult, create_object
+from unifi2netbox.netbox_types import NetBoxTypes, read_netbox_types
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
     WriteExecutionReport,
@@ -2531,6 +2532,7 @@ class MainWindow(QMainWindow):
                 settings_path=self.path,
                 catalog_loader=self.type_catalog,
                 creator=self.create_netbox_object,
+                types_loader=self.netbox_device_types,
             )
             self.type_editor = editor
             self._hook_editor(editor)
@@ -2545,6 +2547,13 @@ class MainWindow(QMainWindow):
         if not config.configured:
             return NetBoxCatalog(errors=("NetBox is not configured.",))
         return read_catalog(config)
+
+    def netbox_device_types(self) -> NetBoxTypes:
+        """All NetBox device types as definitions (runs on the thread pool)."""
+        config = self.netbox.config
+        if not config.configured:
+            return NetBoxTypes(errors=("NetBox is not configured.",))
+        return read_netbox_types(config)
 
     def create_netbox_object(
         self, kind: str, values: dict, catalog: NetBoxCatalog

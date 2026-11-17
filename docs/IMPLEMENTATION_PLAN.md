@@ -704,7 +704,7 @@ Slices:
 - [x] 2. NetBox types as definitions and the comparison (Qt-free, read-only).
   (1.3.3, 2026-11-17: live read of 377 types in 1.4 s, all convert to valid
   definitions; 4 local files compared: 2 equal, 2 with real differences.)
-- [ ] 3. Tree status, NetBox values in the editor, Copy YAML.
+- [x] 3. Tree status, NetBox values in the editor, Copy YAML.
 - [ ] 4. New from NetBox, the devicetype-library or manual.
 - [ ] 5. Sync (overwrite or per value) with preflight, dry run, drift check,
   read-back and write history.

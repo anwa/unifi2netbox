@@ -15,6 +15,15 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	its NetBox type (slug, else manufacturer and model or part number) and
 	lists differing fields and templates (local only, NetBox only, differing
 	columns).
+- M14 slice 3: the device type editor reads the NetBox device types when it
+	opens and on **Reload from NetBox**. The tree shows each local definition
+	green (equal to NetBox), yellow (differs) or red (not in NetBox), with the
+	reason in the tooltip. Fields, tags, custom fields, images and template
+	cells that differ are marked yellow with the NetBox value in the tooltip;
+	right-click **Use NetBox value** takes it over. Template rows only in
+	NetBox are shown greyed out (**Add to the definition**), rows only in the
+	file are marked red; tabs with differences carry a dot. **Copy YAML**
+	copies the definition to the clipboard.
 
 ### Fixed
 
