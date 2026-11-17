@@ -671,7 +671,7 @@ Slices:
 - [x] 3. Editor: NetBox fields, drop-downs, tags, custom fields, images,
   all component tabs.
 - [x] 4. Import of all fields, references, templates and images.
-- [ ] 5. Documentation, screenshots, live checks and approved tests.
+- [x] 5. Documentation, screenshots, live checks and approved tests.
 
 - [ ] Obtain explicit merge approval; prepare version 1.3.0.
 - [ ] Complete the approved main merge and tag v1.3.0; build the Windows exe
