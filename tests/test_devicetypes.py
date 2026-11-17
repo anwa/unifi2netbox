@@ -257,3 +257,13 @@ def test_netbox_field_kinds_and_columns():
     assert component_columns("cooling-intakes")[:3] == ("name", "label", "type")
     assert required_columns("cooling-intakes") == ("name",)
     assert set(NETBOX_ATTRIBUTES) >= {"owner", "tags", "custom_fields", "end_of_life"}
+
+
+def test_decimal_weights_are_exact_multiples():
+    doc = load_yaml(
+        "---\nmanufacturer: Acme\nmodel: W\nslug: acme-w\nu_height: 1\n"
+        "is_full_depth: false\nweight: 2.3\nweight_unit: kg\n"
+    )
+    assert errors(validate(doc)) == ()
+    doc["weight"] = 2.305
+    assert [i.location for i in errors(validate(doc))] == ["weight"]
