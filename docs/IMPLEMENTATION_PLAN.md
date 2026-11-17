@@ -706,7 +706,7 @@ Slices:
   definitions; 4 local files compared: 2 equal, 2 with real differences.)
 - [x] 3. Tree status, NetBox values in the editor, Copy YAML.
 - [x] 4. New from NetBox, the devicetype-library or manual.
-- [ ] 5. Sync (overwrite or per value) with preflight, dry run, drift check,
+- [x] 5. Sync (overwrite or per value) with preflight, dry run, drift check,
   read-back and write history.
 - [ ] 6. Documentation, screenshots, live checks and approved tests.
 

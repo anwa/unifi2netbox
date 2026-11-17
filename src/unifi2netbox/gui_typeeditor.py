@@ -113,6 +113,12 @@ from unifi2netbox.gui_typefields import (
     list_text,
 )
 from unifi2netbox.gui_typepicker import DeviceTypePicker
+from unifi2netbox.gui_typesync import (
+    SyncAllDialog,
+    SyncDialog,
+    SyncTarget,
+    TypeSync,
+)
 from unifi2netbox.library import client
 from unifi2netbox.netbox_catalog import NetBoxCatalog, reference_issues
 from unifi2netbox.netbox_types import (
@@ -904,6 +910,7 @@ class DeviceTypeEditor(QDialog):
         creator: Creator | None = None,
         types_loader: Callable[[], NetBoxTypes] | None = None,
         library: TypeLibrary | None = None,
+        sync: TypeSync | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings_path = settings_path
@@ -913,6 +920,7 @@ class DeviceTypeEditor(QDialog):
         self.creator = creator
         self.types_loader = types_loader
         self.library = library
+        self.sync = sync
         self.netbox_types = NetBoxTypes()
         self.comparison: TypeComparison | None = None
         self.statuses: dict[str, tuple[str, str]] = {}
@@ -967,6 +975,8 @@ class DeviceTypeEditor(QDialog):
             ("copy", "Copy YAML", self.copy_yaml),
             ("folder", "Open folder", self.open_folder),
             ("catalog", "Reload from NetBox", self.reload_netbox),
+            ("sync", "Sync with NetBox", self.open_sync),
+            ("syncAll", "Sync all...", self.open_sync_all),
         ):
             button = QPushButton(text)
             button.setObjectName(f"typeEditor_{name}")
@@ -1177,6 +1187,112 @@ class DeviceTypeEditor(QDialog):
         self._status_parts["types"] = "Reading NetBox device types..."
         self._show_status()
         self.types_runner.start(self.types_loader)
+
+    def exec_dialog(self, dialog: QDialog) -> None:
+        """Run a modal dialog (replaced in tests)."""
+        dialog.exec()
+
+    def local_images(self, doc) -> dict[str, str]:
+        manufacturer = str(doc.get("manufacturer") or "")
+        slug = str(doc.get("slug") or "")
+        result = {}
+        for side in IMAGE_SIDES:
+            found = find_image(self.store, manufacturer, slug, side)
+            if found is not None:
+                result[side] = str(found)
+        return result
+
+    def _sync_ready(self) -> bool:
+        if self.sync is None:
+            self.notes.setText("NetBox is not configured for syncing.")
+            return False
+        if not self.netbox_types.loaded:
+            self.notes.setText(
+                "The NetBox device types are not loaded yet (Reload from NetBox)."
+            )
+            self.load_types()
+            return False
+        return True
+
+    def open_sync(self) -> None:
+        """Sync the open definition with NetBox (saved first)."""
+        if not self._sync_ready() or not self.doc:
+            return
+        if self.dirty or self.path is None:
+            answer = QMessageBox.question(
+                self, "Sync with NetBox", "Save the definition before syncing?"
+            )
+            if answer != QMessageBox.StandardButton.Yes or not self.save():
+                return
+        doc = self.store.read(self.path)
+        comparison = compare(doc, self.netbox_types)
+        if comparison.status == SAME:
+            self.notes.setText("The definition is equal to NetBox.")
+            return
+        images = self.local_images(doc)
+        if comparison.status == MISSING:
+            dialog = SyncAllDialog(
+                [
+                    SyncTarget(
+                        self.path, self.path.stem, MISSING, doc, comparison, images
+                    )
+                ],
+                self.netbox_types,
+                self.sync,
+                self.pool,
+                self,
+            )
+            dialog.finished_all.connect(lambda _r: self.load_types())
+        else:
+            dialog = SyncDialog(
+                doc, comparison, self.netbox_types, self.sync, self.pool, images, self
+            )
+            dialog.synced.connect(self._synced)
+        self.exec_dialog(dialog)
+        dialog.deleteLater()
+
+    def open_sync_all(self) -> None:
+        if not self._sync_ready():
+            return
+        targets = []
+        for item in self.store.files():
+            try:
+                doc = self.store.read(item.path)
+            except DeviceTypeError:
+                continue
+            comparison = compare(doc, self.netbox_types)
+            if comparison.status in (DIFFERS, MISSING):
+                targets.append(
+                    SyncTarget(
+                        item.path,
+                        f"{item.manufacturer} {item.name}",
+                        comparison.status,
+                        doc,
+                        comparison,
+                        self.local_images(doc),
+                    )
+                )
+        if not targets:
+            self.notes.setText("All local definitions are equal to NetBox.")
+            return
+        dialog = SyncAllDialog(targets, self.netbox_types, self.sync, self.pool, self)
+        dialog.finished_all.connect(lambda _r: self.load_types())
+        self.exec_dialog(dialog)
+        dialog.deleteLater()
+
+    def _synced(self, report) -> None:
+        if report.local_doc is not None and self.path is not None:
+            try:
+                path = self.store.write(report.local_doc, previous=self.path)
+            except (DeviceTypeError, OSError) as error:
+                self.notes.setText(f"The local file was not updated: {error}")
+            else:
+                self.dirty = False
+                self.reload_tree()
+                self._show_document(self.store.read(path), path, ("Synced.",))
+                self._select_tree(path)
+        if report.outcome.status != "skipped" or report.local_doc is not None:
+            self.load_types()
 
     def copy_yaml(self) -> None:
         try:

@@ -42,6 +42,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	interface parents and bridges), changed templates, port mappings and
 	images are written, interrupted creates are looked up, and NetBox is read
 	back (verified when every chosen value arrived).
+- M14 slice 5 (editor): **Sync with NetBox** opens the open definition's
+	differences with Local / NetBox / Skip per difference (**Overwrite
+	NetBox** preselects Local, **Take all from NetBox** the other way), a dry
+	run option, the preflight's blockers and a confirmation listing the steps
+	and warnings; NetBox values chosen for the file are saved to it. A
+	definition not in NetBox is imported. **Sync all...** overwrites NetBox
+	for all checked yellow types and imports the red ones after one check
+	and one confirmation. Every run is saved to the write history.
 
 ### Fixed
 

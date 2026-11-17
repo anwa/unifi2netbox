@@ -659,3 +659,54 @@ def test_new_from_the_library_downloads_in_the_background(qtbot, store, monkeypa
     assert window.doc.get("model") and window.dirty
     assert "devicetype-library (Ubiquiti/UNVR.yaml)" in window.notes.text()
     window.dirty = False
+
+
+# -- M14 slice 5: sync from the editor ----------------------------------------------
+
+
+def test_sync_buttons_open_the_right_dialog_and_save_netbox_values(
+    qtbot, store, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from unifi2netbox.gui_typesync import SyncAllDialog, SyncDialog
+
+    types = netbox_types(store)
+    window = DeviceTypeEditor(
+        store,
+        DeviceTypesConfig(),
+        QThreadPool(),
+        types_loader=lambda: types,
+        sync=object(),
+    )
+    opened = []
+    monkeypatch.setattr(window, "exec_dialog", lambda d: opened.append(d))
+    with qtbot.waitSignal(window.types_runner.finished, timeout=5000):
+        window.load_types()
+
+    window.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    window.open_sync()
+    assert isinstance(opened[-1], SyncDialog)
+    assert opened[-1].comparison.status == "differs"
+
+    window.open_path(store.folder / "Ubiquiti" / "UNVR.yaml")
+    window.open_sync()
+    assert isinstance(opened[-1], SyncAllDialog)
+    assert opened[-1].targets[0].status == "missing"
+
+    window.open_sync_all()
+    labels = [t.label for t in opened[-1].targets]
+    assert labels == ["Ubiquiti U6+", "Ubiquiti U6-Lite", "Ubiquiti UNVR"]
+
+    # NetBox values chosen in the dialog are written to the local file.
+    window.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    doc = window.store.read(window.path)
+    doc["weight"] = 310
+    outcome = SimpleNamespace(status="success")
+    with qtbot.waitSignal(window.types_runner.finished, timeout=5000):
+        window._synced(SimpleNamespace(local_doc=doc, outcome=outcome))
+    assert "weight: 310" in window.path.read_text(encoding="utf-8")
+    assert not window.dirty and "Synced." in window.notes.text()
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
