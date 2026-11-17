@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QThreadPool
-from PySide6.QtWidgets import QComboBox, QMessageBox
+from PySide6.QtWidgets import QComboBox, QListWidget, QMessageBox
 
 from unifi2netbox.config import DeviceTypesConfig
 from unifi2netbox.devicetypes import LocalTypeStore, load_yaml, new_document
@@ -209,3 +209,50 @@ def test_header_turns_compact_when_narrow(qtbot, tmp_path):
     assert window.netbox_chip.compact and not window.app_title.isVisible()
     assert window.netbox_chip.text() == "●  NetBox"
     assert window.netbox_chip.toolTip().startswith("NetBox · Not set")
+
+
+def test_editor_remembers_window_and_section_sizes(qtbot, store, tmp_path):
+    from unifi2netbox.config import UiConfig, load_ui_config, save_ui_config
+
+    path = tmp_path / "config.toml"
+    save_ui_config(path, UiConfig(theme="dark"))
+    first = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), settings_path=path
+    )
+    qtbot.addWidget(first)
+    first.show()
+    first.resize(700, 520)
+    first.table_view.splitter.setSizes([120, 300, 200])
+    first.right_splitter.setSizes([400, 220])
+    sizes = first.table_view.splitter.sizes()
+    size = (first.width(), first.height())
+    first.close()
+
+    ui = load_ui_config(path)
+    assert ui.theme == "dark"
+    assert ui.type_editor_geometry and ui.type_editor_splitters.count(",") == 2
+
+    second = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), settings_path=path
+    )
+    qtbot.addWidget(second)
+    second.show()
+    assert (second.width(), second.height()) == size
+    assert second.table_view.splitter.sizes() == sizes
+    assert second.right_splitter.sizes()[1] == first.right_splitter.sizes()[1]
+
+
+def test_sections_are_resizable_splitters(editor):
+    from PySide6.QtWidgets import QSplitter
+
+    assert editor.table_view.splitter.count() == 3
+    assert not editor.table_view.splitter.childrenCollapsible()
+    assert isinstance(editor.right_splitter, QSplitter)
+    assert editor.right_splitter.widget(1).findChild(QListWidget, "typeIssues")
+
+
+def test_saved_layout_is_validated():
+    from unifi2netbox.config import ConfigError, UiConfig
+
+    with pytest.raises(ConfigError, match="layout"):
+        UiConfig(type_editor_geometry="not base64!")

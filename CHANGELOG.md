@@ -6,6 +6,13 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Changed
+
+- Device type editor: the heights of Attributes, Comments, Components and
+	Validation are set by dragging the lines between them; the section
+	heights, the tree width and the window size and position are remembered
+	(`[ui]` in the configuration). Saving the theme keeps these values.
+
 ## v1.2.0
 
 ### Summary

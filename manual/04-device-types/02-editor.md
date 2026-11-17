@@ -12,6 +12,11 @@ Open it with **Device types** in the header, **⋯ More > Device types...**, or
 - **Toolbar**: **New**, **Save**, **Revert**, **Delete** (asks first; local
   files only), **Validate** and **Open folder**.
 
+Drag the lines between Attributes, Comments, Components and Validation to
+change their heights, and the line next to the tree to change its width. The
+editor remembers these sizes and its window size and position for the next
+time.
+
 ## Table view
 
 - **Attributes**: one row per field with an explanation. Required fields are
