@@ -102,6 +102,20 @@ tarball (which contains the schema) from the same tag. All three files and
 `SHA256SUMS.txt` are attached to the public GitHub release v1.2.0 (approved by
 the user on 2026-11-16).
 
+Release v1.3.0 (tag v1.3.0 on merge commit b5571b6, milestone M13
+NetBox-complete device types) was built on 2026-11-17 the same way from a
+clean detached worktree at the tag: bundle check and native smoke test passed
+(1 passed, 1 skipped), the exe reports `1.3.0`, the directory is about 135 MB
+and the installer `unifi2netbox-1.3.0-setup.exe` is 44.6 MB (SHA-256
+`D1DD88052E8B12B0F053447BB86F28312CF34879B14402DBBF552BFC18620330`). The
+bundle contains the NetBox field metadata
+(`_internal/unifi2netbox/resources/netbox-metadata/netbox-4.7.json`), the
+device type schema and the new manual page. The Offline Tests workflow passed
+for main; the Packages workflow and the tag runs were still running when this
+was recorded. Not verified: installer upgrade/uninstall for this version, and
+the editor's NetBox drop-downs, New dialogs or an import inside the packaged
+app. The Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
