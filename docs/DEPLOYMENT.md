@@ -120,6 +120,17 @@ NetBox metadata and the new manual page) from the same tag. All three files
 and `SHA256SUMS.txt` are attached to the public GitHub release v1.3.0
 (approved by the user on 2026-11-17).
 
+Release v1.4.0 (tag v1.4.0 on merge commit f555ada, milestone M14 device
+types synced with NetBox) was built on 2026-11-17 the same way from a clean
+detached worktree at the tag: bundle check and native smoke test passed
+(1 passed, 1 skipped), the exe reports `1.4.0`, the directory is about
+135 MB and the installer `unifi2netbox-1.4.0-setup.exe` is 44.8 MB (SHA-256
+`173CDF8FF0751DA6476AD1940A83BAED1492AE4209951C78A5F0FB56084DECDF`), also
+copied to the local `dist\installer\`. The bundle contains the new manual
+page and the NetBox metadata. Not verified: installer upgrade/uninstall for
+this version, and the editor's NetBox comparison or sync inside the packaged
+app. The Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
