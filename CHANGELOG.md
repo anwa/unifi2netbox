@@ -50,6 +50,10 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	definition not in NetBox is imported. **Sync all...** overwrites NetBox
 	for all checked yellow types and imports the red ones after one check
 	and one confirmation. Every run is saved to the write history.
+- Manual: new page *Syncing with NetBox* (tree colors, NetBox values, sync
+	choices, checks, effects on existing devices) and the New choice in the
+	editor page, with demo screenshots of the differences and the sync
+	dialog.
 
 ### Fixed
 

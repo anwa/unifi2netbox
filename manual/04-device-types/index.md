@@ -13,6 +13,9 @@ app helps in three ways:
    fields, images) with drop-downs read from NetBox.
 3. [Importing into NetBox](04-import.md): a chosen definition that NetBox does
    not have yet is created on apply, as a step you can see and uncheck.
+4. [Syncing with NetBox](06-netbox-sync.md): the editor shows how each local
+   definition differs from its NetBox type and syncs them, per value or by
+   overwriting NetBox, after checks that protect placed devices.
 
 [The local type folder and the library](03-folder-and-library.md) explains
 where definitions are kept and how to contribute them to the library.
@@ -25,7 +28,10 @@ where definitions are kept and how to contribute them to the library.
   tags, custom fields, cooling, end of life, images and all template kinds.
   The library itself is only read.
 - The app creates a device type in NetBox only when you chose it for a new
-  device and the import step is checked.
+  device and the import step is checked, or when you sync a definition that
+  NetBox does not have. It changes an existing type only through a confirmed
+  sync; it never deletes types or templates and never changes existing
+  devices.
 - Manufacturers, owners, owner groups, tags, platforms and inventory item
   roles are created only from a **New...** dialog in the editor, after you
   click **Create** there. The app never creates sites or device roles.

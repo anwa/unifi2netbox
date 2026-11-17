@@ -153,8 +153,13 @@ class SyncDialog(QDialog):
                 if item.section is None
                 else ("in NetBox" if item.kind != "local-only" else "-")
             )
-            if item.columns:
-                local_text = netbox_value = ", ".join(item.columns)
+            if item.changes:
+                local_text = "; ".join(
+                    f"{name}: {netbox_text(local)}" for name, local, _n in item.changes
+                )
+                netbox_value = "; ".join(
+                    f"{name}: {netbox_text(other)}" for name, _l, other in item.changes
+                )
             for column, text in ((0, title), (1, local_text), (2, netbox_value)):
                 cell = (
                     text
@@ -172,6 +177,7 @@ class SyncDialog(QDialog):
             self.choices[item.key] = combo
             self.table.setCellWidget(row, 3, combo)
         self.table.resizeColumnsToContents()
+        self.table.setColumnWidth(3, max(self.table.columnWidth(3), 120))
         layout.addWidget(self.table, 1)
         self.findings = QListWidget()
         self.findings.setObjectName("syncFindings")

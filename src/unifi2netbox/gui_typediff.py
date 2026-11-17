@@ -10,7 +10,13 @@ and the tree status.
 from __future__ import annotations
 
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QComboBox, QTableWidget, QTableWidgetItem, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QStyledItemDelegate,
+    QTableWidget,
+    QTableWidgetItem,
+    QWidget,
+)
 
 from unifi2netbox import theme
 
@@ -48,10 +54,23 @@ def mark_widget(widget: QWidget, tone: str | None, tooltip: str = "") -> None:
     widget.setProperty("netboxMark", tone or "")
 
 
+class MarkDelegate(QStyledItemDelegate):
+    """Paints the mark: the app style sheet styles ``::item``, and then Qt
+    ignores an item's own background."""
+
+    def paint(self, painter, option, index) -> None:
+        tone = index.data(MARK_ROLE)
+        if tone:
+            painter.fillRect(option.rect, QColor(background(str(tone))))
+        super().paint(painter, option, index)
+
+
 def mark_cell(
     table: QTableWidget, row: int, column: int, tone: str | None, tooltip: str = ""
 ) -> None:
     """Mark one cell; callers block the table's signals while marking."""
+    if not isinstance(table.itemDelegate(), MarkDelegate):
+        table.setItemDelegate(MarkDelegate(table))
     widget = table.cellWidget(row, column)
     if widget is not None:
         mark_widget(widget, tone, tooltip)

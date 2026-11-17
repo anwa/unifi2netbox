@@ -6,19 +6,40 @@ Open it with **Device types** in the header, **⋯ More > Device types...**, or
 ![The editor in table view](../images/type-editor-table.png)
 
 - **Left**: your local type folder as a tree, one folder per manufacturer.
-  Click a file to open it.
+  Click a file to open it. Its color shows how it relates to NetBox:
+  green (equal), yellow (differs) or red (not in NetBox); the tooltip says
+  what differs. Files you copy into the folder by hand appear at once.
+  See [Syncing with NetBox](06-netbox-sync.md).
 - **Right**: the selected definition. **Table** and **YAML** switch the view;
   both edit the same definition.
-- **Toolbar**: **New**, **Save**, **Revert**, **Delete** (asks first; local
-  files and their images only), **Validate**, **Open folder** and **Reload
-  from NetBox** (reads the drop-down lists again; next to it the editor
-  shows how many objects NetBox has).
+- **Toolbar**:
+  - **New**: from NetBox, from the devicetype-library or by hand (see
+    below).
+  - **Save**, **Revert**, **Delete** (asks first; local files and their
+    images only), **Validate**.
+  - **Refresh** reads the folder again; **Copy YAML** copies the definition
+    to the clipboard; **Open folder**.
+  - **Reload from NetBox** reads the drop-down lists and the NetBox device
+    types again (next to it the editor shows how many there are).
+  - **Sync with NetBox** and **Sync all...** (see
+    [Syncing with NetBox](06-netbox-sync.md)).
 
 Drag the lines between Attributes, Comments, NetBox, Components and
 Validation to
 change their heights, and the line next to the tree to change its width. The
 editor remembers these sizes and its window size and position for the next
 time.
+
+## New definitions
+
+**New** asks where to start:
+
+- **From NetBox...**: a picker of the NetBox device types. The chosen type
+  opens as an unsaved definition with all its fields and templates; save it
+  to keep it in the local folder.
+- **From the devicetype-library...**: a picker of the library (refresh its
+  index there if needed); the file is downloaded and opens unsaved.
+- **Manual**: an empty definition.
 
 ## Table view
 

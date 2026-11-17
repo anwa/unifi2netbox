@@ -92,6 +92,7 @@ class SyncItem:
     local: object = None
     netbox: object = None
     columns: tuple[str, ...] = ()
+    changes: tuple[tuple[str, object, object], ...] = ()  # column, local, netbox
 
     @property
     def choices(self) -> tuple[str, ...]:
@@ -137,6 +138,7 @@ def sync_items(comparison: TypeComparison) -> list[SyncItem]:
                     None,
                     row.netbox_row,
                     tuple(f.name for f in row.fields),
+                    tuple((f.name, f.local, f.netbox) for f in row.fields),
                 )
             )
     return items

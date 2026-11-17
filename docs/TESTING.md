@@ -851,6 +851,24 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-17 the assistant checked M14 slices 1 to 5 (application 1.3.8
+working tree on `feature/netbox-type-sync`). Offline: tree refresh (show,
+Refresh, file watcher, changed open file), the bulk read and conversion of
+NetBox types, the comparison of every template kind, a round trip
+definition → import → read back → equal, tree colors, cell marks and
+**Use NetBox value**, NetBox-only rows, Copy YAML, New from NetBox and the
+library, the sync plan and execution (overwrite, per value, dry run, drift,
+missing references, interrupted create, read-back) against an API-shaped
+fake, the preflight (rack overlap, leaving the rack, 0 U, child role,
+model conflict, warnings) and the dialogs. Read-only live checks against
+the developer NetBox 4.7.3 (counts and statuses only): 377 types read in
+1.4 s, all converted to valid definitions; of 4 local files 2 equal and 2
+with real differences; a dry-run sync of both (a wrapper refused any write)
+planned 4 and 2 steps with warnings only, no blockers, nothing written.
+Found and fixed on the way: the theme style sheet hid cell backgrounds (a
+delegate paints the marks), and decimal weights failed the schema's
+`multipleOf` in floating point. Not yet done: the approved live write test.
+
 On 2026-11-17 the assistant checked M13 slices 1 to 4 (application 1.2.5
 working tree on `feature/netbox-device-types`). Offline: the extended schema
 accepts every NetBox 4.7 device type and template field and rejects wrong
