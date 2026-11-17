@@ -422,3 +422,57 @@ def test_catalog_is_read_in_the_background_when_shown(qtbot, store):
     assert editor.catalog is CATALOG
     assert "1 manufacturers" in editor.catalog_status.text()
     assert "2 custom fields" in editor.catalog_status.text()
+
+
+# -- M14 slice 1: tree refresh ---------------------------------------------------
+
+
+def test_files_copied_by_hand_appear_after_refresh_reopen_and_watch(
+    qtbot, editor, store
+):
+    copy = store.folder / "Ubiquiti" / "U6-Copy.yaml"
+    copy.write_text(
+        (store.folder / "Ubiquiti" / "U6-Lite.yaml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    editor.buttons["refresh"].click()
+    assert "U6-Copy" in tree_names(editor)[1]
+
+    editor.show()
+    editor.hide()
+    copy.unlink()
+    editor.show()  # reopening re-reads the folder
+    assert "U6-Copy" not in tree_names(editor)[1]
+
+    (store.folder / "Cisco").mkdir()
+    shutil.copy(
+        LIBRARY / "device-types" / "Cisco" / "C9300-24P.yaml", store.folder / "Cisco"
+    )
+    qtbot.waitUntil(lambda: editor.tree.topLevelItemCount() == 2, timeout=5000)
+    editor.hide()
+
+
+def test_open_file_changed_on_disk_is_reloaded_or_asks_when_edited(
+    editor, store, monkeypatch
+):
+    path = store.folder / "Ubiquiti" / "U6-Lite.yaml"
+    editor.open_path(path)
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("U6 Lite", "U6 Lite Disk"), encoding="utf-8")
+    editor.refresh_tree()
+    assert editor.title.text() == "U6 Lite Disk"
+
+    editor.set_mode("yaml")
+    editor.yaml_view.setPlainText(
+        editor.yaml_view.toPlainText().replace("U6 Lite Disk", "Mine")
+    )
+    assert editor.dirty
+    path.write_text(text, encoding="utf-8")
+    answer(monkeypatch, QMessageBox.StandardButton.No)
+    editor.refresh_tree()
+    assert editor.dirty and "Mine" in editor.yaml_view.toPlainText()
+
+    editor.dirty = False
+    path.unlink()
+    editor.refresh_tree()
+    assert editor.path is None and "removed" in editor.notes.text()

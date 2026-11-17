@@ -700,7 +700,7 @@ Branch `feature/netbox-type-sync`. Decisions (2026-11-17, user):
 
 Slices:
 
-- [ ] 1. Tree refresh (on show, Refresh button, file watcher).
+- [x] 1. Tree refresh (on show, Refresh button, file watcher).
 - [ ] 2. NetBox types as definitions and the comparison (Qt-free, read-only).
 - [ ] 3. Tree status, NetBox values in the editor, Copy YAML.
 - [ ] 4. New from NetBox, the devicetype-library or manual.

@@ -20,7 +20,15 @@ from collections.abc import Callable, Iterable
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, Qt, QThreadPool, QUrl, Signal
+from PySide6.QtCore import (
+    QByteArray,
+    QFileSystemWatcher,
+    Qt,
+    QThreadPool,
+    QTimer,
+    QUrl,
+    Signal,
+)
 from PySide6.QtGui import QDesktopServices, QFontDatabase
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -588,6 +596,15 @@ class DeviceTypeEditor(QDialog):
         self.runner.finished.connect(self._lookup_finished)
         self.catalog_runner = TaskRunner(pool, self)
         self.catalog_runner.finished.connect(self._catalog_finished)
+        self._disk_text: str | None = None
+        # Files added, changed or removed by hand show up without a restart.
+        self.watcher = QFileSystemWatcher(self)
+        self.watcher.directoryChanged.connect(lambda _p: self._refresh_timer.start())
+        self.watcher.fileChanged.connect(lambda _p: self._refresh_timer.start())
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(300)
+        self._refresh_timer.timeout.connect(self.refresh_tree)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -601,6 +618,7 @@ class DeviceTypeEditor(QDialog):
             ("revert", "Revert", self.revert),
             ("delete", "Delete", self.delete),
             ("validate", "Validate", self.run_validation),
+            ("refresh", "Refresh", self.refresh_tree),
             ("folder", "Open folder", self.open_folder),
             ("catalog", "Reload from NetBox", self.load_catalog),
         ):
@@ -908,6 +926,47 @@ class DeviceTypeEditor(QDialog):
 
     # -- internals -----------------------------------------------------------------
 
+    def refresh_tree(self) -> None:
+        """Re-read the folder; reload the open file if it changed on disk."""
+        self.reload_tree()
+        self._select_tree(self.path)
+        if self.path is None:
+            return
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except OSError:
+            if not self.dirty:
+                self._show_document(
+                    CommentedMap(), None, ("The file was removed from the folder.",)
+                )
+            return
+        if text == self._disk_text:
+            return
+        if self.dirty:
+            answer = QMessageBox.question(
+                self,
+                "File changed",
+                f"{self.path.name} changed on disk. Discard your edits and load it?",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self._disk_text = text  # ask once per change
+                return
+        self.dirty = False
+        self.open_path(self.path)
+
+    def _watch(self) -> None:
+        folders = [self.store.root, self.store.folder]
+        if self.store.folder.is_dir():
+            folders += [p for p in self.store.folder.iterdir() if p.is_dir()]
+        wanted = {str(p) for p in folders if p.is_dir()}
+        if self.path is not None and self.path.is_file():
+            wanted.add(str(self.path))
+        current = set(self.watcher.directories()) | set(self.watcher.files())
+        if current - wanted:
+            self.watcher.removePaths(sorted(current - wanted))
+        if wanted - current:
+            self.watcher.addPaths(sorted(wanted - current))
+
     def reload_tree(self) -> None:
         self.tree.blockSignals(True)
         self.tree.clear()
@@ -925,6 +984,7 @@ class DeviceTypeEditor(QDialog):
             folder.addChild(child)
         self.tree.expandAll()
         self.tree.blockSignals(False)
+        self._watch()
 
     def _select_tree(self, path: Path | None) -> None:
         self.tree.blockSignals(True)
@@ -959,6 +1019,11 @@ class DeviceTypeEditor(QDialog):
             else ("", "")
         )
         self.table_view.images.clear_pending()
+        try:
+            self._disk_text = path.read_text(encoding="utf-8") if path else None
+        except OSError:
+            self._disk_text = None
+        self._watch()
         self.table_view.set_document(doc)
         self.yaml_view.setPlainText(dump_yaml(doc) if doc else "")
         self.stack.setCurrentIndex(0 if self.mode == "table" else 1)
@@ -1137,6 +1202,8 @@ class DeviceTypeEditor(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802 - Qt override
         if not self._layout_restored:
             self.restore_layout()
+        else:
+            self.refresh_tree()
         if self.catalog_loader is not None and not self.catalog.loaded:
             self.load_catalog()
         super().showEvent(event)

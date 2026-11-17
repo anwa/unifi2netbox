@@ -6,6 +6,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Fixed
+
+- Device type editor: files copied into, changed in or removed from the local
+	type folder by hand now show up without restarting the app: the tree is
+	re-read when the editor is shown again, by the new **Refresh** button and
+	automatically when the folder changes. An open file that changed on disk
+	is reloaded; with unsaved edits the editor asks first.
+
 ## v1.3.0
 
 ### Summary
