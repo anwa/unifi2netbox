@@ -128,6 +128,20 @@ manufacturer), `users/owner-groups` (name, description), `users/owners`
 (name, group, description), `extras/tags` (name, slug, color, description)
 and `dcim/inventory-item-roles` (name, slug, color, description).
 
+Device type comparison and sync (M14). Reads (GET, paginated, on editor
+open and **Reload from NetBox**): `dcim/device-types` and all 12 template
+endpoints unfiltered (about 14 requests; 377 types in 1.4 s on the
+developer NetBox), grouped by `device_type`. Before a sync: the type and its
+templates by `device_type_id` (drift check and read-back), for the preflight
+`dcim/devices?device_type_id=` and, when height or depth change for racked
+devices, `dcim/racks/{id}` and `dcim/devices?rack_id=`; when the subdevice
+role changes `dcim/device-bays?device_id=`. Writes (only after the
+confirmed sync): `PATCH dcim/device-types/{id}` with the chosen fields
+(references by ID), `POST` of new templates (dependency order as on
+import), `PATCH` of changed templates and of front ports' `rear_ports`,
+`PATCH` of interface `parent`/`bridge`, multipart image upload. Never:
+deleting device types or templates, or changing devices.
+
 ## Extended UniFi Details (M11)
 
 Read-only probe on 2026-11-15 against Network 11.0.99, assistant-executed on

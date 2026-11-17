@@ -6,6 +6,91 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.4.0
+
+### Summary
+
+- Milestone M14 (device types synced with NetBox): the device type editor
+	compares every local definition with the NetBox device types (tree green,
+	yellow or red; differing values marked with the NetBox value and taken
+	over by right-click), creates definitions from NetBox, the
+	devicetype-library or by hand, and syncs definitions with NetBox per
+	value or by overwriting NetBox, after a drift check and a preflight that
+	protects racked devices, with dry run, read-back and write history.
+	Values missing in the file are never cleared in NetBox, NetBox-only
+	templates are never deleted and existing devices are not changed. Files
+	copied into the type folder by hand now appear without a restart.
+
+### Added
+
+- M14 slice 2: NetBox device types as local definitions: all types and
+	their templates are read in bulk (read-only) and converted into the
+	library form (references by name, port mappings, inventory components,
+	NetBox defaults left out). A comparison matches a local definition with
+	its NetBox type (slug, else manufacturer and model or part number) and
+	lists differing fields and templates (local only, NetBox only, differing
+	columns).
+- M14 slice 3: the device type editor reads the NetBox device types when it
+	opens and on **Reload from NetBox**. The tree shows each local definition
+	green (equal to NetBox), yellow (differs) or red (not in NetBox), with the
+	reason in the tooltip. Fields, tags, custom fields, images and template
+	cells that differ are marked yellow with the NetBox value in the tooltip;
+	right-click **Use NetBox value** takes it over. Template rows only in
+	NetBox are shown greyed out (**Add to the definition**), rows only in the
+	file are marked red; tabs with differences carry a dot. **Copy YAML**
+	copies the definition to the clipboard.
+- M14 slice 4: **New** in the device type editor asks for the source: **From
+	NetBox...** (a picker limited to the NetBox device types; the type opens
+	as an unsaved definition), **From the devicetype-library...** (picker
+	limited to the library, the file is downloaded in the background) or
+	**Manual**.
+- M14 slice 5 (engine): sync of a local definition with its NetBox device
+	type. Each difference is decided Local (NetBox gets the file's value),
+	NetBox (the file gets NetBox's value) or Skip; "Overwrite NetBox" decides
+	Local wherever possible. Values missing in the file are never cleared in
+	NetBox and NetBox-only templates are never deleted. Before writing, the
+	type is re-read (stops on drift), a preflight blocks rack overlaps,
+	heights that leave the rack or 0 U for racked devices, subdevice role
+	changes with used bays or racked children and model conflicts, and warns
+	about changes that hit every device of the type or only future devices;
+	references are resolved by name. Then type fields, new templates (with
+	interface parents and bridges), changed templates, port mappings and
+	images are written, interrupted creates are looked up, and NetBox is read
+	back (verified when every chosen value arrived).
+- M14 slice 5 (editor): **Sync with NetBox** opens the open definition's
+	differences with Local / NetBox / Skip per difference (**Overwrite
+	NetBox** preselects Local, **Take all from NetBox** the other way), a dry
+	run option, the preflight's blockers and a confirmation listing the steps
+	and warnings; NetBox values chosen for the file are saved to it. A
+	definition not in NetBox is imported. **Sync all...** overwrites NetBox
+	for all checked yellow types and imports the red ones after one check
+	and one confirmation. Every run is saved to the write history.
+- Manual: new page *Syncing with NetBox* (tree colors, NetBox values, sync
+	choices, checks, effects on existing devices) and the New choice in the
+	editor page, with demo screenshots of the differences and the sync
+	dialog.
+
+### Fixed
+
+- Validation no longer rejects decimal weights such as 2.3 kg as "not a
+	multiple of 0.01" (floating point); multiples are checked exactly.
+
+- Device type editor: files copied into, changed in or removed from the local
+	type folder by hand now show up without restarting the app: the tree is
+	re-read when the editor is shown again, by the new **Refresh** button and
+	automatically when the folder changes. An open file that changed on disk
+	is reloaded; with unsaved edits the editor asks first.
+
+### Validation
+
+- Offline gate: 714 passed, 2 skipped; Ruff lint and format pass.
+- Live on the developer workstation (NetBox 4.7.3, 2026-11-17): read-only
+	bulk read of 377 device types (all valid definitions), comparisons and
+	dry-run syncs of the local files; then an approved write test on test
+	type 378: overwrite and per-value sync verified, local-only change saved,
+	dry run wrote nothing, second comparison equal. UniFi was not touched.
+- Packaged builds of this version are not verified yet.
+
 ## v1.3.0
 
 ### Summary

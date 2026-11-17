@@ -16,7 +16,11 @@
 - Do not implement automatic deletions or silently create Custom Fields or
   device types. The only Custom Field the app may create is `firmware`;
   device types are created only from a chosen local or devicetype-library
-  definition, as a visible, selected and confirmed write step.
+  definition, as a visible, selected and confirmed write step. Existing
+  device types are updated only through the editor's confirmed **Sync with
+  NetBox** (preflight, dry run, drift check, read-back, write history);
+  templates that exist only in NetBox are never deleted, and existing
+  devices are not changed.
   Manufacturers, owners, owner groups, tags, platforms and inventory item
   roles are created only through an explicit "New" dialog the user confirms
   (immediate write, journaled, read back). Never create sites or device

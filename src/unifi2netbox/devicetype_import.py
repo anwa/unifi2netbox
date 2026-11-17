@@ -403,8 +403,11 @@ def _lookup(backend: IpamBackend, path: str, value: str, keys=("name", "slug")):
 
 
 def _references(row: TypeImportRow, backend: IpamBackend):
+    return resolve_references(row.doc, backend)
+
+
+def resolve_references(doc: Mapping, backend: IpamBackend):
     """Resolve every NetBox object the definition names; (refs, missing)."""
-    doc = row.doc
     refs = _References()
     missing: list[str] = []
     if doc.get("owner"):

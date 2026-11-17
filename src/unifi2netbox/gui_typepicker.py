@@ -133,6 +133,7 @@ class DeviceTypePicker(QDialog):
         refresh_library: Callable[[], Sequence[TypeCandidate]] | None = None,
         pool: QThreadPool | None = None,
         parent: QWidget | None = None,
+        allow_new: bool = True,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("typePicker")
@@ -199,6 +200,7 @@ class DeviceTypePicker(QDialog):
             "Create a device type in the editor from the UniFi data"
         )
         self.new_button.clicked.connect(self._new)
+        self.new_button.setVisible(allow_new)
         footer.addWidget(self.new_button)
         footer.addStretch()
         cancel = QPushButton("Cancel")

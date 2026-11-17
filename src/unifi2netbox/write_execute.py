@@ -567,6 +567,27 @@ class RequestsNetBoxWriteBackend:
         ids = (str(row.get("id", "")).strip() for row in rows if isinstance(row, dict))
         return tuple(item for item in ids if item)
 
+    def list_objects(self, path: str, **filters: object) -> list[dict[str, object]]:
+        """All objects of a list endpoint (paginated GET)."""
+        rows: list[dict[str, object]] = []
+        offset = 0
+        for _page in range(200):
+            params = {**filters, "limit": 500, "offset": offset}
+            response = self._request("GET", path, params=params)
+            if response.status_code != 200:
+                raise WriteExecutionError(
+                    f"NetBox read {path} failed with HTTP {response.status_code}."
+                )
+            payload = response.json()
+            page = payload.get("results") if isinstance(payload, dict) else None
+            if not isinstance(page, list):
+                raise WriteExecutionError(f"NetBox read {path} payload is invalid.")
+            rows += [row for row in page if isinstance(row, dict)]
+            offset += len(page)
+            if not page or offset >= int(payload.get("count") or 0):
+                return rows
+        raise WriteExecutionError(f"NetBox returned too many objects for {path}.")
+
     def read_object(self, path: str) -> dict[str, object] | None:
         response = self._request("GET", path)
         if response.status_code == 404:

@@ -1,11 +1,12 @@
 # unifi2netbox
 
-Latest main release: **v1.3.0** (M13 NetBox-complete device types: all
-NetBox fields, templates and images, drop-downs and New dialogs from NetBox). Download the Windows installer or the
+Latest main release: **v1.4.0** (M14 device types synced with NetBox:
+differences in the editor, per-value or overwrite sync with checks, New from
+NetBox or the devicetype-library). Download the Windows installer or the
 Ubuntu `.deb` from the
 [GitHub releases](https://github.com/anwa/unifi2netbox/releases).
 
-Release **v1.3.0** compares UniFi Network inventory with NetBox in a modern
+Release **v1.4.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
@@ -20,7 +21,7 @@ version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v1.3.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v1.4.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities
@@ -156,7 +157,12 @@ header), and the app has its own icon in title bars, taskbar and executable.
   NetBox fields, template kinds and images. Owner, platform, tags,
   manufacturer and inventory item roles are drop-downs read from NetBox;
   **New...** creates such an object in NetBox after you confirm the small
-  dialog (never sites or device roles).
+  dialog (never sites or device roles). The editor tree shows each local
+  definition green (equal to NetBox), yellow (differs) or red (missing);
+  differing values are marked with the NetBox value and can be taken over;
+  **Sync with NetBox** writes chosen values either way (per value or
+  overwriting NetBox) after checks that protect racked devices, and **New**
+  starts from NetBox, the devicetype-library or an empty definition.
 - **Manual** opens the user manual from [`manual/`](manual/index.md): the
   chapter tree on the left, the page with screenshots on the right, starting
   at the overview. The same Markdown pages can be read on GitHub.

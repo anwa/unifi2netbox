@@ -14,6 +14,7 @@ this tool at real data: the manual is published with the repository.
 
 from __future__ import annotations
 
+import copy
 import os
 import sys
 import tempfile
@@ -23,7 +24,7 @@ if sys.platform == "win32":
     os.environ.setdefault("QT_QPA_FONTDIR", "C:/Windows/Fonts")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QThreadPool  # noqa: E402
+from PySide6.QtCore import QEvent, QThreadPool  # noqa: E402
 from PySide6.QtGui import QColor, QImage  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
@@ -59,7 +60,9 @@ from unifi2netbox.gui import MainWindow, SettingsDialog  # noqa: E402
 from unifi2netbox.gui_manual import ManualWindow  # noqa: E402
 from unifi2netbox.gui_newobject import NewObjectDialog  # noqa: E402
 from unifi2netbox.gui_review import ConfirmDialog, HistoryDialog  # noqa: E402
+from unifi2netbox.gui_typeeditor import _TABLE_ATTRIBUTES  # noqa: E402
 from unifi2netbox.gui_typepicker import DeviceTypePicker  # noqa: E402
+from unifi2netbox.gui_typesync import SyncDialog  # noqa: E402
 from unifi2netbox.inventory import (  # noqa: E402
     InventoryDevice,
     InventoryDeviceRole,
@@ -86,6 +89,11 @@ from unifi2netbox.netbox_catalog import (  # noqa: E402
     CatalogObject,
     CustomFieldDef,
     NetBoxCatalog,
+)
+from unifi2netbox.netbox_types import (  # noqa: E402
+    NetBoxType,
+    NetBoxTypes,
+    compare,
 )
 from unifi2netbox.port_config import ACCESS, TAGGED, InventoryPortConfig  # noqa: E402
 from unifi2netbox.refresh import RefreshResult, RefreshStatus  # noqa: E402
@@ -553,6 +561,8 @@ class Shooter:
 
     def save(self, widget, name: str) -> None:
         self.settle()
+        # Replaced cell widgets are deleted later; flush them before grabbing.
+        self.app.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
         self.scrub(widget)
         self.app.processEvents()
         widget.grab().save(str(self.out / f"{name}.png"))
@@ -637,6 +647,7 @@ class Shooter:
         picker.close()
         window.type_catalog = lambda: DEMO_CATALOG
         window.create_netbox_object = lambda *args: None
+        window.netbox_device_types = lambda: NetBoxTypes()
         editor = window.show_type_editor()
         editor.resize(WIDTH, HEIGHT)
         local = next(c for c in candidates if c.source == "local")
@@ -667,6 +678,46 @@ class Shooter:
         editor.set_mode("yaml")
         self.save(editor, "type-editor-yaml")
         editor.set_mode("table")
+        # NetBox has the type with other values: tree status, marks and sync.
+        netbox_doc = copy.deepcopy(editor.doc)
+        netbox_doc["weight"] = 1
+        netbox_doc["weight_unit"] = "kg"
+        netbox_doc["interfaces"][0]["poe_type"] = "type1-ieee802.3af"
+        netbox_doc["interfaces"].append({"name": "mgmt", "type": "virtual"})
+        demo_types = NetBoxTypes((NetBoxType("12", netbox_doc, 1),), loaded=True)
+        editor._types_finished(demo_types)
+        for _ in range(200):
+            self.app.processEvents()
+            if editor.statuses and not editor.status_runner.busy:
+                break
+        editor._paint_tree()
+        view = editor.table_view
+        view.tabs.setCurrentWidget(view.sections["interfaces"])
+        total = sum(view.splitter.sizes())
+        view.splitter.setSizes(
+            [total * 2 // 5, total // 10, total // 10, total - total * 3 // 5]
+        )
+        editor.resize(WIDTH, HEIGHT + 260)
+        self.app.processEvents()
+        total = sum(view.splitter.sizes())
+        view.splitter.setSizes([total - 520, 50, 110, 360])
+        row = editor.table_view.attributes
+        row.scrollToItem(row.item(_TABLE_ATTRIBUTES.index("weight"), 0))
+        self.save(editor, "type-editor-diff")
+        editor.resize(WIDTH, HEIGHT)
+        view.splitter.setSizes(sizes)
+        sync = SyncDialog(
+            editor.doc,
+            compare(editor.doc, demo_types),
+            demo_types,
+            None,
+            self.pool,
+            parent=editor,
+        )
+        sync.set_choice("field:weight", "netbox")
+        sync.show()
+        self.save(sync, "type-sync")
+        sync.close()
         editor.close()
         window.set_device_type_choice(door, local)
         self.select_device(window, "Door Intercom")

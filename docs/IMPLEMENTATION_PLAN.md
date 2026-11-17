@@ -679,6 +679,54 @@ Slices:
   and installer from the tag. (Done 2026-11-17: merge b5571b6,
   release v1.3.0 published.)
 
+## M14: Device Types Synced With NetBox -> v1.4.0
+
+Branch `feature/netbox-type-sync`. Decisions (2026-11-17, user):
+
+- The editor tree marks each local definition against NetBox: green (equal),
+  yellow (differs), red (not in NetBox); NetBox-only types are not listed.
+- Differing fields and template cells are marked yellow with the NetBox
+  value in the tooltip; **Use NetBox value** takes it over. Template rows
+  only in NetBox are shown and can be added to the definition.
+- **New** asks for the source: NetBox, the devicetype-library or manual.
+- **Sync with NetBox** for one or all types: overwrite NetBox, or decide per
+  value between local and NetBox. Templates only in NetBox are never
+  deleted; existing devices are not changed (NetBox applies template changes
+  to new devices only).
+- A preflight warns about or blocks changes NetBox would refuse or that have
+  side effects (rack height overlaps, subdevice role with used bays, slug
+  conflicts, fields that change every device of the type).
+- **Copy YAML**; the tree refreshes when files change on disk.
+
+Slices:
+
+- [x] 1. Tree refresh (on show, Refresh button, file watcher).
+- [x] 2. NetBox types as definitions and the comparison (Qt-free, read-only).
+  (1.3.3, 2026-11-17: live read of 377 types in 1.4 s, all convert to valid
+  definitions; 4 local files compared: 2 equal, 2 with real differences.)
+- [x] 3. Tree status, NetBox values in the editor, Copy YAML.
+- [x] 4. New from NetBox, the devicetype-library or manual.
+- [x] 5. Sync (overwrite or per value) with preflight, dry run, drift check,
+  read-back and write history.
+- [x] 6. Documentation, screenshots, live checks and approved tests.
+  (2026-11-17: live sync test on type 378 passed; see TESTING.)
+
+- [x] Obtain explicit merge approval; prepare version 1.4.0. (Approved
+  2026-11-17.)
+- [ ] Complete the approved main merge and tag v1.4.0; build the Windows exe
+  and installer from the tag.
+
+## M15: NetBox Backup and Restore -> v1.5.0 (outline)
+
+Branch `feature/netbox-backup`, detailed after M14. Decisions (2026-11-17,
+user): back up all NetBox data (without users, tokens, secrets and change
+logs) to a JSON or YAML file chosen by the user; restore in dependency order
+with a selectable mode: create missing only, create and update after a diff,
+or empty NetBox first and then restore. The last mode needs an explicit rule
+change (bulk deletion only as a separately confirmed restore option, after a
+fresh backup and typing the host name). Live write tests only on a separate
+NetBox test instance.
+
 ## Security and Configuration
 
 Explicit URL schemes; no HTTP downgrade. TLS verification defaults on, with per-

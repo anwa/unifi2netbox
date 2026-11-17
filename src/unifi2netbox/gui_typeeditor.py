@@ -16,12 +16,27 @@ be completed from techspecs.ui.com.
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
+from typing import Protocol
 
-from PySide6.QtCore import QByteArray, Qt, QThreadPool, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QFontDatabase
+from PySide6.QtCore import (
+    QByteArray,
+    QFileSystemWatcher,
+    Qt,
+    QThreadPool,
+    QTimer,
+    QUrl,
+    Signal,
+)
+from PySide6.QtGui import (
+    QColor,
+    QDesktopServices,
+    QFont,
+    QFontDatabase,
+    QGuiApplication,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -32,6 +47,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -80,6 +96,14 @@ from unifi2netbox.devicetypes import (
 )
 from unifi2netbox.gui_jobs import TaskRunner
 from unifi2netbox.gui_newobject import Creator, NewObjectDialog
+from unifi2netbox.gui_typediff import (
+    DANGER,
+    USE_HINT,
+    WARNING,
+    mark_cell,
+    mark_widget,
+    netbox_text,
+)
 from unifi2netbox.gui_typefields import (
     ChoiceCell,
     CustomFieldsTable,
@@ -88,15 +112,49 @@ from unifi2netbox.gui_typefields import (
     TagEditor,
     list_text,
 )
+from unifi2netbox.gui_typepicker import DeviceTypePicker
+from unifi2netbox.gui_typesync import (
+    SyncAllDialog,
+    SyncDialog,
+    SyncTarget,
+    TypeSync,
+)
 from unifi2netbox.library import client
 from unifi2netbox.netbox_catalog import NetBoxCatalog, reference_issues
+from unifi2netbox.netbox_types import (
+    DIFFERS,
+    LOCAL_ONLY,
+    MISSING,
+    NETBOX_ONLY,
+    SAME,
+    NetBoxTypes,
+    RowDiff,
+    TypeComparison,
+    compare,
+    row_key,
+    type_statuses,
+)
 from unifi2netbox.techspecs import TechSpec, fetch_url, lookup
 from unifi2netbox.typedraft import merge_spec
+from unifi2netbox.typesearch import TypeCandidate
 
 PATH_ROLE = Qt.ItemDataRole.UserRole + 1
+STATUS_ROLE = Qt.ItemDataRole.UserRole + 2
 # Shown in their own editors: comments, tags, custom fields and images.
 _OWN_EDITORS = ("comments", "tags", "custom_fields", "front_image", "rear_image")
 _TABLE_ATTRIBUTES = tuple(name for name in ATTRIBUTES if name not in _OWN_EDITORS)
+
+
+class TypeLibrary(Protocol):
+    """The devicetype-library as offered by the main window."""
+
+    def candidates(self) -> tuple[list[TypeCandidate], str]: ...
+
+    def refresh(self) -> Sequence[TypeCandidate]: ...  # thread pool
+
+    def fetch(self, candidate: TypeCandidate) -> str: ...  # thread pool
+
+
 # (section, column) -> (options, catalog kind for New... or "").
 References = Callable[[str | None, str], tuple[tuple[str, ...], str] | None]
 
@@ -200,6 +258,9 @@ class ComponentTable(QWidget):
         self.columns = component_columns(section)
         self.references = references
         self.originals: list = []
+        # Rows only in NetBox, shown greyed out after the definition's rows.
+        self.ghosts: list[RowDiff] = []
+        self.diffs: tuple[RowDiff, ...] = ()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 6, 0, 0)
         self.table = QTableWidget(0, len(self.columns))
@@ -217,6 +278,8 @@ class ComponentTable(QWidget):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.itemChanged.connect(lambda _i: self.changed.emit())
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._context_menu)
         self.cells = _Cells(self.table, references, on_new)
         buttons = QHBoxLayout()
         add = QPushButton("Add row")
@@ -235,10 +298,16 @@ class ComponentTable(QWidget):
         )
         layout.addWidget(_label(help_text + " (* required)", "caption"))
 
+    def real_rows(self) -> int:
+        """Rows of the definition (without the greyed NetBox-only rows)."""
+        return self.table.rowCount() - len(self.ghosts)
+
     def set_rows(self, rows: Iterable) -> None:
         self.table.blockSignals(True)
         self.table.setRowCount(0)
         self.originals = []
+        self.ghosts = []
+        self.diffs = ()
         for row in rows:
             self._append(row if isinstance(row, dict) else {})
             self.originals[-1] = row if isinstance(row, dict) else None
@@ -249,7 +318,7 @@ class ComponentTable(QWidget):
         """The rows and whether they are exactly the original ones."""
         result = []
         unchanged = True
-        for row in range(self.table.rowCount()):
+        for row in range(self.real_rows()):
             texts = [self.cells.get(row, c) for c in range(len(self.columns))]
             original = self.originals[row] if row < len(self.originals) else None
             if original is not None and texts == [
@@ -271,7 +340,7 @@ class ComponentTable(QWidget):
         if "name" not in self.columns:
             return ()
         column = self.columns.index("name")
-        names = (self.cells.get(row, column) for row in range(self.table.rowCount()))
+        names = (self.cells.get(row, column) for row in range(self.real_rows()))
         return tuple(name.strip() for name in names if name.strip())
 
     def refresh_references(self, columns: Iterable[str] | None = None) -> None:
@@ -285,7 +354,7 @@ class ComponentTable(QWidget):
             reference = self.references(self.section, name)
             if reference is None:
                 continue
-            for row in range(self.table.rowCount()):
+            for row in range(self.real_rows()):
                 widget = self.table.cellWidget(row, index)
                 if isinstance(widget, ChoiceCell):
                     widget.set_options(reference[0])
@@ -299,19 +368,149 @@ class ComponentTable(QWidget):
         for row in sorted(
             {i.row() for i in self.table.selectedIndexes()}, reverse=True
         ):
+            if row >= self.real_rows():
+                continue  # NetBox-only rows are not part of the definition
             self.table.removeRow(row)
             if row < len(self.originals):
                 del self.originals[row]
         self.changed.emit()
 
     def _append(self, values: dict) -> None:
-        row = self.table.rowCount()
+        row = self.real_rows()  # before the NetBox-only rows
         self.table.insertRow(row)
         self.originals.append(None)
         for column, name in enumerate(self.columns):
             self.cells.put(
                 row, column, self.section, name, values.get(name), self.changed.emit
             )
+
+    def row_values(self, row: int) -> dict:
+        return {
+            name: text_value(self.section, name, self.cells.get(row, column))
+            for column, name in enumerate(self.columns)
+        }
+
+    def set_diffs(self, diffs: Iterable[RowDiff]) -> None:
+        """Mark differing cells and show the rows only NetBox has."""
+        self.table.blockSignals(True)
+        for _ in self.ghosts:
+            self.table.removeRow(self.table.rowCount() - 1)
+        self.ghosts = []
+        self.diffs = tuple(diffs)
+        by_key = {d.key: d for d in self.diffs}
+        name_column = 0  # the name (or front port) column
+        for row in range(self.table.rowCount()):
+            diff = by_key.get(row_key(self.section, self.row_values(row)))
+            for column, name in enumerate(self.columns):
+                change = (
+                    next((f for f in diff.fields if f.name == name), None)
+                    if diff and diff.kind == DIFFERS
+                    else None
+                )
+                if change is not None:
+                    mark_cell(
+                        self.table,
+                        row,
+                        column,
+                        WARNING,
+                        f"NetBox: {netbox_text(change.netbox)}. {USE_HINT}",
+                    )
+                elif diff and diff.kind == LOCAL_ONLY and column == name_column:
+                    mark_cell(self.table, row, column, DANGER, "Not in NetBox.")
+                else:
+                    mark_cell(self.table, row, column, None)
+        grey = theme.colors().text_secondary
+        for diff in self.diffs:
+            if diff.kind != NETBOX_ONLY or diff.netbox_row is None:
+                continue
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            for column, name in enumerate(self.columns):
+                item = QTableWidgetItem(value_text(diff.netbox_row.get(name)))
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                font = QFont(item.font())
+                font.setItalic(True)
+                item.setFont(font)
+                if grey:
+                    item.setForeground(QColor(grey))
+                item.setToolTip(
+                    "Only in NetBox. Right-click to add it to the definition."
+                )
+                self.table.setItem(row, column, item)
+            header = QTableWidgetItem("NetBox")
+            header.setToolTip("Only in NetBox; never deleted by a sync.")
+            self.table.setVerticalHeaderItem(row, header)
+            self.ghosts.append(diff)
+        self.table.blockSignals(False)
+
+    def use_netbox(self, row: int, columns: Iterable[str] | None = None) -> bool:
+        """Take NetBox values into a row; a NetBox-only row is added."""
+        if row >= self.real_rows():
+            ghost = self.ghosts[row - self.real_rows()]
+            self.table.blockSignals(True)
+            self.table.removeRow(row)
+            self.ghosts.remove(ghost)
+            self.table.blockSignals(False)
+            self._append(dict(ghost.netbox_row or {}))
+            self.changed.emit()
+            return True
+        diff = next(
+            (
+                d
+                for d in self.diffs
+                if d.kind == DIFFERS
+                and d.key == row_key(self.section, self.row_values(row))
+            ),
+            None,
+        )
+        if diff is None:
+            return False
+        wanted = set(columns) if columns is not None else None
+        for change in diff.fields:
+            if wanted is not None and change.name not in wanted:
+                continue
+            self.cells.put(
+                row,
+                self.columns.index(change.name),
+                self.section,
+                change.name,
+                change.netbox,
+                self.changed.emit,
+            )
+        self.changed.emit()
+        return True
+
+    def _context_menu(self, position) -> None:
+        index = self.table.indexAt(position)
+        if not index.isValid():
+            return
+        row, column = index.row(), index.column()
+        menu = QMenu(self)
+        if row >= self.real_rows():
+            menu.addAction("Add to the definition", lambda: self.use_netbox(row))
+        else:
+            diff = next(
+                (
+                    d
+                    for d in self.diffs
+                    if d.kind == DIFFERS
+                    and d.key == row_key(self.section, self.row_values(row))
+                ),
+                None,
+            )
+            if diff is None:
+                return
+            name = self.columns[column]
+            change = next((f for f in diff.fields if f.name == name), None)
+            if change is not None:
+                menu.addAction(
+                    f"Use NetBox value: {netbox_text(change.netbox)}",
+                    lambda: self.use_netbox(row, [name]),
+                )
+            menu.addAction(
+                "Use NetBox values for this row", lambda: self.use_netbox(row)
+            )
+        menu.exec(self.table.viewport().mapToGlobal(position))
 
 
 class TableView(QWidget):
@@ -350,6 +549,9 @@ class TableView(QWidget):
             self.attributes.setItem(row, 0, label)
             self.attributes.setItem(row, 2, help_item)
         self.attributes.itemChanged.connect(lambda _i: self.changed.emit())
+        self.attributes.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.attributes.customContextMenuRequested.connect(self._attribute_menu)
+        self.comparison: TypeComparison | None = None
         self.comments = QPlainTextEdit()
         self.comments.setObjectName("typeComments")
         self.comments.setPlaceholderText(FIELD_HELP["comments"])
@@ -366,8 +568,13 @@ class TableView(QWidget):
         netbox_layout = QVBoxLayout(netbox)
         netbox_layout.setContentsMargins(0, 0, 0, 0)
         tags_row = QHBoxLayout()
-        tags_row.addWidget(QLabel("Tags"))
+        self.tags_label = QLabel("Tags")
+        tags_row.addWidget(self.tags_label)
         tags_row.addWidget(self.tags, 1)
+        for widget in (self.tags, self.custom_fields):
+            widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tags.customContextMenuRequested.connect(self._tags_menu)
+        self.custom_fields.customContextMenuRequested.connect(self._custom_menu)
         netbox_layout.addLayout(tags_row)
         netbox_layout.addWidget(self.images)
         netbox_layout.addWidget(
@@ -496,6 +703,139 @@ class TableView(QWidget):
                 doc.pop(section, None)
         return doc
 
+    # -- NetBox comparison ----------------------------------------------------
+
+    def set_comparison(self, comparison: TypeComparison | None) -> None:
+        """Mark what differs from NetBox; None clears all marks."""
+        self.comparison = comparison
+        active = comparison is not None and comparison.status != MISSING
+        self.attributes.blockSignals(True)
+        for row, name in enumerate(_TABLE_ATTRIBUTES):
+            change = comparison.field_diff(name) if active else None
+            mark_cell(
+                self.attributes,
+                row,
+                1,
+                WARNING if change else None,
+                f"NetBox: {netbox_text(change.netbox)}. {USE_HINT}" if change else "",
+            )
+        self.attributes.blockSignals(False)
+        tags = comparison.field_diff("tags") if active else None
+        mark_widget(
+            self.tags.picker,
+            WARNING if tags else None,
+            f"NetBox: {netbox_text(tags.netbox)}. {USE_HINT}" if tags else "",
+        )
+        self.tags_label.setToolTip(self.tags.picker.toolTip())
+        custom = comparison.field_diff("custom_fields") if active else None
+        netbox_custom = dict(custom.netbox or {}) if custom else {}
+        local_custom = dict(custom.local or {}) if custom else {}
+        self.custom_fields.blockSignals(True)
+        for row, name in enumerate(self.custom_fields.names):
+            differs = custom is not None and (
+                netbox_text(netbox_custom.get(name))
+                != netbox_text(local_custom.get(name))
+            )
+            mark_cell(
+                self.custom_fields,
+                row,
+                1,
+                WARNING if differs else None,
+                f"NetBox: {netbox_text(netbox_custom.get(name))}. {USE_HINT}"
+                if differs
+                else "",
+            )
+        self.custom_fields.blockSignals(False)
+        for side, label in self.images.labels.items():
+            change = comparison.field_diff(f"{side}_image") if active else None
+            mark_widget(
+                label,
+                WARNING if change else None,
+                (
+                    "NetBox has an image."
+                    if change and change.netbox
+                    else "NetBox has no image."
+                )
+                if change
+                else "",
+            )
+        for section, table in self.sections.items():
+            table.set_diffs(comparison.rows(section) if active else ())
+        self._update_tab_titles()
+
+    def _attribute_menu(self, position) -> None:
+        index = self.attributes.indexAt(position)
+        if not index.isValid() or self.comparison is None:
+            return
+        name = _TABLE_ATTRIBUTES[index.row()]
+        change = self.comparison.field_diff(name)
+        if change is None:
+            return
+        menu = QMenu(self)
+        menu.addAction(
+            f"Use NetBox value: {netbox_text(change.netbox)}",
+            lambda: self.use_netbox_attribute(name),
+        )
+        menu.exec(self.attributes.viewport().mapToGlobal(position))
+
+    def use_netbox_attribute(self, name: str) -> None:
+        change = self.comparison.field_diff(name) if self.comparison else None
+        if change is None:
+            return
+        if name == "tags":
+            self.tags.set_tags(change.netbox or ())
+        elif name == "custom_fields":
+            self.custom_fields.set_fields(
+                self.catalog.custom_fields, dict(change.netbox or {})
+            )
+        else:
+            row = _TABLE_ATTRIBUTES.index(name)
+            self.attributes.blockSignals(True)
+            self.cells.put(row, 1, None, name, change.netbox, self.changed.emit)
+            self.attributes.blockSignals(False)
+        self.changed.emit()
+
+    def use_netbox_custom_field(self, field_name: str) -> None:
+        change = (
+            self.comparison.field_diff("custom_fields") if self.comparison else None
+        )
+        if change is None:
+            return
+        values = {k: v for k, v in self.custom_fields.texts().items() if v}
+        netbox = dict(change.netbox or {})
+        if field_name in netbox:
+            values[field_name] = netbox[field_name]
+        else:
+            values.pop(field_name, None)
+        self.custom_fields.set_fields(self.catalog.custom_fields, values)
+        self.changed.emit()
+
+    def _tags_menu(self, position) -> None:
+        if self.comparison is None or self.comparison.field_diff("tags") is None:
+            return
+        menu = QMenu(self)
+        menu.addAction(
+            "Use NetBox tags: "
+            + netbox_text(self.comparison.field_diff("tags").netbox),
+            lambda: self.use_netbox_attribute("tags"),
+        )
+        menu.exec(self.tags.mapToGlobal(position))
+
+    def _custom_menu(self, position) -> None:
+        index = self.custom_fields.indexAt(position)
+        if not index.isValid() or self.comparison is None:
+            return
+        change = self.comparison.field_diff("custom_fields")
+        if change is None:
+            return
+        name = self.custom_fields.names[index.row()]
+        menu = QMenu(self)
+        menu.addAction(
+            "Use NetBox value: " + netbox_text(dict(change.netbox or {}).get(name)),
+            lambda: self.use_netbox_custom_field(name),
+        )
+        menu.exec(self.custom_fields.viewport().mapToGlobal(position))
+
     def reference(self, section: str | None, name: str):
         """Options of a reference column, or None for ordinary columns."""
         kind = CATALOG_REFERENCES.get((section, name))
@@ -546,8 +886,12 @@ class TableView(QWidget):
 
     def _update_tab_titles(self) -> None:
         for index, section in enumerate(COMPONENTS):
-            count = self.sections[section].table.rowCount()
-            self.tabs.setTabText(index, f"{section} ({count})" if count else section)
+            table = self.sections[section]
+            count = table.real_rows()
+            title = f"{section} ({count})" if count else section
+            if table.diffs:
+                title += " \u25cf"  # a dot: differs from NetBox
+            self.tabs.setTabText(index, title)
 
 
 class DeviceTypeEditor(QDialog):
@@ -564,6 +908,9 @@ class DeviceTypeEditor(QDialog):
         settings_path: Path | None = None,
         catalog_loader: Callable[[], NetBoxCatalog] | None = None,
         creator: Creator | None = None,
+        types_loader: Callable[[], NetBoxTypes] | None = None,
+        library: TypeLibrary | None = None,
+        sync: TypeSync | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings_path = settings_path
@@ -571,6 +918,13 @@ class DeviceTypeEditor(QDialog):
         self.catalog = NetBoxCatalog()
         self.catalog_loader = catalog_loader
         self.creator = creator
+        self.types_loader = types_loader
+        self.library = library
+        self.sync = sync
+        self.netbox_types = NetBoxTypes()
+        self.comparison: TypeComparison | None = None
+        self.statuses: dict[str, tuple[str, str]] = {}
+        self._status_parts = {"catalog": "", "types": ""}
         self.saved_key = ("", "")
         self._layout_restored = False
         self.setObjectName("typeEditor")
@@ -588,6 +942,22 @@ class DeviceTypeEditor(QDialog):
         self.runner.finished.connect(self._lookup_finished)
         self.catalog_runner = TaskRunner(pool, self)
         self.catalog_runner.finished.connect(self._catalog_finished)
+        self.types_runner = TaskRunner(pool, self)
+        self.types_runner.finished.connect(self._types_finished)
+        self.fetch_runner = TaskRunner(pool, self)
+        self.fetch_runner.finished.connect(self._library_fetched)
+        self.status_runner = TaskRunner(pool, self)
+        self.status_runner.finished.connect(self._statuses_finished)
+        self._statuses_stale = False
+        self._disk_text: str | None = None
+        # Files added, changed or removed by hand show up without a restart.
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(300)
+        self._refresh_timer.timeout.connect(self.refresh_tree)
+        self.watcher = QFileSystemWatcher(self)
+        self.watcher.directoryChanged.connect(self._schedule_refresh)
+        self.watcher.fileChanged.connect(self._schedule_refresh)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -601,8 +971,12 @@ class DeviceTypeEditor(QDialog):
             ("revert", "Revert", self.revert),
             ("delete", "Delete", self.delete),
             ("validate", "Validate", self.run_validation),
+            ("refresh", "Refresh", self.refresh_tree),
+            ("copy", "Copy YAML", self.copy_yaml),
             ("folder", "Open folder", self.open_folder),
-            ("catalog", "Reload from NetBox", self.load_catalog),
+            ("catalog", "Reload from NetBox", self.reload_netbox),
+            ("sync", "Sync with NetBox", self.open_sync),
+            ("syncAll", "Sync all...", self.open_sync_all),
         ):
             button = QPushButton(text)
             button.setObjectName(f"typeEditor_{name}")
@@ -610,7 +984,24 @@ class DeviceTypeEditor(QDialog):
             button.clicked.connect(slot)
             self.buttons[name] = button
             bar.addWidget(button)
-        self.buttons["catalog"].setEnabled(catalog_loader is not None)
+        new_menu = QMenu(self.buttons["new"])
+        new_menu.setObjectName("typeEditorNewMenu")
+        for source, text in (
+            ("netbox", "From NetBox..."),
+            ("library", "From the devicetype-library..."),
+            ("manual", "Manual"),
+        ):
+            action = new_menu.addAction(text)
+            action.setObjectName(f"typeEditorNew_{source}")
+            action.triggered.connect(lambda _c=False, s=source: self.new_from(s))
+        self.buttons["new"].clicked.disconnect()
+        self.buttons["new"].setMenu(new_menu)
+        self.buttons["new"].setToolTip(
+            "Create a definition from NetBox, the devicetype-library or by hand"
+        )
+        self.buttons["catalog"].setEnabled(
+            catalog_loader is not None or types_loader is not None
+        )
         self.buttons["catalog"].setToolTip(
             "Read manufacturers, owners, platforms, tags, inventory item roles "
             "and custom fields from NetBox (read-only)"
@@ -667,6 +1058,9 @@ class DeviceTypeEditor(QDialog):
         self.notes = _label("", "caption")
         self.notes.setObjectName("typeNotes")
         right_layout.addWidget(self.notes)
+        self.netbox_note = _label("", "caption")
+        self.netbox_note.setObjectName("typeNetBoxNote")
+        right_layout.addWidget(self.netbox_note)
         self.stack = QStackedWidget()
         self.table_view = TableView(
             on_new=self.new_object if creator is not None else None,
@@ -774,6 +1168,7 @@ class DeviceTypeEditor(QDialog):
             self.stack.setCurrentIndex(0)
         self._loading = False
         self._sync_mode_buttons()
+        self._update_comparison()
 
     def set_catalog(self, catalog: NetBoxCatalog) -> None:
         self.catalog = catalog
@@ -781,12 +1176,139 @@ class DeviceTypeEditor(QDialog):
         if self.doc:
             self.run_validation()
 
+    def reload_netbox(self) -> None:
+        """Read the drop-down lists and the device types of NetBox."""
+        self.load_catalog()
+        self.load_types()
+
+    def load_types(self) -> None:
+        if self.types_loader is None or self.types_runner.busy:
+            return
+        self._status_parts["types"] = "Reading NetBox device types..."
+        self._show_status()
+        self.types_runner.start(self.types_loader)
+
+    def exec_dialog(self, dialog: QDialog) -> None:
+        """Run a modal dialog (replaced in tests)."""
+        dialog.exec()
+
+    def local_images(self, doc) -> dict[str, str]:
+        manufacturer = str(doc.get("manufacturer") or "")
+        slug = str(doc.get("slug") or "")
+        result = {}
+        for side in IMAGE_SIDES:
+            found = find_image(self.store, manufacturer, slug, side)
+            if found is not None:
+                result[side] = str(found)
+        return result
+
+    def _sync_ready(self) -> bool:
+        if self.sync is None:
+            self.notes.setText("NetBox is not configured for syncing.")
+            return False
+        if not self.netbox_types.loaded:
+            self.notes.setText(
+                "The NetBox device types are not loaded yet (Reload from NetBox)."
+            )
+            self.load_types()
+            return False
+        return True
+
+    def open_sync(self) -> None:
+        """Sync the open definition with NetBox (saved first)."""
+        if not self._sync_ready() or not self.doc:
+            return
+        if self.dirty or self.path is None:
+            answer = QMessageBox.question(
+                self, "Sync with NetBox", "Save the definition before syncing?"
+            )
+            if answer != QMessageBox.StandardButton.Yes or not self.save():
+                return
+        doc = self.store.read(self.path)
+        comparison = compare(doc, self.netbox_types)
+        if comparison.status == SAME:
+            self.notes.setText("The definition is equal to NetBox.")
+            return
+        images = self.local_images(doc)
+        if comparison.status == MISSING:
+            dialog = SyncAllDialog(
+                [
+                    SyncTarget(
+                        self.path, self.path.stem, MISSING, doc, comparison, images
+                    )
+                ],
+                self.netbox_types,
+                self.sync,
+                self.pool,
+                self,
+            )
+            dialog.finished_all.connect(lambda _r: self.load_types())
+        else:
+            dialog = SyncDialog(
+                doc, comparison, self.netbox_types, self.sync, self.pool, images, self
+            )
+            dialog.synced.connect(self._synced)
+        self.exec_dialog(dialog)
+        dialog.deleteLater()
+
+    def open_sync_all(self) -> None:
+        if not self._sync_ready():
+            return
+        targets = []
+        for item in self.store.files():
+            try:
+                doc = self.store.read(item.path)
+            except DeviceTypeError:
+                continue
+            comparison = compare(doc, self.netbox_types)
+            if comparison.status in (DIFFERS, MISSING):
+                targets.append(
+                    SyncTarget(
+                        item.path,
+                        f"{item.manufacturer} {item.name}",
+                        comparison.status,
+                        doc,
+                        comparison,
+                        self.local_images(doc),
+                    )
+                )
+        if not targets:
+            self.notes.setText("All local definitions are equal to NetBox.")
+            return
+        dialog = SyncAllDialog(targets, self.netbox_types, self.sync, self.pool, self)
+        dialog.finished_all.connect(lambda _r: self.load_types())
+        self.exec_dialog(dialog)
+        dialog.deleteLater()
+
+    def _synced(self, report) -> None:
+        if report.local_doc is not None and self.path is not None:
+            try:
+                path = self.store.write(report.local_doc, previous=self.path)
+            except (DeviceTypeError, OSError) as error:
+                self.notes.setText(f"The local file was not updated: {error}")
+            else:
+                self.dirty = False
+                self.reload_tree()
+                self._show_document(self.store.read(path), path, ("Synced.",))
+                self._select_tree(path)
+        if report.outcome.status != "skipped" or report.local_doc is not None:
+            self.load_types()
+
+    def copy_yaml(self) -> None:
+        try:
+            doc = self.current_document()
+        except DeviceTypeError as error:
+            self._show_issues((Issue("error", "YAML", str(error)),))
+            return
+        QGuiApplication.clipboard().setText(dump_yaml(doc))
+        self.notes.setText("Copied the YAML to the clipboard.")
+
     def load_catalog(self) -> None:
         """Read the NetBox drop-down lists in the background."""
         if self.catalog_loader is None or self.catalog_runner.busy:
             return
-        self.buttons["catalog"].setEnabled(False)
-        self.catalog_status.setText("Reading NetBox lists...")
+        self._status_parts["catalog"] = "Reading NetBox lists..."
+        self._show_status()
         self.catalog_runner.start(self.catalog_loader)
 
     def new_object(self, kind: str, target) -> None:
@@ -802,6 +1324,94 @@ class DeviceTypeEditor(QDialog):
             target.set_text(created.slug if kind == "tags" else created.name)
 
     # -- actions -------------------------------------------------------------------
+
+    def new_from(self, source: str) -> None:
+        """New definition from NetBox, the devicetype-library or by hand."""
+        if source == "manual":
+            self.new_type()
+            return
+        if source == "netbox":
+            if not self.netbox_types.loaded:
+                self.notes.setText(
+                    "The NetBox device types are not loaded yet; try again when "
+                    "they are (Reload from NetBox)."
+                )
+                self.load_types()
+                return
+            by_id = {t.id: t for t in self.netbox_types.types}
+            candidates = [
+                TypeCandidate(
+                    "netbox",
+                    t.manufacturer,
+                    t.model,
+                    str(t.doc.get("part_number") or ""),
+                    netbox_id=t.id,
+                )
+                for t in self.netbox_types.types
+            ]
+            picker = self._picker(candidates, "")
+            if picker is None or picker.selected is None:
+                return
+            found = by_id.get(picker.selected.netbox_id)
+            if found is not None:
+                self.open_new(
+                    copy.deepcopy(found.doc),
+                    (
+                        f"From NetBox (device type {found.id}, used by "
+                        f"{found.device_count} devices). Save to keep it in the "
+                        "local folder.",
+                    ),
+                )
+            return
+        if self.library is None:
+            self.notes.setText("The devicetype-library is not available here.")
+            return
+        candidates, note = self.library.candidates()
+        picker = self._picker(
+            [c for c in candidates if c.source == "library"],
+            note,
+            self.library.refresh,
+        )
+        if picker is None or picker.selected is None:
+            return
+        self.notes.setText(f"Loading {picker.selected.path} from the library...")
+        library, chosen = self.library, picker.selected
+        self.fetch_runner.start(lambda: (chosen, library.fetch(chosen)))
+
+    def _picker(self, candidates, note, refresh=None) -> DeviceTypePicker | None:
+        picker = DeviceTypePicker(
+            candidates,
+            note=note,
+            refresh_library=refresh,
+            pool=self.pool,
+            parent=self,
+            allow_new=False,
+        )
+        accepted = self.exec_picker(picker)
+        picker.deleteLater()
+        return picker if accepted else None
+
+    def exec_picker(self, picker: DeviceTypePicker) -> bool:
+        """Run the picker modally (replaced in tests)."""
+        return picker.exec() == QDialog.DialogCode.Accepted
+
+    def _library_fetched(self, result: object) -> None:
+        if not isinstance(result, tuple):
+            self.notes.setText(f"Library file not loaded: {result}")
+            return
+        chosen, text = result
+        try:
+            doc = load_yaml(text)
+        except DeviceTypeError as error:
+            self.notes.setText(f"The library file is invalid: {error}")
+            return
+        self.open_new(
+            doc,
+            (
+                f"From the devicetype-library ({chosen.path}). Save to keep it in "
+                "the local folder.",
+            ),
+        )
 
     def new_type(self) -> None:
         manufacturer = ""
@@ -837,6 +1447,7 @@ class DeviceTypeEditor(QDialog):
             return False
         image_problem = self._save_images(doc)
         self.reload_tree()
+        self.update_statuses()
         self._show_document(self.store.read(path), path, ())
         self._select_tree(path)
         if image_problem:
@@ -908,6 +1519,56 @@ class DeviceTypeEditor(QDialog):
 
     # -- internals -----------------------------------------------------------------
 
+    def refresh_tree(self) -> None:
+        """Re-read the folder; reload the open file if it changed on disk."""
+        self.reload_tree()
+        self.update_statuses()
+        self._select_tree(self.path)
+        if self.path is None:
+            return
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except OSError:
+            if not self.dirty:
+                self._show_document(
+                    CommentedMap(), None, ("The file was removed from the folder.",)
+                )
+            return
+        if text == self._disk_text:
+            return
+        if self.dirty:
+            answer = QMessageBox.question(
+                self,
+                "File changed",
+                f"{self.path.name} changed on disk. Discard your edits and load it?",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self._disk_text = text  # ask once per change
+                return
+        self.dirty = False
+        self.open_path(self.path)
+
+    def _schedule_refresh(self, _path: str = "") -> None:
+        self._refresh_timer.start()  # several events in a row: one refresh
+
+    def _watch(self) -> None:
+        """Watch the folder while the window is visible (showing re-reads it)."""
+        current = set(self.watcher.directories()) | set(self.watcher.files())
+        if not self.isVisible():
+            if current:
+                self.watcher.removePaths(sorted(current))
+            return
+        folders = [self.store.root, self.store.folder]
+        if self.store.folder.is_dir():
+            folders += [p for p in self.store.folder.iterdir() if p.is_dir()]
+        wanted = {str(p) for p in folders if p.is_dir()}
+        if self.path is not None and self.path.is_file():
+            wanted.add(str(self.path))
+        if current - wanted:
+            self.watcher.removePaths(sorted(current - wanted))
+        if wanted - current:
+            self.watcher.addPaths(sorted(wanted - current))
+
     def reload_tree(self) -> None:
         self.tree.blockSignals(True)
         self.tree.clear()
@@ -925,6 +1586,8 @@ class DeviceTypeEditor(QDialog):
             folder.addChild(child)
         self.tree.expandAll()
         self.tree.blockSignals(False)
+        self._paint_tree()
+        self._watch()
 
     def _select_tree(self, path: Path | None) -> None:
         self.tree.blockSignals(True)
@@ -959,6 +1622,11 @@ class DeviceTypeEditor(QDialog):
             else ("", "")
         )
         self.table_view.images.clear_pending()
+        try:
+            self._disk_text = path.read_text(encoding="utf-8") if path else None
+        except OSError:
+            self._disk_text = None
+        self._watch()
         self.table_view.set_document(doc)
         self.yaml_view.setPlainText(dump_yaml(doc) if doc else "")
         self.stack.setCurrentIndex(0 if self.mode == "table" else 1)
@@ -967,6 +1635,7 @@ class DeviceTypeEditor(QDialog):
         self.notes.setText("\n".join(notes))
         self.spec_url.clear()
         self._update_title()
+        self._update_comparison()
         if doc:
             try:
                 target = path or self.store.path_for(doc)
@@ -1002,6 +1671,7 @@ class DeviceTypeEditor(QDialog):
         except DeviceTypeError:
             pass
         self._update_title()
+        self._update_comparison()
 
     def _save_images(self, doc) -> str:
         """Move images to a new name and apply the pending choices."""
@@ -1017,10 +1687,87 @@ class DeviceTypeEditor(QDialog):
             return f"The images were not saved: {error}"
         return ""
 
+    def _show_status(self) -> None:
+        text = " ".join(part for part in self._status_parts.values() if part)
+        self.catalog_status.setText(text)
+        self.catalog_status.setToolTip(text)
+
+    def _types_finished(self, result: object) -> None:
+        if not isinstance(result, NetBoxTypes):
+            self._status_parts["types"] = f"NetBox device types not loaded: {result}"
+            self._show_status()
+            return
+        self.netbox_types = result
+        if result.loaded:
+            self._status_parts["types"] = f"{len(result.types)} NetBox device types."
+        else:
+            self._status_parts["types"] = (
+                f"NetBox device types not loaded: {'; '.join(result.errors)}"
+            )
+        self._show_status()
+        self._update_comparison()
+        self.update_statuses()
+
+    def update_statuses(self) -> None:
+        """Compare every local file with NetBox in the background."""
+        if not self.netbox_types.loaded:
+            return
+        if self.status_runner.busy:
+            self._statuses_stale = True
+            return
+        store, types = self.store, self.netbox_types
+        self.status_runner.start(lambda: type_statuses(store, types))
+
+    def _statuses_finished(self, result: object) -> None:
+        if isinstance(result, dict):
+            self.statuses = result
+            self._paint_tree()
+        if self._statuses_stale:
+            self._statuses_stale = False
+            self.update_statuses()
+
+    def _paint_tree(self) -> None:
+        tones = {SAME: "success", DIFFERS: "warning", MISSING: "danger"}
+        rank = {"success": 0, "warning": 1, "danger": 2}
+        for index in range(self.tree.topLevelItemCount()):
+            folder = self.tree.topLevelItem(index)
+            worst = None
+            for child_index in range(folder.childCount()):
+                child = folder.child(child_index)
+                status, summary = self.statuses.get(
+                    str(child.data(0, PATH_ROLE)), ("", "")
+                )
+                tone = tones.get(status)
+                child.setToolTip(0, f"{child.data(0, PATH_ROLE)}\n{summary}".strip())
+                if tone is None:
+                    child.setData(0, Qt.ItemDataRole.ForegroundRole, None)
+                    continue
+                child.setForeground(0, theme.tone_qcolor(tone))
+                child.setData(0, STATUS_ROLE, status)
+                if worst is None or rank[tone] > rank[worst]:
+                    worst = tone
+            if worst is None:
+                folder.setData(0, Qt.ItemDataRole.ForegroundRole, None)
+            else:
+                folder.setForeground(0, theme.tone_qcolor(worst))
+
+    def _update_comparison(self) -> None:
+        if not self.netbox_types.loaded or not self.doc:
+            self.comparison = None
+        else:
+            self.comparison = compare(self.doc, self.netbox_types)
+        if self.mode == "table" or self.comparison is None:
+            self.table_view.set_comparison(self.comparison)
+        if self.comparison is None:
+            self.netbox_note.setText("")
+        else:
+            self.netbox_note.setText(self.comparison.summary())
+
     def _catalog_finished(self, result: object) -> None:
         self.buttons["catalog"].setEnabled(True)
         if not isinstance(result, NetBoxCatalog):
-            self.catalog_status.setText(f"NetBox lists not loaded: {result}")
+            self._status_parts["catalog"] = f"NetBox lists not loaded: {result}"
+            self._show_status()
             return
         self.set_catalog(result)
         counts = ", ".join(
@@ -1035,8 +1782,8 @@ class DeviceTypeEditor(QDialog):
         text = f"NetBox: {counts}, {len(result.custom_fields)} custom fields."
         if result.errors:
             text += f" Not readable: {'; '.join(result.errors)}"
-        self.catalog_status.setText(text)
-        self.catalog_status.setToolTip(text)
+        self._status_parts["catalog"] = text
+        self._show_status()
 
     def _confirm_discard(self) -> bool:
         if not self.dirty:
@@ -1137,12 +1884,19 @@ class DeviceTypeEditor(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802 - Qt override
         if not self._layout_restored:
             self.restore_layout()
+        else:
+            self.refresh_tree()
+        QTimer.singleShot(0, self, self._watch)
         if self.catalog_loader is not None and not self.catalog.loaded:
             self.load_catalog()
+        if self.types_loader is not None and not self.netbox_types.loaded:
+            self.load_types()
         super().showEvent(event)
 
     def hideEvent(self, event) -> None:  # noqa: N802 - Qt override
         self.save_layout()
+        self._refresh_timer.stop()
+        QTimer.singleShot(0, self, self._watch)  # isVisible() is still true here
         super().hideEvent(event)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override

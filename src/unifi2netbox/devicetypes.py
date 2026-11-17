@@ -25,6 +25,7 @@ import json
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
@@ -505,6 +506,10 @@ def validate(doc: Mapping, path: Path | None = None) -> tuple[Issue, ...]:
     issues: list[Issue] = []
     plain = json.loads(json.dumps(doc, default=str))
     for error in sorted(_validator().iter_errors(plain), key=lambda e: list(e.path)):
+        if error.validator == "multipleOf" and _exact_multiple(
+            error.instance, error.validator_value
+        ):
+            continue  # 2.3 / 0.01 is 229.999... in floating point
         where = "/".join(str(part) for part in error.path)
         issues.append(Issue("error", where, error.message))
     issues += _empty_values(doc, "")
@@ -660,6 +665,13 @@ def _sibling_issues(doc: Mapping) -> list[Issue]:
                 )
             )
     return issues
+
+
+def _exact_multiple(value, step) -> bool:
+    try:
+        return Decimal(str(value)) % Decimal(str(step)) == 0
+    except InvalidOperation, ValueError:
+        return False
 
 
 def _empty_values(value, where: str) -> list[Issue]:

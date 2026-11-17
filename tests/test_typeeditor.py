@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
 from PySide6.QtWidgets import QComboBox, QListWidget, QMessageBox
 
 from unifi2netbox.config import DeviceTypesConfig
@@ -27,7 +27,13 @@ def store(tmp_path):
 def editor(qtbot, store):
     window = DeviceTypeEditor(store, DeviceTypesConfig(), QThreadPool())
     qtbot.addWidget(window)
-    return window
+    yield window
+    # Delete the window now: hundreds of closed but living windows make
+    # later style changes (theme tests) fragile.
+    window.dirty = False
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
 
 
 def answer(monkeypatch, button):
@@ -422,3 +428,285 @@ def test_catalog_is_read_in_the_background_when_shown(qtbot, store):
     assert editor.catalog is CATALOG
     assert "1 manufacturers" in editor.catalog_status.text()
     assert "2 custom fields" in editor.catalog_status.text()
+
+
+# -- M14 slice 1: tree refresh ---------------------------------------------------
+
+
+def test_files_copied_by_hand_appear_after_refresh_reopen_and_watch(
+    qtbot, editor, store
+):
+    copy = store.folder / "Ubiquiti" / "U6-Copy.yaml"
+    copy.write_text(
+        (store.folder / "Ubiquiti" / "U6-Lite.yaml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    editor.buttons["refresh"].click()
+    assert "U6-Copy" in tree_names(editor)[1]
+
+    editor.show()
+    editor.hide()
+    copy.unlink()
+    editor.show()  # reopening re-reads the folder
+    assert "U6-Copy" not in tree_names(editor)[1]
+
+    (store.folder / "Cisco").mkdir()
+    shutil.copy(
+        LIBRARY / "device-types" / "Cisco" / "C9300-24P.yaml", store.folder / "Cisco"
+    )
+    qtbot.waitUntil(lambda: editor.tree.topLevelItemCount() == 2, timeout=5000)
+    editor.hide()
+
+
+def test_open_file_changed_on_disk_is_reloaded_or_asks_when_edited(
+    editor, store, monkeypatch
+):
+    path = store.folder / "Ubiquiti" / "U6-Lite.yaml"
+    editor.open_path(path)
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("U6 Lite", "U6 Lite Disk"), encoding="utf-8")
+    editor.refresh_tree()
+    assert editor.title.text() == "U6 Lite Disk"
+
+    editor.set_mode("yaml")
+    editor.yaml_view.setPlainText(
+        editor.yaml_view.toPlainText().replace("U6 Lite Disk", "Mine")
+    )
+    assert editor.dirty
+    path.write_text(text, encoding="utf-8")
+    answer(monkeypatch, QMessageBox.StandardButton.No)
+    editor.refresh_tree()
+    assert editor.dirty and "Mine" in editor.yaml_view.toPlainText()
+
+    editor.dirty = False
+    path.unlink()
+    editor.refresh_tree()
+    assert editor.path is None and "removed" in editor.notes.text()
+
+
+# -- M14 slice 3: NetBox status and values ----------------------------------------
+
+from unifi2netbox.gui_typediff import cell_mark  # noqa: E402
+from unifi2netbox.gui_typeeditor import STATUS_ROLE  # noqa: E402
+from unifi2netbox.netbox_types import NetBoxType, NetBoxTypes  # noqa: E402
+
+
+def netbox_types(store):
+    lite = store.read(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    lite["weight"] = 310
+    lite["interfaces"][0]["poe_type"] = "type2-ieee802.3at"
+    del lite["interfaces"][2]  # wlan1 is only local
+    lite["interfaces"].append({"name": "eth9", "type": "1000base-t"})
+    pro = store.read(store.folder / "Ubiquiti" / "USW-Pro-24.yaml")
+    return NetBoxTypes((NetBoxType("5", lite, 2), NetBoxType("6", pro, 0)), loaded=True)
+
+
+@pytest.fixture
+def synced(qtbot, store):
+    types = netbox_types(store)
+    window = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), types_loader=lambda: types
+    )
+    # Not qtbot.addWidget: it closes (and would ask) before this teardown.
+    with qtbot.waitSignal(window.status_runner.finished, timeout=5000):
+        window.show()
+    yield window
+    window.dirty = False
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+
+
+def test_tree_shows_equal_differing_and_missing_types(synced):
+    from unifi2netbox import theme
+
+    folder = synced.tree.topLevelItem(0)
+    states = {
+        folder.child(i).text(0): folder.child(i).data(0, STATUS_ROLE)
+        for i in range(folder.childCount())
+    }
+    assert states == {
+        "U6+": "missing",
+        "U6-Lite": "differs",
+        "UNVR": "missing",
+        "USW-Pro-24": "same",
+    }
+    lite = next(
+        folder.child(i) for i in range(4) if folder.child(i).text(0) == "U6-Lite"
+    )
+    assert lite.foreground(0).color() == theme.tone_qcolor("warning")
+    assert "Differs from NetBox" in lite.toolTip(0)
+    assert folder.foreground(0).color() == theme.tone_qcolor("danger")
+    assert "377" not in synced.catalog_status.text()
+    assert "2 NetBox device types." in synced.catalog_status.text()
+
+
+def test_editor_marks_netbox_values_and_takes_them_over(synced, store):
+    from unifi2netbox.gui_typeeditor import _TABLE_ATTRIBUTES
+
+    synced.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    view = synced.table_view
+    row = _TABLE_ATTRIBUTES.index("weight")
+    assert cell_mark(view.attributes, row, 1) == "warning"
+    assert "NetBox: 310" in view.attributes.item(row, 1).toolTip()
+    assert "Differs from NetBox" in synced.netbox_note.text()
+
+    interfaces = view.sections["interfaces"]
+    columns = interfaces.columns
+    assert cell_mark(interfaces.table, 0, columns.index("poe_type")) == "warning"
+    assert cell_mark(interfaces.table, 2, 0) == "danger"  # wlan1: only local
+    assert interfaces.real_rows() == 3 and interfaces.table.rowCount() == 4
+    assert interfaces.table.verticalHeaderItem(3).text() == "NetBox"
+    assert [i["name"] for i in view.document()["interfaces"]] == [
+        "lan0",
+        "wlan0",
+        "wlan1",
+    ]
+    assert "●" in view.tabs.tabText(view.tabs.indexOf(interfaces))
+
+    view.use_netbox_attribute("weight")
+    interfaces.use_netbox(0, ["poe_type"])
+    interfaces.use_netbox(3)  # adds eth9
+    doc = synced.table_view.document()
+    assert doc["weight"] == 310
+    assert doc["interfaces"][0]["poe_type"] == "type2-ieee802.3at"
+    assert [i["name"] for i in doc["interfaces"]] == ["lan0", "wlan0", "wlan1", "eth9"]
+    assert synced.dirty
+    assert cell_mark(view.attributes, row, 1) == ""
+    assert interfaces.table.rowCount() == 4  # no NetBox-only row left
+
+
+def test_copy_yaml_puts_the_definition_on_the_clipboard(editor, store):
+    from PySide6.QtGui import QGuiApplication
+
+    from unifi2netbox.devicetypes import dump_yaml
+
+    path = store.folder / "Ubiquiti" / "U6-Lite.yaml"
+    editor.open_path(path)
+    editor.buttons["copy"].click()
+    assert QGuiApplication.clipboard().text() == path.read_text(encoding="utf-8")
+    assert dump_yaml(editor.doc) == path.read_text(encoding="utf-8")
+    assert "clipboard" in editor.notes.text()
+
+
+# -- M14 slice 4: New from NetBox, the library or by hand --------------------------
+
+from unifi2netbox.typesearch import TypeCandidate  # noqa: E402
+
+
+def choose(window, monkeypatch, wanted):
+    seen = []
+
+    def exec_picker(picker):
+        seen.append(picker)
+        assert picker.new_button.isHidden()
+        picker.selected = next(c for c in picker.candidates if wanted(c))
+        return True
+
+    monkeypatch.setattr(window, "exec_picker", exec_picker)
+    return seen
+
+
+def test_new_menu_offers_netbox_library_and_manual(editor):
+    menu = editor.buttons["new"].menu()
+    assert [a.text() for a in menu.actions()] == [
+        "From NetBox...",
+        "From the devicetype-library...",
+        "Manual",
+    ]
+    editor.new_from("manual")
+    assert editor.path is None and editor.dirty
+    editor.new_from("netbox")
+    assert "not loaded" in editor.notes.text()
+
+
+def test_new_from_netbox_opens_the_netbox_definition(synced, monkeypatch):
+    seen = choose(synced, monkeypatch, lambda c: c.model == "U6 Lite")
+    synced.new_from("netbox")
+    assert {c.source for c in seen[0].candidates} == {"netbox"}
+    assert synced.path is None and synced.dirty
+    assert synced.doc["weight"] == 310
+    assert "From NetBox (device type 5, used by 2 devices)" in synced.notes.text()
+
+
+def test_new_from_the_library_downloads_in_the_background(qtbot, store, monkeypatch):
+    text = (store.folder / "Ubiquiti" / "UNVR.yaml").read_text(encoding="utf-8")
+    fetched = []
+
+    class Library:
+        def candidates(self):
+            return [
+                TypeCandidate("library", "Ubiquiti", "UNVR", path="Ubiquiti/UNVR.yaml"),
+                TypeCandidate("netbox", "Ubiquiti", "Other", netbox_id="1"),
+            ], ""
+
+        def refresh(self):
+            return []
+
+        def fetch(self, candidate):
+            fetched.append(candidate.path)
+            return text
+
+    window = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), library=Library()
+    )
+    qtbot.addWidget(window)
+    seen = choose(window, monkeypatch, lambda c: c.model == "UNVR")
+    with qtbot.waitSignal(window.fetch_runner.finished, timeout=5000):
+        window.new_from("library")
+    assert [c.source for c in seen[0].candidates] == ["library"]
+    assert fetched == ["Ubiquiti/UNVR.yaml"]
+    assert window.doc.get("model") and window.dirty
+    assert "devicetype-library (Ubiquiti/UNVR.yaml)" in window.notes.text()
+    window.dirty = False
+
+
+# -- M14 slice 5: sync from the editor ----------------------------------------------
+
+
+def test_sync_buttons_open_the_right_dialog_and_save_netbox_values(
+    qtbot, store, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from unifi2netbox.gui_typesync import SyncAllDialog, SyncDialog
+
+    types = netbox_types(store)
+    window = DeviceTypeEditor(
+        store,
+        DeviceTypesConfig(),
+        QThreadPool(),
+        types_loader=lambda: types,
+        sync=object(),
+    )
+    opened = []
+    monkeypatch.setattr(window, "exec_dialog", lambda d: opened.append(d))
+    with qtbot.waitSignal(window.types_runner.finished, timeout=5000):
+        window.load_types()
+
+    window.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    window.open_sync()
+    assert isinstance(opened[-1], SyncDialog)
+    assert opened[-1].comparison.status == "differs"
+
+    window.open_path(store.folder / "Ubiquiti" / "UNVR.yaml")
+    window.open_sync()
+    assert isinstance(opened[-1], SyncAllDialog)
+    assert opened[-1].targets[0].status == "missing"
+
+    window.open_sync_all()
+    labels = [t.label for t in opened[-1].targets]
+    assert labels == ["Ubiquiti U6+", "Ubiquiti U6-Lite", "Ubiquiti UNVR"]
+
+    # NetBox values chosen in the dialog are written to the local file.
+    window.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    doc = window.store.read(window.path)
+    doc["weight"] = 310
+    outcome = SimpleNamespace(status="success")
+    with qtbot.waitSignal(window.types_runner.finished, timeout=5000):
+        window._synced(SimpleNamespace(local_doc=doc, outcome=outcome))
+    assert "weight: 310" in window.path.read_text(encoding="utf-8")
+    assert not window.dirty and "Synced." in window.notes.text()
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)

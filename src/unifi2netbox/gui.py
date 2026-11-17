@@ -85,6 +85,8 @@ from unifi2netbox.connections import (
     check_unifi_connection,
 )
 from unifi2netbox.custom_fields import select_custom_field
+from unifi2netbox.devicetype_import import build_import_plan, execute_import_plan
+from unifi2netbox.devicetype_update import execute_sync, journal_sync
 from unifi2netbox.devicetypes import (
     IMAGE_SIDES,
     LocalTypeStore,
@@ -115,7 +117,7 @@ from unifi2netbox.gui_review import (
 )
 from unifi2netbox.gui_typeeditor import DeviceTypeEditor
 from unifi2netbox.gui_typepicker import DeviceTypePicker
-from unifi2netbox.inventory import InventoryDevice
+from unifi2netbox.inventory import InventoryDevice, InventoryManufacturer
 from unifi2netbox.journal_store import JOURNAL_FILENAME, JournalStore, JournalStoreError
 from unifi2netbox.library import (
     LibraryCache,
@@ -127,6 +129,8 @@ from unifi2netbox.library import client as library_client
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
 from unifi2netbox.netbox_catalog import NetBoxCatalog, read_catalog
 from unifi2netbox.netbox_objects import CreateResult, create_object
+from unifi2netbox.netbox_types import NetBoxTypes, read_netbox_types
+from unifi2netbox.network_execute import NetworkOutcome
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
     WriteExecutionReport,
@@ -153,6 +157,7 @@ from unifi2netbox.review import (
     humanize_timestamp,
     single_operation_plan,
 )
+from unifi2netbox.type_preflight import preflight
 from unifi2netbox.typedraft import draft_from_unifi
 from unifi2netbox.typesearch import (
     SOURCE_LABELS,
@@ -182,6 +187,79 @@ def state_tone(state: str) -> str:
     if state in (ConnectionState.UNSUPPORTED, ConnectionState.PARTIAL):
         return "warning"
     return "danger"
+
+
+class EditorLibrary:
+    """The devicetype-library for the editor's New menu (main window settings)."""
+
+    def __init__(self, window: MainWindow) -> None:
+        self.window = window
+
+    def candidates(self) -> tuple[list[TypeCandidate], str]:
+        config = self.window.device_types_config
+        if not config.use_library:
+            return [], "The devicetype-library is switched off in Settings."
+        cache = LibraryCache(cache_folder(self.window.path))
+        index = cache.load_index(config)
+        return library_candidates(index, cache), ""
+
+    def refresh(self) -> list[TypeCandidate]:  # thread pool
+        config, path = self.window.device_types_config, self.window.path
+        index = refresh_index(config, path)
+        return library_candidates(index, LibraryCache(cache_folder(path)))
+
+    def fetch(self, candidate: TypeCandidate) -> str:  # thread pool
+        config, path = self.window.device_types_config, self.window.path
+        cache = LibraryCache(cache_folder(path))
+        text = cache.cached_text(candidate.entry)
+        if text is None:
+            with library_client() as http:
+                text = fetch_text(config, candidate.entry, http, cache)
+        return text
+
+
+class EditorSync:
+    """NetBox access for the editor's sync dialogs (thread pool)."""
+
+    def __init__(self, window: MainWindow) -> None:
+        self.window = window
+
+    def _backend(self) -> RequestsNetBoxWriteBackend:
+        return RequestsNetBoxWriteBackend(self.window.netbox.config)
+
+    def check(self, plan, types):
+        return preflight(plan, types, self._backend())
+
+    def run(self, plan, dry_run, types):
+        report = execute_sync(plan, self._backend(), dry_run=dry_run, types=types)
+        journal_sync(self.window.journal_path, [report.outcome], dry_run)
+        return report
+
+    def import_type(self, doc, images, dry_run):
+        backend = self._backend()
+        makers = [
+            InventoryManufacturer(str(row.get("id")), str(row.get("name") or ""))
+            for row in backend.list_objects("/api/dcim/manufacturers/")
+        ]
+        choice = "editor:sync"
+        label = f"{doc.get('manufacturer') or ''} {doc.get('model') or ''}".strip()
+        plan = build_import_plan(
+            {"sync:type": choice},
+            {choice: doc},
+            {choice: label},
+            makers,
+            (),
+            images={choice: images},
+        )
+        outcomes, _overrides = execute_import_plan(plan, backend, dry_run=dry_run)
+        if not outcomes:
+            (row,) = plan.rows
+            reason = row.notes[0] if row.notes else "Cannot import this type."
+            return NetworkOutcome(
+                row.key, "import_device_type", label, "skipped", reason
+            )
+        journal_sync(self.window.journal_path, outcomes, dry_run)
+        return outcomes[0]
 
 
 class InventoryJobSignals(QObject):
@@ -2531,6 +2609,9 @@ class MainWindow(QMainWindow):
                 settings_path=self.path,
                 catalog_loader=self.type_catalog,
                 creator=self.create_netbox_object,
+                types_loader=self.netbox_device_types,
+                library=EditorLibrary(self),
+                sync=EditorSync(self),
             )
             self.type_editor = editor
             self._hook_editor(editor)
@@ -2545,6 +2626,13 @@ class MainWindow(QMainWindow):
         if not config.configured:
             return NetBoxCatalog(errors=("NetBox is not configured.",))
         return read_catalog(config)
+
+    def netbox_device_types(self) -> NetBoxTypes:
+        """All NetBox device types as definitions (runs on the thread pool)."""
+        config = self.netbox.config
+        if not config.configured:
+            return NetBoxTypes(errors=("NetBox is not configured.",))
+        return read_netbox_types(config)
 
     def create_netbox_object(
         self, kind: str, values: dict, catalog: NetBoxCatalog
