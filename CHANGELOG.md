@@ -29,6 +29,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	as an unsaved definition), **From the devicetype-library...** (picker
 	limited to the library, the file is downloaded in the background) or
 	**Manual**.
+- M14 slice 5 (engine): sync of a local definition with its NetBox device
+	type. Each difference is decided Local (NetBox gets the file's value),
+	NetBox (the file gets NetBox's value) or Skip; "Overwrite NetBox" decides
+	Local wherever possible. Values missing in the file are never cleared in
+	NetBox and NetBox-only templates are never deleted. Before writing, the
+	type is re-read (stops on drift), a preflight blocks rack overlaps,
+	heights that leave the rack or 0 U for racked devices, subdevice role
+	changes with used bays or racked children and model conflicts, and warns
+	about changes that hit every device of the type or only future devices;
+	references are resolved by name. Then type fields, new templates (with
+	interface parents and bridges), changed templates, port mappings and
+	images are written, interrupted creates are looked up, and NetBox is read
+	back (verified when every chosen value arrived).
 
 ### Fixed
 
