@@ -33,6 +33,15 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	of the definition's own components and are validated; references NetBox
 	does not know are warnings. **Reload from NetBox** reads the lists in the
 	background; they are also read when the editor opens.
+- M13 slice 4: the device type import sends every NetBox field (owner,
+	default platform and tags looked up by name or slug, custom fields, cooling
+	method, end of life, exclude from utilization) and creates all template
+	kinds in dependency order: front ports with their rear port mappings,
+	cooling intakes and outflows, interface parents and bridges, inventory
+	item hierarchies with roles, manufacturers and components. Local front
+	and rear images are uploaded after the templates (multipart PATCH).
+	References NetBox does not have stop that import before anything is
+	written, in dry runs too. Front/rear ports no longer block an import.
 
 ### Changed
 

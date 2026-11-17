@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import requests
@@ -597,6 +598,18 @@ class RequestsNetBoxWriteBackend:
         if not isinstance(data, dict) or not str(data.get("id", "")).strip():
             raise AmbiguousWriteError("NetBox create response did not include an ID")
         return str(data["id"])
+
+    def upload_files(self, path: str, files: Mapping[str, Path]) -> None:
+        """PATCH image fields as multipart (without the JSON content type)."""
+        parts = {name: (file.name, file.read_bytes()) for name, file in files.items()}
+        response = self._request(
+            "PATCH", path, files=parts, headers={"Content-Type": None}
+        )
+        if response.status_code not in {200, 204}:
+            detail = _response_error_detail(response)
+            raise WriteExecutionError(
+                f"NetBox upload failed with HTTP {response.status_code}: {detail}"
+            )
 
     def update_object(self, path: str, payload: dict[str, object]) -> None:
         response = self._request("PATCH", path, json=payload)

@@ -168,7 +168,7 @@ def test_interrupted_type_create_is_looked_up_and_template_failures_reported():
     broken = with_manufacturer()
     broken.fail_names = {"Port 3"}
     (outcome,), overrides = execute_import_plan(plan(), broken)
-    assert outcome.status == "failed" and "1 of 28 templates failed" in outcome.message
+    assert outcome.status == "failed" and "1 of 28 steps failed" in outcome.message
     assert outcome.verification == "mismatch" and "interfaces (25 of 26)" in (
         outcome.verification_detail
     )
@@ -207,3 +207,190 @@ def test_skip_override_skips_the_device_create():
     )
     assert str(outcome.status) == "skipped"
     assert outcome.message == "Device type X was not imported"
+
+
+# -- M13 slice 4: all fields, references, templates and images ----------------
+
+FULL = load_yaml(
+    "---\n"
+    "manufacturer: Ubiquiti\n"
+    "model: Lab Box\n"
+    "slug: ubiquiti-lab-box\n"
+    "u_height: 1\n"
+    "is_full_depth: false\n"
+    "cooling_method: air\n"
+    "end_of_life: 2031-12-31\n"
+    "exclude_from_utilization: true\n"
+    "owner: Network team\n"
+    "default_platform: UniFi OS\n"
+    "tags: [core]\n"
+    "front_image: true\n"
+    "custom_fields:\n  support: gold\n"
+    "power-ports:\n  - name: PSU 1\n    type: iec-60320-c14\n"
+    "power-outlets:\n  - name: Out 1\n    type: iec-60320-c13\n"
+    "    power_port: PSU 1\n"
+    "interfaces:\n"
+    "  - name: eth0\n    type: 1000base-t\n"
+    "  - name: eth0.10\n    type: virtual\n    parent: eth0\n"
+    "  - name: br0\n    type: bridge\n"
+    "  - name: eth1\n    type: 1000base-t\n    bridge: br0\n"
+    "front-ports:\n  - name: F1\n    type: 8p8c\n    positions: 1\n"
+    "rear-ports:\n  - name: R1\n    type: 8p8c\n    positions: 2\n"
+    "port-mappings:\n"
+    "  - front_port: F1\n    front_port_position: 1\n"
+    "    rear_port: R1\n    rear_port_position: 2\n"
+    "cooling-intakes:\n  - name: In 1\n    type: uqd\n"
+    "cooling-outflows:\n  - name: Out A\n    type: uqd\n    cooling_intake: In 1\n"
+    "inventory-items:\n"
+    "  - name: Fan 1\n    parent: Tray\n"
+    "  - name: Tray\n    role: Fan tray\n    manufacturer: Ubiquiti\n"
+    "    component_type: dcim.powerporttemplate\n    component_name: PSU 1\n"
+)
+FULL_CHOICE = "local:C:/types/Ubiquiti/Lab Box.yaml"
+
+
+class FullNetBox(FakeNetBox):
+    def __init__(self):
+        super().__init__()
+        self.objects.update(
+            {
+                "41": ("/api/dcim/manufacturers/", {"name": "Ubiquiti"}),
+                "51": ("/api/users/owners/", {"name": "Network team"}),
+                "52": ("/api/dcim/platforms/", {"name": "x", "slug": "UniFi OS"}),
+                "53": ("/api/extras/tags/", {"name": "Core", "slug": "core"}),
+                "54": ("/api/dcim/inventory-item-roles/", {"name": "Fan tray"}),
+            }
+        )
+        self.updates = []
+        self.uploads = []
+
+    def update_object(self, path, payload):
+        self.updates.append((path, payload))
+
+    def upload_files(self, path, files):
+        self.uploads.append((path, sorted(files)))
+        key = path.rstrip("/").rsplit("/", 1)[-1]
+        for name in files:
+            self.objects[key][1][name] = "/media/x.png"
+
+    def payload(self, endpoint, name):
+        return next(
+            p
+            for path, p in self.created
+            if endpoint in path and (p.get("name") == name)
+        )
+
+
+def full_plan(images=None):
+    return build_import_plan(
+        {"create:x": FULL_CHOICE},
+        {FULL_CHOICE: FULL},
+        {},
+        MAKERS,
+        (),
+        images={FULL_CHOICE: images} if images else None,
+    )
+
+
+def test_full_definition_is_imported_with_references_mappings_and_images(tmp_path):
+    image = tmp_path / "ubiquiti-lab-box.front.png"
+    image.write_bytes(b"png")
+    (row,) = full_plan({"front": str(image)}).rows
+    assert row.action == CREATE and row.images == (("front_image", str(image)),)
+    assert "uploads 1 image(s)" in row.notes[0]
+    backend = FullNetBox()
+
+    (outcome,), overrides = execute_import_plan(
+        full_plan({"front": str(image)}), backend
+    )
+
+    assert outcome.status == "success", outcome.message
+    assert outcome.verification == "verified", outcome.verification_detail
+    _, device_type = backend.created[0]
+    assert device_type["owner"] == 51 and device_type["default_platform"] == 52
+    assert device_type["tags"] == [53]
+    assert device_type["custom_fields"] == {"support": "gold"}
+    assert device_type["end_of_life"] == "2031-12-31"
+    assert device_type["cooling_method"] == "air"
+    assert device_type["exclude_from_utilization"] is True
+    assert "front_image" not in device_type
+    ids = {p.get("name"): key for key, (path, p) in backend.objects.items()}
+    outlet = backend.payload("power-outlet", "Out 1")
+    assert outlet["power_port"] == int(ids["PSU 1"])
+    front = backend.payload("front-port", "F1")
+    assert front["rear_ports"] == [
+        {"position": 1, "rear_port": int(ids["R1"]), "rear_port_position": 2}
+    ]
+    assert backend.payload("cooling-outflow", "Out A")["cooling_intake"] == int(
+        ids["In 1"]
+    )
+    tray = backend.payload("inventory-item", "Tray")
+    fan = backend.payload("inventory-item", "Fan 1")
+    assert tray["role"] == 54 and tray["manufacturer"] == 41
+    assert tray["component_type"] == "dcim.powerporttemplate"
+    assert tray["component_id"] == int(ids["PSU 1"])
+    assert fan["parent"] == int(ids["Tray"])
+    order = [p.get("name") for _path, p in backend.created]
+    assert order.index("R1") < order.index("F1")
+    assert order.index("Tray") < order.index("Fan 1")
+    assert sorted(backend.updates) == [
+        (
+            f"/api/dcim/interface-templates/{ids['eth0.10']}/",
+            {"parent": int(ids["eth0"])},
+        ),
+        (f"/api/dcim/interface-templates/{ids['eth1']}/", {"bridge": int(ids["br0"])}),
+    ]
+    assert backend.uploads == [
+        (f"/api/dcim/device-types/{outcome.object_id}/", ["front_image"])
+    ]
+    assert "and 1 image(s)" in outcome.message
+    assert overrides == {"create:x": outcome.object_id}
+
+
+def test_missing_references_stop_the_import_before_any_write():
+    backend = FullNetBox()
+    del backend.objects["53"]  # the tag
+    del backend.objects["51"]  # the owner
+    for dry_run in (True, False):
+        (outcome,), overrides = execute_import_plan(
+            full_plan(), backend, dry_run=dry_run
+        )
+        assert outcome.status == "skipped"
+        assert "owner 'Network team'" in outcome.message
+        assert "tag 'core'" in outcome.message
+        assert overrides["create:x"].startswith("skip:")
+    assert backend.created == []
+
+
+def test_plan_notes_images_without_files():
+    (row,) = full_plan().rows
+    assert row.images == ()
+    assert any("No local file for front_image" in note for note in row.notes)
+
+
+def test_backend_uploads_images_as_multipart(tmp_path):
+    from unifi2netbox.config import NetBoxConfig
+    from unifi2netbox.write_execute import RequestsNetBoxWriteBackend
+
+    image = tmp_path / "x.front.png"
+    image.write_bytes(b"\x89PNG")
+    backend = RequestsNetBoxWriteBackend(
+        NetBoxConfig(url="https://netbox.example.com", token="t")
+    )
+    sent = []
+
+    def send(request, **kwargs):
+        sent.append(request)
+        response = requests.Response()
+        response.status_code = 200
+        return response
+
+    backend.session.send = send
+    backend.upload_files("/api/dcim/device-types/5/", {"front_image": image})
+
+    (request,) = sent
+    assert request.method == "PATCH"
+    assert request.url == "https://netbox.example.com/api/dcim/device-types/5/"
+    assert request.headers["Content-Type"].startswith("multipart/form-data")
+    assert b'name="front_image"; filename="x.front.png"' in request.body
+    assert request.headers["Authorization"] == "Token t"
