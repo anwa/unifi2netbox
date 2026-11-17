@@ -200,13 +200,26 @@ def local_type_folder(config: DeviceTypesConfig, config_path: Path) -> Path:
 THEME_CHOICES = ("system", "light", "dark")
 
 
+_LAYOUT_STATE = re.compile(r"[A-Za-z0-9+/=,]*")
+
+
 @dataclass(frozen=True)
 class UiConfig:
     theme: str = "system"
+    # Device type editor window: geometry and splitter states (Qt, base64).
+    type_editor_geometry: str = ""
+    type_editor_splitters: str = ""
 
     def __post_init__(self) -> None:
         if self.theme not in THEME_CHOICES:
             raise ConfigError("Theme must be system, light or dark.")
+        for value in (self.type_editor_geometry, self.type_editor_splitters):
+            if (
+                not isinstance(value, str)
+                or len(value) > 20000
+                or not _LAYOUT_STATE.fullmatch(value)
+            ):
+                raise ConfigError("Saved window layout is invalid.")
 
 
 def load_config(path: Path) -> NetBoxConfig:

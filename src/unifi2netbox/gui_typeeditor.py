@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable
+from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
+from PySide6.QtCore import QByteArray, Qt, QThreadPool, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFontDatabase
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -29,7 +30,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
-    QScrollArea,
     QSplitter,
     QStackedWidget,
     QTableWidget,
@@ -43,7 +43,12 @@ from PySide6.QtWidgets import (
 from ruamel.yaml.comments import CommentedMap
 
 from unifi2netbox import theme
-from unifi2netbox.config import DeviceTypesConfig
+from unifi2netbox.config import (
+    ConfigError,
+    DeviceTypesConfig,
+    load_ui_config,
+    save_ui_config,
+)
 from unifi2netbox.devicetypes import (
     ATTRIBUTES,
     COLUMN_HELP,
@@ -67,6 +72,10 @@ from unifi2netbox.typedraft import merge_spec
 
 PATH_ROLE = Qt.ItemDataRole.UserRole + 1
 _TABLE_ATTRIBUTES = tuple(name for name in ATTRIBUTES if name != "comments")
+
+
+def _base64(data: QByteArray) -> str:
+    return bytes(data.toBase64()).decode("ascii")
 
 
 def _label(text: str, role: str = "") -> QLabel:
@@ -147,7 +156,7 @@ class ComponentTable(QWidget):
         layout.setContentsMargins(0, 6, 0, 0)
         self.table = QTableWidget(0, len(self.columns))
         self.table.setObjectName(f"component_{section}")
-        self.table.setMinimumHeight(170)
+        self.table.setMinimumHeight(60)
         self.table.setHorizontalHeaderLabels(
             [f"{c} *" if field_spec(section, c).required else c for c in self.columns]
         )
@@ -251,7 +260,7 @@ class TableView(QWidget):
             2, QHeaderView.ResizeMode.Stretch
         )
         self.attributes.setWordWrap(True)
-        self.attributes.setMinimumHeight(240)
+        self.attributes.setMinimumHeight(60)
         self.cells = _Cells(self.attributes)
         for row, name in enumerate(_TABLE_ATTRIBUTES):
             spec = field_spec(None, name)
@@ -266,7 +275,7 @@ class TableView(QWidget):
         self.comments = QPlainTextEdit()
         self.comments.setObjectName("typeComments")
         self.comments.setPlaceholderText(FIELD_HELP["comments"])
-        self.comments.setMaximumHeight(90)
+        self.comments.setMinimumHeight(40)
         self.comments.textChanged.connect(self.changed.emit)
         self.tabs = QTabWidget()
         self.tabs.setObjectName("typeComponents")
@@ -276,12 +285,24 @@ class TableView(QWidget):
             table.changed.connect(self._section_changed)
             self.sections[section] = table
             self.tabs.addTab(table, section)
-        layout.addWidget(_label("Attributes (* required)", "subheading"))
-        layout.addWidget(self.attributes, 2)
-        layout.addWidget(_label("Comments", "subheading"))
-        layout.addWidget(self.comments)
-        layout.addWidget(_label("Components", "subheading"))
-        layout.addWidget(self.tabs, 3)
+        # Attributes, comments and components: heights set by dragging.
+        self.splitter = QSplitter(Qt.Orientation.Vertical)
+        self.splitter.setObjectName("typeTableSplitter")
+        self.splitter.setChildrenCollapsible(False)
+        for title, widget, stretch in (
+            ("Attributes (* required)", self.attributes, 3),
+            ("Comments", self.comments, 1),
+            ("Components", self.tabs, 4),
+        ):
+            section = QWidget()
+            section_layout = QVBoxLayout(section)
+            section_layout.setContentsMargins(0, 4, 0, 0)
+            section_layout.addWidget(_label(title, "subheading"))
+            section_layout.addWidget(widget, 1)
+            self.splitter.addWidget(section)
+            self.splitter.setStretchFactor(self.splitter.count() - 1, stretch)
+        self.splitter.setSizes([280, 110, 330])
+        layout.addWidget(self.splitter)
         self.base = CommentedMap()
 
     def set_document(self, doc: CommentedMap) -> None:
@@ -355,8 +376,11 @@ class DeviceTypeEditor(QDialog):
         config: DeviceTypesConfig,
         pool: QThreadPool,
         parent: QWidget | None = None,
+        settings_path: Path | None = None,
     ) -> None:
         super().__init__(parent)
+        self.settings_path = settings_path
+        self._layout_restored = False
         self.setObjectName("typeEditor")
         self.setWindowTitle("Device types")
         self.setWindowFlag(Qt.WindowType.Window, True)
@@ -440,9 +464,6 @@ class DeviceTypeEditor(QDialog):
         self.stack = QStackedWidget()
         self.table_view = TableView()
         self.table_view.changed.connect(self._edited)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(self.table_view)
         self.yaml_view = QPlainTextEdit()
         self.yaml_view.setObjectName("typeYaml")
         self.yaml_view.setFont(
@@ -454,19 +475,38 @@ class DeviceTypeEditor(QDialog):
         )
         self.yaml_view.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.yaml_view.textChanged.connect(self._edited)
-        self.stack.addWidget(scroll)
+        self.stack.addWidget(self.table_view)
         self.stack.addWidget(self.yaml_view)
-        right_layout.addWidget(self.stack, 1)
-        right_layout.addWidget(_label("Validation", "subheading"))
         self.issues = QListWidget()
         self.issues.setObjectName("typeIssues")
-        self.issues.setMaximumHeight(110)
-        right_layout.addWidget(self.issues)
+        self.issues.setMinimumHeight(40)
+        validation = QWidget()
+        validation_layout = QVBoxLayout(validation)
+        validation_layout.setContentsMargins(0, 4, 0, 0)
+        validation_layout.addWidget(_label("Validation", "subheading"))
+        validation_layout.addWidget(self.issues, 1)
+        self.right_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.right_splitter.setObjectName("typeRightSplitter")
+        self.right_splitter.setChildrenCollapsible(False)
+        self.right_splitter.addWidget(self.stack)
+        self.right_splitter.addWidget(validation)
+        self.right_splitter.setStretchFactor(0, 1)
+        self.right_splitter.setSizes([620, 130])
+        right_layout.addWidget(self.right_splitter, 1)
         splitter.addWidget(self.tree)
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([260, 920])
+        splitter.setObjectName("typeTreeSplitter")
+        self.tree_splitter = splitter
         layout.addWidget(splitter, 1)
+        # Visible grab bars, so the section heights are obviously adjustable.
+        for item in (self.right_splitter, self.table_view.splitter):
+            item.setHandleWidth(9)
+            item.setStyleSheet(
+                "QSplitter::handle:vertical { background: palette(mid);"
+                " margin: 4px 0px; }"
+            )
         self.mode = "table"
         self.reload_tree()
         self._show_document(CommentedMap(), None, ("Choose a file or click New.",))
@@ -765,6 +805,56 @@ class DeviceTypeEditor(QDialog):
     def _sync_mode_buttons(self) -> None:
         self.yaml_button.setChecked(self.mode == "yaml")
         self.table_button.setChecked(self.mode == "table")
+
+    # -- window layout ---------------------------------------------------------
+
+    def splitters(self) -> tuple[QSplitter, ...]:
+        return (self.tree_splitter, self.right_splitter, self.table_view.splitter)
+
+    def restore_layout(self) -> None:
+        """Window geometry and section heights from ``[ui]``, if saved."""
+        self._layout_restored = True
+        if self.settings_path is None:
+            return
+        try:
+            ui = load_ui_config(self.settings_path)
+        except ConfigError:
+            return
+        if ui.type_editor_geometry:
+            self.restoreGeometry(
+                QByteArray.fromBase64(ui.type_editor_geometry.encode())
+            )
+        states = ui.type_editor_splitters.split(",") if ui.type_editor_splitters else []
+        for splitter, state in zip(self.splitters(), states, strict=False):
+            if state:
+                splitter.restoreState(QByteArray.fromBase64(state.encode()))
+
+    def save_layout(self) -> None:
+        if self.settings_path is None or not self._layout_restored:
+            return
+        try:
+            ui = load_ui_config(self.settings_path)
+            save_ui_config(
+                self.settings_path,
+                replace(
+                    ui,
+                    type_editor_geometry=_base64(self.saveGeometry()),
+                    type_editor_splitters=",".join(
+                        _base64(s.saveState()) for s in self.splitters()
+                    ),
+                ),
+            )
+        except ConfigError:
+            pass  # the layout is a convenience; never block closing
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if not self._layout_restored:
+            self.restore_layout()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self.save_layout()
+        super().hideEvent(event)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
         # Only a visible window asks; hidden ones (shutdown) just close.

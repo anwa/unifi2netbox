@@ -1,6 +1,6 @@
 import json
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -1562,8 +1562,9 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if isinstance(app, QApplication):
             theme.apply_theme(app, theme.dark_for(choice))
-        self.ui = UiConfig(theme=choice)
         try:
+            # Keep the other [ui] values (for example the editor layout).
+            self.ui = replace(load_ui_config(self.path), theme=choice)
             save_ui_config(self.path, self.ui)
         except ConfigError as error:
             self.statusBar().showMessage(f"Theme not saved: {error}")
@@ -2514,7 +2515,13 @@ class MainWindow(QMainWindow):
                 editor.deleteLater()
                 editor = None
         if editor is None:
-            editor = DeviceTypeEditor(store, self.device_types_config, self.pool, self)
+            editor = DeviceTypeEditor(
+                store,
+                self.device_types_config,
+                self.pool,
+                self,
+                settings_path=self.path,
+            )
             self.type_editor = editor
             self._hook_editor(editor)
         editor.show()

@@ -851,6 +851,13 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-17 the assistant checked the resizable editor sections
+(application 1.2.1 working tree on `feature/editor-layout`): offline tests
+cover the three-section splitter, the validation splitter, restoring window
+size and section heights from `[ui]` and keeping them when the theme is
+saved; offscreen rendering shows the grab lines. Not checked on a real
+desktop with several screens.
+
 On 2026-11-16 the assistant checked M12 (application 1.1.9 working tree on
 `feature/device-types`) read-only against the live systems, nothing written:
 the devicetype-library index was read from GitHub (14,433 files, 455
