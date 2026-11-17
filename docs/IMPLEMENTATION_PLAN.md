@@ -662,7 +662,9 @@ Branch `feature/netbox-device-types`. Decisions (2026-11-17, user):
 
 Slices:
 
-- [ ] 1. NetBox metadata (bundled from OPTIONS) and the extended schema.
+- [x] 1. NetBox metadata (bundled from OPTIONS) and the extended schema.
+  (1.2.2, 2026-11-17: metadata of NetBox 4.7.3, 19 endpoints; library files
+  still round-trip byte-identical.)
 - [ ] 2. NetBox catalog reader and "New" dialogs.
 - [ ] 3. Editor: NetBox fields, drop-downs, tags, custom fields, images,
   all component tabs.

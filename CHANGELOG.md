@@ -6,6 +6,17 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Added
+
+- M13 slice 1: local device type files may carry every NetBox 4.7 device type
+	field (owner, default platform, tags, custom fields, cooling method, end of
+	life, exclude from utilization) and every template kind and field,
+	including cooling intakes and outflows, interface channels and parents,
+	bay states, inventory item roles and components. Validation uses the
+	devicetype-library schema extended with NetBox field metadata, bundled
+	from the API of NetBox 4.7.3 (`tools/update_netbox_metadata.py`). The
+	library itself is only read.
+
 ### Changed
 
 - Device type editor: the heights of Attributes, Comments, Components and

@@ -163,3 +163,83 @@ def test_local_store_refuses_paths_outside_and_bad_names(tmp_path):
         store.read(tmp_path / "secret.yaml")
     with pytest.raises(DeviceTypeError, match="valid file names"):
         store.path_for(new_document("Acme", "A/B"))
+
+
+def test_bundled_netbox_metadata_covers_device_types_and_templates():
+    from unifi2netbox.devicetypes import SECTION_ENDPOINTS, netbox_metadata
+
+    metadata = netbox_metadata()
+    assert metadata["netbox_version"].startswith("4.7")
+    endpoints = metadata["endpoints"]
+    assert "cooling_method" in endpoints["dcim/device-types"]
+    assert all(endpoint in endpoints for endpoint in SECTION_ENDPOINTS.values())
+    assert endpoints["users/owners"]["group"]["required"]
+
+
+def test_netbox_fields_are_accepted_and_checked():
+    doc = load_yaml(
+        "---\n"
+        "manufacturer: Acme\n"
+        "model: Box 1\n"
+        "slug: acme-box-1\n"
+        "u_height: 1\n"
+        "is_full_depth: false\n"
+        "exclude_from_utilization: true\n"
+        "cooling_method: liquid\n"
+        "end_of_life: 2031-12-31\n"
+        "owner: Network team\n"
+        "default_platform: UniFi OS\n"
+        "tags: [core, lab]\n"
+        "custom_fields:\n"
+        "  warranty_years: 5\n"
+        "interfaces:\n"
+        "  - name: wlan0\n"
+        "    type: ieee802.11ax\n"
+        "    channels: 2\n"
+        "    parent: eth0\n"
+        "inventory-items:\n"
+        "  - name: PSU\n"
+        "    role: Power supply\n"
+        "    component_type: dcim.powerporttemplate\n"
+        "    component_name: PSU 1\n"
+        "module-bays:\n"
+        "  - name: Slot 1\n"
+        "    position: '1'\n"
+        "    enabled: true\n"
+        "    module_bay_types: [SFP]\n"
+        "cooling-intakes:\n"
+        "  - name: In 1\n"
+        "    type: uqd\n"
+        "    diameter: 12.5\n"
+        "    diameter_unit: mm\n"
+        "cooling-outflows:\n"
+        "  - name: Out 1\n"
+        "    cooling_intake: In 1\n"
+    )
+
+    assert errors(validate(doc)) == ()
+    assert dump_yaml(doc).splitlines()[-1] == "    cooling_intake: In 1"
+
+    bad = load_yaml(
+        "---\nmanufacturer: Acme\nmodel: X\nslug: acme-x\nu_height: 1\n"
+        "is_full_depth: false\ncooling_method: fans\nend_of_life: 31.12.2031\n"
+        "tags: core\ncooling-intakes:\n  - name: In\n    diameter_unit: miles\n"
+    )
+    messages = " ".join(str(issue) for issue in errors(validate(bad)))
+    for expected in ("fans", "31.12.2031", "'core' is not of type 'array'", "miles"):
+        assert expected in messages
+
+
+def test_netbox_field_kinds_and_columns():
+    from unifi2netbox.devicetypes import NETBOX_ATTRIBUTES, field_spec
+
+    assert field_spec(None, "end_of_life").kind == "date"
+    assert field_spec(None, "tags").kind == "list"
+    assert field_spec(None, "custom_fields").kind == "object"
+    assert field_spec(None, "cooling_method").choices[0] == "air"
+    assert field_spec("cooling-outflows", "diameter_unit").choices == ("mm", "cm", "in")
+    assert "dcim.interfacetemplate" in choices("inventory-item", "component_type")
+    assert component_columns("interfaces")[-3:] == ("channels", "channel_id", "parent")
+    assert component_columns("cooling-intakes")[:3] == ("name", "label", "type")
+    assert required_columns("cooling-intakes") == ("name",)
+    assert set(NETBOX_ATTRIBUTES) >= {"owner", "tags", "custom_fields", "end_of_life"}

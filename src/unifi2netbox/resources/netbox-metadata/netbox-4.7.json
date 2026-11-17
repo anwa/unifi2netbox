@@ -1,0 +1,1685 @@
+{
+ "netbox_version": "4.7.3",
+ "endpoints": {
+  "dcim/device-types": {
+   "manufacturer": {
+    "type": "nested object",
+    "required": true,
+    "label": "Manufacturer"
+   },
+   "default_platform": {
+    "type": "nested object",
+    "required": false,
+    "label": "Default platform"
+   },
+   "model": {
+    "type": "string",
+    "required": true,
+    "label": "Model"
+   },
+   "slug": {
+    "type": "slug",
+    "required": true,
+    "label": "Slug"
+   },
+   "part_number": {
+    "type": "string",
+    "required": false,
+    "label": "Part number",
+    "help": "Discrete part number (optional)"
+   },
+   "u_height": {
+    "type": "decimal",
+    "required": false,
+    "label": "Position (U)"
+   },
+   "exclude_from_utilization": {
+    "type": "boolean",
+    "required": false,
+    "label": "Exclude from utilization",
+    "help": "Devices of this type are excluded when calculating rack utilization."
+   },
+   "is_full_depth": {
+    "type": "boolean",
+    "required": false,
+    "label": "Is full depth",
+    "help": "Device consumes both front and rear rack faces."
+   },
+   "subdevice_role": {
+    "type": "field",
+    "required": false,
+    "label": "Subdevice role",
+    "choices": [
+     "parent",
+     "child"
+    ]
+   },
+   "airflow": {
+    "type": "field",
+    "required": false,
+    "label": "Airflow",
+    "choices": [
+     "front-to-rear",
+     "rear-to-front",
+     "left-to-right",
+     "right-to-left",
+     "side-to-rear",
+     "rear-to-side",
+     "bottom-to-top",
+     "top-to-bottom",
+     "passive",
+     "mixed"
+    ]
+   },
+   "cooling_method": {
+    "type": "field",
+    "required": false,
+    "label": "Cooling method",
+    "choices": [
+     "air",
+     "liquid",
+     "hybrid",
+     "immersion"
+    ]
+   },
+   "weight": {
+    "type": "decimal",
+    "required": false,
+    "label": "Weight"
+   },
+   "weight_unit": {
+    "type": "field",
+    "required": false,
+    "label": "Weight unit",
+    "choices": [
+     "kg",
+     "g",
+     "lb",
+     "oz"
+    ]
+   },
+   "end_of_life": {
+    "type": "date",
+    "required": false,
+    "label": "End of life",
+    "help": "The date after which this device type is no longer supported by the manufacturer"
+   },
+   "front_image": {
+    "type": "image upload",
+    "required": false,
+    "label": "Front image"
+   },
+   "rear_image": {
+    "type": "image upload",
+    "required": false,
+    "label": "Rear image"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "owner": {
+    "type": "nested object",
+    "required": false,
+    "label": "Owner"
+   },
+   "comments": {
+    "type": "string",
+    "required": false,
+    "label": "Comments"
+   },
+   "tags": {
+    "type": "field",
+    "required": false,
+    "label": "Tags",
+    "children": {
+     "name": {
+      "type": "string",
+      "required": true,
+      "label": "Name"
+     },
+     "slug": {
+      "type": "slug",
+      "required": true,
+      "label": "Slug"
+     },
+     "color": {
+      "type": "string",
+      "required": false,
+      "label": "Color"
+     }
+    }
+   },
+   "custom_fields": {
+    "type": "field",
+    "required": false,
+    "label": "Custom fields"
+   }
+  },
+  "dcim/console-port-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": false,
+    "label": "Type",
+    "choices": [
+     "de-9",
+     "db-25",
+     "rj-11",
+     "rj-12",
+     "rj-45",
+     "mini-din-8",
+     "usb-a",
+     "usb-b",
+     "usb-c",
+     "usb-mini-a",
+     "usb-mini-b",
+     "usb-micro-a",
+     "usb-micro-b",
+     "usb-micro-ab",
+     "other"
+    ]
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/console-server-port-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": false,
+    "label": "Type",
+    "choices": [
+     "de-9",
+     "db-25",
+     "rj-11",
+     "rj-12",
+     "rj-45",
+     "mini-din-8",
+     "usb-a",
+     "usb-b",
+     "usb-c",
+     "usb-mini-a",
+     "usb-mini-b",
+     "usb-micro-a",
+     "usb-micro-b",
+     "usb-micro-ab",
+     "other"
+    ]
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/power-port-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": false,
+    "label": "Type",
+    "choices": [
+     "iec-60320-c6",
+     "iec-60320-c8",
+     "iec-60320-c14",
+     "iec-60320-c16",
+     "iec-60320-c18",
+     "iec-60320-c20",
+     "iec-60320-c22",
+     "iec-60309-p-n-e-4h",
+     "iec-60309-p-n-e-6h",
+     "iec-60309-p-n-e-9h",
+     "iec-60309-2p-e-4h",
+     "iec-60309-2p-e-6h",
+     "iec-60309-2p-e-9h",
+     "iec-60309-3p-e-4h",
+     "iec-60309-3p-e-6h",
+     "iec-60309-3p-e-9h",
+     "iec-60309-3p-n-e-4h",
+     "iec-60309-3p-n-e-6h",
+     "iec-60309-3p-n-e-9h",
+     "iec-60906-1",
+     "nbr-14136-10a",
+     "nbr-14136-20a",
+     "nema-1-15p",
+     "nema-5-15p",
+     "nema-5-20p",
+     "nema-5-30p",
+     "nema-5-50p",
+     "nema-6-15p",
+     "nema-6-20p",
+     "nema-6-30p",
+     "nema-6-50p",
+     "nema-10-30p",
+     "nema-10-50p",
+     "nema-14-20p",
+     "nema-14-30p",
+     "nema-14-50p",
+     "nema-14-60p",
+     "nema-15-15p",
+     "nema-15-20p",
+     "nema-15-30p",
+     "nema-15-50p",
+     "nema-15-60p",
+     "nema-l1-15p",
+     "nema-l5-15p",
+     "nema-l5-20p",
+     "nema-l5-30p",
+     "nema-l5-50p",
+     "nema-l6-15p",
+     "nema-l6-20p",
+     "nema-l6-30p",
+     "nema-l6-50p",
+     "nema-l10-30p",
+     "nema-l14-20p",
+     "nema-l14-30p",
+     "nema-l14-50p",
+     "nema-l14-60p",
+     "nema-l15-20p",
+     "nema-l15-30p",
+     "nema-l15-50p",
+     "nema-l15-60p",
+     "nema-l21-20p",
+     "nema-l21-30p",
+     "nema-l22-20p",
+     "nema-l22-30p",
+     "cs6361c",
+     "cs6365c",
+     "cs8165c",
+     "cs8265c",
+     "cs8365c",
+     "cs8465c",
+     "ita-c",
+     "ita-e",
+     "ita-f",
+     "ita-ef",
+     "ita-g",
+     "ita-h",
+     "ita-i",
+     "ita-j",
+     "ita-k",
+     "ita-l",
+     "ita-m",
+     "ita-n",
+     "ita-o",
+     "usb-a",
+     "usb-b",
+     "usb-c",
+     "usb-mini-a",
+     "usb-mini-b",
+     "usb-micro-a",
+     "usb-micro-b",
+     "usb-micro-ab",
+     "usb-3-b",
+     "usb-3-micro-b",
+     "molex-micro-fit-1x2",
+     "molex-micro-fit-2x2",
+     "molex-micro-fit-2x3",
+     "molex-micro-fit-2x4",
+     "dc-terminal",
+     "saf-d-grid",
+     "neutrik-powercon-20",
+     "neutrik-powercon-32",
+     "neutrik-powercon-true1",
+     "neutrik-powercon-true1-top",
+     "ubiquiti-smartpower",
+     "hardwired",
+     "other"
+    ]
+   },
+   "maximum_draw": {
+    "type": "integer",
+    "required": false,
+    "label": "Maximum draw",
+    "help": "Maximum power draw (watts)"
+   },
+   "allocated_draw": {
+    "type": "integer",
+    "required": false,
+    "label": "Allocated draw",
+    "help": "Allocated power draw (watts)"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/power-outlet-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": false,
+    "label": "Type",
+    "choices": [
+     "iec-60320-c5",
+     "iec-60320-c7",
+     "iec-60320-c13",
+     "iec-60320-c15",
+     "iec-60320-c17",
+     "iec-60320-c19",
+     "iec-60320-c21",
+     "iec-60309-p-n-e-4h",
+     "iec-60309-p-n-e-6h",
+     "iec-60309-p-n-e-9h",
+     "iec-60309-2p-e-4h",
+     "iec-60309-2p-e-6h",
+     "iec-60309-2p-e-9h",
+     "iec-60309-3p-e-4h",
+     "iec-60309-3p-e-6h",
+     "iec-60309-3p-e-9h",
+     "iec-60309-3p-n-e-4h",
+     "iec-60309-3p-n-e-6h",
+     "iec-60309-3p-n-e-9h",
+     "iec-60906-1",
+     "nbr-14136-10a",
+     "nbr-14136-20a",
+     "nema-1-15r",
+     "nema-5-15r",
+     "nema-5-20r",
+     "nema-5-30r",
+     "nema-5-50r",
+     "nema-6-15r",
+     "nema-6-20r",
+     "nema-6-30r",
+     "nema-6-50r",
+     "nema-10-30r",
+     "nema-10-50r",
+     "nema-14-20r",
+     "nema-14-30r",
+     "nema-14-50r",
+     "nema-14-60r",
+     "nema-15-15r",
+     "nema-15-20r",
+     "nema-15-30r",
+     "nema-15-50r",
+     "nema-15-60r",
+     "nema-l1-15r",
+     "nema-l5-15r",
+     "nema-l5-20r",
+     "nema-l5-30r",
+     "nema-l5-50r",
+     "nema-l6-15r",
+     "nema-l6-20r",
+     "nema-l6-30r",
+     "nema-l6-50r",
+     "nema-l10-30r",
+     "nema-l14-20r",
+     "nema-l14-30r",
+     "nema-l14-50r",
+     "nema-l14-60r",
+     "nema-l15-20r",
+     "nema-l15-30r",
+     "nema-l15-50r",
+     "nema-l15-60r",
+     "nema-l21-20r",
+     "nema-l21-30r",
+     "nema-l22-20r",
+     "nema-l22-30r",
+     "CS6360C",
+     "CS6364C",
+     "CS8164C",
+     "CS8264C",
+     "CS8364C",
+     "CS8464C",
+     "ita-e",
+     "ita-f",
+     "ita-g",
+     "ita-h",
+     "ita-i",
+     "ita-j",
+     "ita-k",
+     "ita-l",
+     "ita-m",
+     "ita-n",
+     "ita-o",
+     "ita-multistandard",
+     "usb-a",
+     "usb-micro-b",
+     "usb-c",
+     "molex-micro-fit-1x2",
+     "molex-micro-fit-2x2",
+     "molex-micro-fit-2x3",
+     "molex-micro-fit-2x4",
+     "dc-terminal",
+     "eaton-c39",
+     "hdot-cx",
+     "saf-d-grid",
+     "neutrik-powercon-20a",
+     "neutrik-powercon-32a",
+     "neutrik-powercon-true1",
+     "neutrik-powercon-true1-top",
+     "ubiquiti-smartpower",
+     "hardwired",
+     "other"
+    ]
+   },
+   "color": {
+    "type": "string",
+    "required": false,
+    "label": "Color"
+   },
+   "power_port": {
+    "type": "nested object",
+    "required": false,
+    "label": "Power port"
+   },
+   "feed_leg": {
+    "type": "field",
+    "required": false,
+    "label": "Feed leg",
+    "choices": [
+     "A",
+     "B",
+     "C"
+    ]
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/interface-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": true,
+    "label": "Type",
+    "choices": [
+     "virtual",
+     "bridge",
+     "lag",
+     "channel",
+     "100base-fx",
+     "100base-lfx",
+     "100base-tx",
+     "100base-t1",
+     "1000base-bx10-d",
+     "1000base-bx10-u",
+     "1000base-cwdm",
+     "1000base-cx",
+     "1000base-dwdm",
+     "1000base-ex",
+     "1000base-lsx",
+     "1000base-lx",
+     "1000base-lx10",
+     "1000base-sx",
+     "1000base-t",
+     "1000base-tx",
+     "1000base-zx",
+     "2.5gbase-t",
+     "5gbase-t",
+     "10gbase-br-d",
+     "10gbase-br-u",
+     "10gbase-cu",
+     "10gbase-cx4",
+     "10gbase-er",
+     "10gbase-lr",
+     "10gbase-lrm",
+     "10gbase-lx4",
+     "10gbase-sr",
+     "10gbase-t",
+     "10gbase-zr",
+     "25gbase-cr",
+     "25gbase-er",
+     "25gbase-lr",
+     "25gbase-sr",
+     "25gbase-t",
+     "40gbase-cr4",
+     "40gbase-er4",
+     "40gbase-fr4",
+     "40gbase-lr4",
+     "40gbase-sr4",
+     "40gbase-sr4-bd",
+     "50gbase-cr",
+     "50gbase-er",
+     "50gbase-fr",
+     "50gbase-lr",
+     "50gbase-sr",
+     "100gbase-cr1",
+     "100gbase-cr2",
+     "100gbase-cr4",
+     "100gbase-cr10",
+     "100gbase-cwdm4",
+     "100gbase-dr",
+     "100gbase-er4",
+     "100gbase-fr1",
+     "100gbase-lr1",
+     "100gbase-lr4",
+     "100gbase-sr1",
+     "100gbase-sr1.2",
+     "100gbase-sr2",
+     "100gbase-sr4",
+     "100gbase-sr10",
+     "100gbase-zr",
+     "200gbase-cr2",
+     "200gbase-cr4",
+     "200gbase-dr4",
+     "200gbase-er4",
+     "200gbase-fr4",
+     "200gbase-lr4",
+     "200gbase-sr2",
+     "200gbase-sr4",
+     "200gbase-vr2",
+     "400gbase-cr4",
+     "400gbase-dr4",
+     "400gbase-er8",
+     "400gbase-fr4",
+     "400gbase-fr8",
+     "400gbase-lr4",
+     "400gbase-lr8",
+     "400gbase-sr4",
+     "400gbase-sr4_2",
+     "400gbase-sr8",
+     "400gbase-sr16",
+     "400gbase-vr4",
+     "400gbase-zr",
+     "800gbase-cr8",
+     "800gbase-dr8",
+     "800gbase-sr8",
+     "800gbase-vr8",
+     "1.6tbase-cr8",
+     "1.6tbase-dr8",
+     "1.6tbase-dr8-2",
+     "100base-x-sfp",
+     "1000base-x-gbic",
+     "1000base-x-sfp",
+     "2.5gbase-x-sfp",
+     "10gbase-x-sfpp",
+     "10gbase-x-xenpak",
+     "10gbase-x-xfp",
+     "10gbase-x-x2",
+     "25gbase-x-sfp28",
+     "40gbase-x-qsfpp",
+     "50gbase-x-sfp28",
+     "50gbase-x-sfp56",
+     "100gbase-x-cfp",
+     "100gbase-x-cfp2",
+     "100gbase-x-cfp4",
+     "100gbase-x-cxp",
+     "100gbase-x-cpak",
+     "100gbase-x-dsfp",
+     "100gbase-x-qsfp28",
+     "100gbase-x-qsfpdd",
+     "100gbase-x-sfp112",
+     "100gbase-x-sfpdd",
+     "200gbase-x-cfp2",
+     "200gbase-x-qsfp56",
+     "200gbase-x-qsfpdd",
+     "400gbase-x-qsfp112",
+     "400gbase-x-qsfpdd",
+     "400gbase-x-cdfp",
+     "400gbase-x-cfp2",
+     "400gbase-x-cfp8",
+     "400gbase-x-osfp",
+     "400gbase-x-osfp-rhs",
+     "800gbase-x-osfp",
+     "800gbase-x-qsfpdd",
+     "1.6tbase-x-osfp1600",
+     "1.6tbase-x-osfp1600-rhs",
+     "1.6tbase-x-qsfpdd1600",
+     "1000base-kx",
+     "2.5gbase-kx",
+     "5gbase-kr",
+     "10gbase-kr",
+     "10gbase-kx4",
+     "25gbase-kr",
+     "40gbase-kr4",
+     "50gbase-kr",
+     "100gbase-kp4",
+     "100gbase-kr2",
+     "100gbase-kr4",
+     "1.6tbase-kr8",
+     "ieee802.11a",
+     "ieee802.11g",
+     "ieee802.11n",
+     "ieee802.11ac",
+     "ieee802.11ad",
+     "ieee802.11ax",
+     "ieee802.11ay",
+     "ieee802.11be",
+     "ieee802.15.1",
+     "ieee802.15.4",
+     "other-wireless",
+     "gsm",
+     "cdma",
+     "lte",
+     "4g",
+     "5g",
+     "sonet-oc3",
+     "sonet-oc12",
+     "sonet-oc48",
+     "sonet-oc192",
+     "sonet-oc768",
+     "sonet-oc1920",
+     "sonet-oc3840",
+     "1gfc-sfp",
+     "2gfc-sfp",
+     "4gfc-sfp",
+     "8gfc-sfpp",
+     "16gfc-sfpp",
+     "32gfc-sfp28",
+     "32gfc-sfpp",
+     "64gfc-qsfpp",
+     "64gfc-sfpdd",
+     "64gfc-sfpp",
+     "128gfc-qsfp28",
+     "infiniband-sdr",
+     "infiniband-ddr",
+     "infiniband-qdr",
+     "infiniband-fdr10",
+     "infiniband-fdr",
+     "infiniband-edr",
+     "infiniband-hdr",
+     "infiniband-ndr",
+     "infiniband-xdr",
+     "infiniband-hdr-2x",
+     "infiniband-ndr-2x",
+     "infiniband-xdr-2x",
+     "infiniband-sdr-4x",
+     "infiniband-ddr-4x",
+     "infiniband-qdr-4x",
+     "infiniband-fdr10-4x",
+     "infiniband-fdr-4x",
+     "infiniband-edr-4x",
+     "infiniband-hdr-4x",
+     "infiniband-ndr-4x",
+     "infiniband-xdr-4x",
+     "t1",
+     "e1",
+     "t3",
+     "e3",
+     "xdsl",
+     "docsis",
+     "moca",
+     "bpon",
+     "epon",
+     "10g-epon",
+     "gpon",
+     "xg-pon",
+     "xgs-pon",
+     "ng-pon2",
+     "25g-pon",
+     "50g-pon",
+     "cisco-stackwise",
+     "cisco-stackwise-plus",
+     "cisco-flexstack",
+     "cisco-flexstack-plus",
+     "cisco-stackwise-80",
+     "cisco-stackwise-160",
+     "cisco-stackwise-320",
+     "cisco-stackwise-480",
+     "cisco-stackwise-1t",
+     "juniper-vcp",
+     "extreme-summitstack",
+     "extreme-summitstack-128",
+     "extreme-summitstack-256",
+     "extreme-summitstack-512",
+     "hpe-synergy-interconnect-link",
+     "other"
+    ]
+   },
+   "channels": {
+    "type": "integer",
+    "required": false,
+    "label": "Channels",
+    "help": "The number of channels into which this interface is channelized"
+   },
+   "channel_id": {
+    "type": "integer",
+    "required": false,
+    "label": "Channel ID",
+    "help": "The channel on the parent interface to which this subinterface is bound"
+   },
+   "enabled": {
+    "type": "boolean",
+    "required": false,
+    "label": "Enabled"
+   },
+   "mgmt_only": {
+    "type": "boolean",
+    "required": false,
+    "label": "Management only"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "parent": {
+    "type": "nested object",
+    "required": false,
+    "label": "Parent"
+   },
+   "bridge": {
+    "type": "nested object",
+    "required": false,
+    "label": "Bridge"
+   },
+   "poe_mode": {
+    "type": "field",
+    "required": false,
+    "label": "Poe mode",
+    "choices": [
+     "pd",
+     "pse"
+    ]
+   },
+   "poe_type": {
+    "type": "field",
+    "required": false,
+    "label": "Poe type",
+    "choices": [
+     "type1-ieee802.3af",
+     "type2-ieee802.3at",
+     "type3-ieee802.3bt",
+     "type4-ieee802.3bt",
+     "passive-24v-2pair",
+     "passive-24v-4pair",
+     "passive-48v-2pair",
+     "passive-48v-4pair"
+    ]
+   },
+   "rf_role": {
+    "type": "field",
+    "required": false,
+    "label": "Rf role",
+    "choices": [
+     "ap",
+     "station"
+    ]
+   }
+  },
+  "dcim/front-port-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": true,
+    "label": "Type",
+    "choices": [
+     "8p8c",
+     "8p6c",
+     "8p4c",
+     "8p2c",
+     "6p6c",
+     "6p4c",
+     "6p2c",
+     "4p4c",
+     "4p2c",
+     "gg45",
+     "tera-4p",
+     "tera-2p",
+     "tera-1p",
+     "110-punch",
+     "bnc",
+     "f",
+     "n",
+     "mrj21",
+     "fc",
+     "fc-pc",
+     "fc-upc",
+     "fc-apc",
+     "lc",
+     "lc-pc",
+     "lc-upc",
+     "lc-apc",
+     "mu",
+     "mu-pc",
+     "mu-upc",
+     "mu-apc",
+     "lsh",
+     "lsh-pc",
+     "lsh-upc",
+     "lsh-apc",
+     "lx5",
+     "lx5-pc",
+     "lx5-upc",
+     "lx5-apc",
+     "mpo",
+     "mtrj",
+     "sc",
+     "sc-pc",
+     "sc-upc",
+     "sc-apc",
+     "st",
+     "cs",
+     "sn",
+     "mdc",
+     "sma-905",
+     "sma-906",
+     "urm-p2",
+     "urm-p4",
+     "urm-p8",
+     "splice",
+     "usb-a",
+     "usb-b",
+     "usb-c",
+     "usb-mini-a",
+     "usb-mini-b",
+     "usb-micro-a",
+     "usb-micro-b",
+     "usb-micro-ab",
+     "other"
+    ]
+   },
+   "color": {
+    "type": "string",
+    "required": false,
+    "label": "Color"
+   },
+   "positions": {
+    "type": "integer",
+    "required": false,
+    "label": "Positions"
+   },
+   "rear_ports": {
+    "type": "field",
+    "required": false,
+    "label": "Rear ports",
+    "children": {
+     "position": {
+      "type": "integer",
+      "required": true,
+      "label": "Position"
+     },
+     "rear_port": {
+      "type": "field",
+      "required": true,
+      "label": "Rear port"
+     },
+     "rear_port_position": {
+      "type": "integer",
+      "required": false,
+      "label": "Rear port position"
+     }
+    }
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/rear-port-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": true,
+    "label": "Type",
+    "choices": [
+     "8p8c",
+     "8p6c",
+     "8p4c",
+     "8p2c",
+     "6p6c",
+     "6p4c",
+     "6p2c",
+     "4p4c",
+     "4p2c",
+     "gg45",
+     "tera-4p",
+     "tera-2p",
+     "tera-1p",
+     "110-punch",
+     "bnc",
+     "f",
+     "n",
+     "mrj21",
+     "fc",
+     "fc-pc",
+     "fc-upc",
+     "fc-apc",
+     "lc",
+     "lc-pc",
+     "lc-upc",
+     "lc-apc",
+     "mu",
+     "mu-pc",
+     "mu-upc",
+     "mu-apc",
+     "lsh",
+     "lsh-pc",
+     "lsh-upc",
+     "lsh-apc",
+     "lx5",
+     "lx5-pc",
+     "lx5-upc",
+     "lx5-apc",
+     "mpo",
+     "mtrj",
+     "sc",
+     "sc-pc",
+     "sc-upc",
+     "sc-apc",
+     "st",
+     "cs",
+     "sn",
+     "mdc",
+     "sma-905",
+     "sma-906",
+     "urm-p2",
+     "urm-p4",
+     "urm-p8",
+     "splice",
+     "usb-a",
+     "usb-b",
+     "usb-c",
+     "usb-mini-a",
+     "usb-mini-b",
+     "usb-micro-a",
+     "usb-micro-b",
+     "usb-micro-ab",
+     "other"
+    ]
+   },
+   "color": {
+    "type": "string",
+    "required": false,
+    "label": "Color"
+   },
+   "positions": {
+    "type": "integer",
+    "required": false,
+    "label": "Positions"
+   },
+   "front_ports": {
+    "type": "field",
+    "required": false,
+    "label": "Front ports",
+    "children": {
+     "position": {
+      "type": "integer",
+      "required": true,
+      "label": "Position"
+     },
+     "front_port": {
+      "type": "field",
+      "required": true,
+      "label": "Front port"
+     },
+     "front_port_position": {
+      "type": "integer",
+      "required": false,
+      "label": "Front port position"
+     }
+    }
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/module-bay-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "position": {
+    "type": "string",
+    "required": false,
+    "label": "Position",
+    "help": "Identifier to reference when renaming installed components"
+   },
+   "enabled": {
+    "type": "boolean",
+    "required": false,
+    "label": "Enabled"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "module_bay_types": {
+    "type": "field",
+    "required": false,
+    "label": "Module bay types"
+   }
+  },
+  "dcim/device-bay-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": true,
+    "label": "Device type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "enabled": {
+    "type": "boolean",
+    "required": false,
+    "label": "Enabled"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/inventory-item-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": true,
+    "label": "Device type"
+   },
+   "parent": {
+    "type": "field",
+    "required": false,
+    "label": "Parent"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "role": {
+    "type": "nested object",
+    "required": false,
+    "label": "Role"
+   },
+   "manufacturer": {
+    "type": "nested object",
+    "required": false,
+    "label": "Manufacturer"
+   },
+   "part_id": {
+    "type": "string",
+    "required": false,
+    "label": "Part ID",
+    "help": "Manufacturer-assigned part identifier"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "component_type": {
+    "type": "field",
+    "required": false,
+    "label": "Component type"
+   },
+   "component_id": {
+    "type": "integer",
+    "required": false,
+    "label": "Component id"
+   }
+  },
+  "dcim/cooling-intake-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": false,
+    "label": "Type",
+    "choices": [
+     "uqd",
+     "uqdb",
+     "qdc",
+     "camlock",
+     "npt",
+     "bsp",
+     "proprietary"
+    ]
+   },
+   "diameter": {
+    "type": "decimal",
+    "required": false,
+    "label": "Diameter"
+   },
+   "diameter_unit": {
+    "type": "field",
+    "required": false,
+    "label": "Diameter unit",
+    "choices": [
+     "mm",
+     "cm",
+     "in"
+    ]
+   },
+   "max_flow": {
+    "type": "decimal",
+    "required": false,
+    "label": "Max flow"
+   },
+   "max_flow_unit": {
+    "type": "field",
+    "required": false,
+    "label": "Max flow unit",
+    "choices": [
+     "lpm",
+     "m3ph",
+     "gpm"
+    ]
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/cooling-outflow-templates": {
+   "device_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Device type"
+   },
+   "module_type": {
+    "type": "nested object",
+    "required": false,
+    "label": "Module type"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name",
+    "help": "{module} is accepted as a substitution for the module bay position when attached to a module type."
+   },
+   "label": {
+    "type": "string",
+    "required": false,
+    "label": "Label",
+    "help": "Physical label"
+   },
+   "type": {
+    "type": "field",
+    "required": false,
+    "label": "Type",
+    "choices": [
+     "uqd",
+     "uqdb",
+     "qdc",
+     "camlock",
+     "npt",
+     "bsp",
+     "proprietary"
+    ]
+   },
+   "diameter": {
+    "type": "decimal",
+    "required": false,
+    "label": "Diameter"
+   },
+   "diameter_unit": {
+    "type": "field",
+    "required": false,
+    "label": "Diameter unit",
+    "choices": [
+     "mm",
+     "cm",
+     "in"
+    ]
+   },
+   "cooling_intake": {
+    "type": "nested object",
+    "required": false,
+    "label": "Cooling intake"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  },
+  "dcim/manufacturers": {
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name"
+   },
+   "slug": {
+    "type": "slug",
+    "required": true,
+    "label": "Slug"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "owner": {
+    "type": "nested object",
+    "required": false,
+    "label": "Owner"
+   },
+   "comments": {
+    "type": "string",
+    "required": false,
+    "label": "Comments"
+   },
+   "tags": {
+    "type": "field",
+    "required": false,
+    "label": "Tags",
+    "children": {
+     "name": {
+      "type": "string",
+      "required": true,
+      "label": "Name"
+     },
+     "slug": {
+      "type": "slug",
+      "required": true,
+      "label": "Slug"
+     },
+     "color": {
+      "type": "string",
+      "required": false,
+      "label": "Color"
+     }
+    }
+   },
+   "custom_fields": {
+    "type": "field",
+    "required": false,
+    "label": "Custom fields"
+   }
+  },
+  "dcim/platforms": {
+   "parent": {
+    "type": "nested object",
+    "required": false,
+    "label": "Parent"
+   },
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name"
+   },
+   "slug": {
+    "type": "slug",
+    "required": true,
+    "label": "Slug"
+   },
+   "manufacturer": {
+    "type": "nested object",
+    "required": false,
+    "label": "Manufacturer"
+   },
+   "config_template": {
+    "type": "nested object",
+    "required": false,
+    "label": "Config template"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "owner": {
+    "type": "nested object",
+    "required": false,
+    "label": "Owner"
+   },
+   "comments": {
+    "type": "string",
+    "required": false,
+    "label": "Comments"
+   },
+   "tags": {
+    "type": "field",
+    "required": false,
+    "label": "Tags",
+    "children": {
+     "name": {
+      "type": "string",
+      "required": true,
+      "label": "Name"
+     },
+     "slug": {
+      "type": "slug",
+      "required": true,
+      "label": "Slug"
+     },
+     "color": {
+      "type": "string",
+      "required": false,
+      "label": "Color"
+     }
+    }
+   },
+   "custom_fields": {
+    "type": "field",
+    "required": false,
+    "label": "Custom fields"
+   }
+  },
+  "dcim/inventory-item-roles": {
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name"
+   },
+   "slug": {
+    "type": "slug",
+    "required": true,
+    "label": "Slug"
+   },
+   "color": {
+    "type": "string",
+    "required": false,
+    "label": "Color"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "owner": {
+    "type": "nested object",
+    "required": false,
+    "label": "Owner"
+   },
+   "comments": {
+    "type": "string",
+    "required": false,
+    "label": "Comments"
+   },
+   "tags": {
+    "type": "field",
+    "required": false,
+    "label": "Tags",
+    "children": {
+     "name": {
+      "type": "string",
+      "required": true,
+      "label": "Name"
+     },
+     "slug": {
+      "type": "slug",
+      "required": true,
+      "label": "Slug"
+     },
+     "color": {
+      "type": "string",
+      "required": false,
+      "label": "Color"
+     }
+    }
+   },
+   "custom_fields": {
+    "type": "field",
+    "required": false,
+    "label": "Custom fields"
+   }
+  },
+  "extras/tags": {
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name"
+   },
+   "slug": {
+    "type": "slug",
+    "required": true,
+    "label": "Slug"
+   },
+   "color": {
+    "type": "string",
+    "required": false,
+    "label": "Color"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "weight": {
+    "type": "integer",
+    "required": false,
+    "label": "Weight"
+   },
+   "object_types": {
+    "type": "field",
+    "required": false,
+    "label": "Object types"
+   }
+  },
+  "users/owners": {
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name"
+   },
+   "group": {
+    "type": "nested object",
+    "required": true,
+    "label": "Group"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   },
+   "user_groups": {
+    "type": "field",
+    "required": false,
+    "label": "User groups"
+   },
+   "users": {
+    "type": "field",
+    "required": false,
+    "label": "Users"
+   }
+  },
+  "users/owner-groups": {
+   "name": {
+    "type": "string",
+    "required": true,
+    "label": "Name"
+   },
+   "description": {
+    "type": "string",
+    "required": false,
+    "label": "Description"
+   }
+  }
+ }
+}

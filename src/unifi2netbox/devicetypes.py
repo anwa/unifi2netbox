@@ -19,6 +19,7 @@ back with its key order and comments; new documents use the library order.
 
 from __future__ import annotations
 
+import copy
 import io
 import json
 import re
@@ -39,6 +40,7 @@ DEVICE_TYPES = "device-types"
 SUFFIXES = (".yaml", ".yml")
 
 # Attribute order for new documents (CONTRIBUTING: attributes first).
+# Library attributes plus every NetBox 4.7 device type field (M13).
 ATTRIBUTES = (
     "manufacturer",
     "model",
@@ -47,15 +49,38 @@ ATTRIBUTES = (
     "description",
     "u_height",
     "is_full_depth",
+    "exclude_from_utilization",
     "airflow",
+    "cooling_method",
     "weight",
     "weight_unit",
-    "front_image",
-    "rear_image",
     "subdevice_role",
     "is_powered",
+    "default_platform",
+    "owner",
+    "end_of_life",
+    "front_image",
+    "rear_image",
+    "tags",
+    "custom_fields",
     "comments",
 )
+# Device type fields NetBox has but the devicetype-library schema does not.
+NETBOX_ATTRIBUTES = (
+    "exclude_from_utilization",
+    "cooling_method",
+    "default_platform",
+    "owner",
+    "end_of_life",
+    "tags",
+    "custom_fields",
+)
+# Attributes that refer to NetBox objects, by name (tags: by slug).
+REFERENCES = {
+    "manufacturer": "dcim/manufacturers",
+    "default_platform": "dcim/platforms",
+    "owner": "users/owners",
+}
 COMPONENTS = (
     "console-ports",
     "console-server-ports",
@@ -68,7 +93,24 @@ COMPONENTS = (
     "module-bays",
     "device-bays",
     "inventory-items",
+    "cooling-intakes",
+    "cooling-outflows",
 )
+# Component section -> NetBox template endpoint.
+SECTION_ENDPOINTS = {
+    "console-ports": "dcim/console-port-templates",
+    "console-server-ports": "dcim/console-server-port-templates",
+    "power-ports": "dcim/power-port-templates",
+    "power-outlets": "dcim/power-outlet-templates",
+    "interfaces": "dcim/interface-templates",
+    "front-ports": "dcim/front-port-templates",
+    "rear-ports": "dcim/rear-port-templates",
+    "module-bays": "dcim/module-bay-templates",
+    "device-bays": "dcim/device-bay-templates",
+    "inventory-items": "dcim/inventory-item-templates",
+    "cooling-intakes": "dcim/cooling-intake-templates",
+    "cooling-outflows": "dcim/cooling-outflow-templates",
+}
 # Component section -> definition name in the library schema.
 COMPONENT_DEFINITIONS = {
     "console-ports": "console-port",
@@ -82,6 +124,29 @@ COMPONENT_DEFINITIONS = {
     "module-bays": "module-bay",
     "device-bays": "device-bay",
     "inventory-items": "inventory-item",
+    "cooling-intakes": "cooling-intake",
+    "cooling-outflows": "cooling-outflow",
+}
+# Template fields handled elsewhere or not stored in the YAML.
+_TEMPLATE_SKIP = {"device_type", "module_type", "rear_ports", "front_ports"}
+_DATE = r"^\d{4}-\d{2}-\d{2}$"
+# Template fields whose NetBox metadata has no usable type or choices.
+_COMPONENT_TEMPLATES = [
+    "dcim.consoleporttemplate",
+    "dcim.consoleserverporttemplate",
+    "dcim.frontporttemplate",
+    "dcim.interfacetemplate",
+    "dcim.poweroutlettemplate",
+    "dcim.powerporttemplate",
+    "dcim.rearporttemplate",
+]
+_TEMPLATE_OVERRIDES = {
+    "inventory-items": {
+        "component_type": {"type": "string", "enum": _COMPONENT_TEMPLATES},
+    },
+    "module-bays": {
+        "module_bay_types": {"type": "array", "items": {"type": "string"}},
+    },
 }
 RECOMMENDED = ("weight", "weight_unit", "airflow")
 _UNSAFE_FILE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -103,8 +168,20 @@ FIELD_HELP = {
     "(recommended by the library).",
     "weight": "Weight of the device (recommended by the library).",
     "weight_unit": "Unit of the weight: kg, g, lb or oz.",
-    "front_image": "True if the library has a front image for this model.",
-    "rear_image": "True if the library has a rear image for this model.",
+    "front_image": "True if a front image exists (elevation-images folder); "
+    "uploaded on import.",
+    "rear_image": "True if a rear image exists (elevation-images folder); "
+    "uploaded on import.",
+    "exclude_from_utilization": "True to leave devices of this type out of the "
+    "rack utilization.",
+    "cooling_method": "How the device is cooled: air, liquid, hybrid or immersion.",
+    "default_platform": "Default operating system (NetBox platform) for devices "
+    "of this type.",
+    "owner": "NetBox owner responsible for this device type.",
+    "end_of_life": "Date after which the manufacturer no longer supports the type "
+    "(YYYY-MM-DD).",
+    "tags": "NetBox tags, by slug.",
+    "custom_fields": "Values of NetBox custom fields for device types.",
     "subdevice_role": "parent if the device has device bays, child if it sits "
     "in another device's bay.",
     "is_powered": "False for devices without power (for example patch panels).",
@@ -131,6 +208,19 @@ COLUMN_HELP = {
     "rear_port_position": "Position on the rear port.",
     "manufacturer": "Manufacturer of the item.",
     "part_id": "Part number of the item.",
+    "channels": "Number of wireless channels (virtual interfaces).",
+    "channel_id": "Channel number.",
+    "parent": "Parent component (by name).",
+    "role": "NetBox inventory item role.",
+    "component_type": "Kind of component the item belongs to.",
+    "component_name": "Name of the component the item belongs to.",
+    "module_bay_types": "Module type profiles the bay accepts.",
+    "diameter": "Diameter of the cooling connection.",
+    "diameter_unit": "Unit of the diameter.",
+    "max_flow": "Maximum coolant flow.",
+    "max_flow_unit": "Unit of the flow.",
+    "cooling_intake": "Cooling intake this outflow belongs to (by name).",
+    "color": "Cable color (hex).",
 }
 
 
@@ -167,8 +257,89 @@ def _schemas() -> dict[str, dict]:
 
 
 @cache
+def netbox_metadata() -> dict:
+    """Writable NetBox fields per endpoint (bundled, newest NetBox series)."""
+    folder = files("unifi2netbox") / "resources" / "netbox-metadata"
+    names = sorted(
+        (item.name for item in folder.iterdir() if item.name.endswith(".json")),
+        key=lambda n: tuple(int(p) for p in re.findall(r"\d+", n)),
+    )
+    if not names:
+        return {"netbox_version": "", "endpoints": {}}
+    return json.loads((folder / names[-1]).read_text(encoding="utf-8"))
+
+
+def _netbox_property(field: Mapping) -> dict:
+    """JSON schema of one NetBox field as stored in the YAML (references by name)."""
+    if field.get("choices"):
+        return {"type": "string", "enum": list(field["choices"])}
+    kind = field.get("type")
+    if kind == "boolean":
+        return {"type": "boolean"}
+    if kind == "integer":
+        return {"type": "integer"}
+    if kind == "decimal":
+        return {"type": "number"}
+    if kind == "date":
+        return {"type": "string", "pattern": _DATE}
+    if kind == "field" and field.get("children"):
+        return {"type": "array", "items": {"type": "string"}}
+    if kind == "field":
+        return {"type": ["string", "array"]}
+    return {"type": "string"}
+
+
+@cache
+def _extended() -> dict[str, dict]:
+    """The library schema plus every NetBox device type and template field."""
+    schemas = copy.deepcopy(_schemas())
+    endpoints = netbox_metadata().get("endpoints", {})
+    device = schemas["devicetype.json"]
+    props = device["properties"]
+    netbox = endpoints.get("dcim/device-types", {})
+    for name in NETBOX_ATTRIBUTES:
+        if name == "tags":
+            props[name] = {"type": "array", "items": {"type": "string"}}
+        elif name == "custom_fields":
+            props[name] = {"type": "object"}
+        elif name in netbox:
+            props[name] = _netbox_property(netbox[name])
+    components = schemas["components.json"]["definitions"]
+    for section, endpoint in SECTION_ENDPOINTS.items():
+        definition = COMPONENT_DEFINITIONS[section]
+        node = components.setdefault(
+            definition, {"type": "object", "additionalProperties": False}
+        )
+        node.setdefault("properties", {})
+        fields = endpoints.get(endpoint, {})
+        for name, field in fields.items():
+            if name in _TEMPLATE_SKIP or name in node["properties"]:
+                continue
+            if name == "component_id":
+                node["properties"]["component_name"] = {"type": "string"}
+                continue
+            node["properties"][name] = _netbox_property(field)
+        node["properties"].update(copy.deepcopy(_TEMPLATE_OVERRIDES.get(section, {})))
+        if "required" not in node:
+            node["required"] = [
+                n
+                for n, f in fields.items()
+                if f.get("required") and n not in _TEMPLATE_SKIP
+            ]
+        if section not in props:
+            props[section] = {
+                "type": "array",
+                "items": {
+                    "$ref": "urn:devicetype-library:components#/definitions/"
+                    + definition
+                },
+            }
+    return schemas
+
+
+@cache
 def _validator() -> Draft202012Validator:
-    schemas = _schemas()
+    schemas = _extended()
     registry = Registry().with_resources(
         (schema["$id"], Resource.from_contents(schema)) for schema in schemas.values()
     )
@@ -181,13 +352,19 @@ def choices(definition: str, field: str) -> tuple[str, ...]:
     if definition in ("airflow", "weight-unit", "subdevice-role"):
         return tuple(generated.get(definition, {}).get("enum", ()))
     node = generated.get(definition, {}).get("properties", {}).get(field, {})
-    return tuple(node.get("enum", ()))
+    found = tuple(node.get("enum", ()))
+    if found:
+        return found
+    section = next(
+        (s for s, d in COMPONENT_DEFINITIONS.items() if d == definition), None
+    )
+    return field_spec(section, field).choices if section else ()
 
 
 def component_columns(section: str) -> tuple[str, ...]:
-    """Fields of one component section in schema order."""
+    """Fields of one component section: library order, then NetBox fields."""
     definition = COMPONENT_DEFINITIONS[section]
-    props = _schemas()["components.json"]["definitions"][definition].get(
+    props = _extended()["components.json"]["definitions"][definition].get(
         "properties", {}
     )
     return tuple(props)
@@ -195,7 +372,7 @@ def component_columns(section: str) -> tuple[str, ...]:
 
 def required_columns(section: str) -> tuple[str, ...]:
     definition = COMPONENT_DEFINITIONS[section]
-    node = _schemas()["components.json"]["definitions"][definition]
+    node = _extended()["components.json"]["definitions"][definition]
     return tuple(node.get("required", ()))
 
 
@@ -511,7 +688,7 @@ class LocalTypeStore:
 
 @dataclass(frozen=True)
 class FieldSpec:
-    kind: str  # string, number, integer, boolean or enum
+    kind: str  # string, number, integer, boolean, enum, date, list or object
     choices: tuple[str, ...] = ()
     required: bool = False
 
@@ -523,7 +700,7 @@ def _resolve(node: Mapping) -> Mapping:
         seen += 1
         base, _, pointer = str(node["$ref"]).partition("#")
         schema = next(
-            (s for s in _schemas().values() if s.get("$id") == base),
+            (s for s in _extended().values() if s.get("$id") == base),
             None,
         )
         if schema is None:
@@ -540,11 +717,11 @@ def _resolve(node: Mapping) -> Mapping:
 def field_spec(section: str | None, name: str) -> FieldSpec:
     """Kind and choices of a device type attribute or component column."""
     if section is None:
-        schema = _schemas()["devicetype.json"]
+        schema = _extended()["devicetype.json"]
         node = schema["properties"].get(name, {})
         required = name in schema.get("required", ())
     else:
-        definition = _schemas()["components.json"]["definitions"][
+        definition = _extended()["components.json"]["definitions"][
             COMPONENT_DEFINITIONS[section]
         ]
         node = definition.get("properties", {}).get(name, {})
@@ -553,6 +730,12 @@ def field_spec(section: str | None, name: str) -> FieldSpec:
     if node.get("enum"):
         return FieldSpec("enum", tuple(str(v) for v in node["enum"]), required)
     kind = node.get("type", "string")
-    if kind not in ("string", "number", "integer", "boolean"):
+    if node.get("pattern") == _DATE:
+        kind = "date"
+    elif kind == "array":
+        kind = "list"
+    elif kind == "object":
+        kind = "object"
+    elif kind not in ("string", "number", "integer", "boolean"):
         kind = "string"
     return FieldSpec(kind, (), required)
