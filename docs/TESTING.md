@@ -867,7 +867,22 @@ with real differences; a dry-run sync of both (a wrapper refused any write)
 planned 4 and 2 steps with warnings only, no blockers, nothing written.
 Found and fixed on the way: the theme style sheet hid cell backgrounds (a
 delegate paints the marks), and decimal weights failed the schema's
-`multipleOf` in floating point. Not yet done: the approved live write test.
+`multipleOf` in floating point.
+
+Then, with the user's explicit approval, the assistant ran the M14 write test
+on test device type 378 (`u2n Test Box`, no devices) in the developer NetBox
+4.7.3 (commit 4b3fc8b, application 1.3.8); a guard refused any write outside
+type 378 and its templates, UniFi was not touched. The type was read from
+NetBox into a temporary local folder (compared equal). Results, all passed:
+**Overwrite NetBox** with a new description, weight 1.6 kg and a new
+interface `eth1` patched the type and created the template, read back as
+verified; **per value** with `eth0` `mgmt_only` set to Local and `comments`
+set to NetBox patched one interface template (verified) and changed only the
+local file's comments; a 2 U height produced no preflight finding (no
+devices) and its dry run wrote nothing; a second comparison of the saved
+file was equal to NetBox. Writes made: one PATCH of the type, one interface
+template created, one interface template patched; both runs are in the
+write history. The changes stay on type 378.
 
 On 2026-11-17 the assistant checked M13 slices 1 to 4 (application 1.2.5
 working tree on `feature/netbox-device-types`). Offline: the extended schema

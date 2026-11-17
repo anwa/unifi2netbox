@@ -708,7 +708,8 @@ Slices:
 - [x] 4. New from NetBox, the devicetype-library or manual.
 - [x] 5. Sync (overwrite or per value) with preflight, dry run, drift check,
   read-back and write history.
-- [ ] 6. Documentation, screenshots, live checks and approved tests.
+- [x] 6. Documentation, screenshots, live checks and approved tests.
+  (2026-11-17: live sync test on type 378 passed; see TESTING.)
 
 - [ ] Obtain explicit merge approval; prepare version 1.4.0.
 - [ ] Complete the approved main merge and tag v1.4.0; build the Windows exe
