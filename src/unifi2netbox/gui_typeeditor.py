@@ -598,13 +598,13 @@ class DeviceTypeEditor(QDialog):
         self.catalog_runner.finished.connect(self._catalog_finished)
         self._disk_text: str | None = None
         # Files added, changed or removed by hand show up without a restart.
-        self.watcher = QFileSystemWatcher(self)
-        self.watcher.directoryChanged.connect(lambda _p: self._refresh_timer.start())
-        self.watcher.fileChanged.connect(lambda _p: self._refresh_timer.start())
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(300)
         self._refresh_timer.timeout.connect(self.refresh_tree)
+        self.watcher = QFileSystemWatcher(self)
+        self.watcher.directoryChanged.connect(self._schedule_refresh)
+        self.watcher.fileChanged.connect(self._schedule_refresh)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -954,14 +954,22 @@ class DeviceTypeEditor(QDialog):
         self.dirty = False
         self.open_path(self.path)
 
+    def _schedule_refresh(self, _path: str = "") -> None:
+        self._refresh_timer.start()  # several events in a row: one refresh
+
     def _watch(self) -> None:
+        """Watch the folder while the window is visible (showing re-reads it)."""
+        current = set(self.watcher.directories()) | set(self.watcher.files())
+        if not self.isVisible():
+            if current:
+                self.watcher.removePaths(sorted(current))
+            return
         folders = [self.store.root, self.store.folder]
         if self.store.folder.is_dir():
             folders += [p for p in self.store.folder.iterdir() if p.is_dir()]
         wanted = {str(p) for p in folders if p.is_dir()}
         if self.path is not None and self.path.is_file():
             wanted.add(str(self.path))
-        current = set(self.watcher.directories()) | set(self.watcher.files())
         if current - wanted:
             self.watcher.removePaths(sorted(current - wanted))
         if wanted - current:
@@ -1204,12 +1212,15 @@ class DeviceTypeEditor(QDialog):
             self.restore_layout()
         else:
             self.refresh_tree()
+        QTimer.singleShot(0, self, self._watch)
         if self.catalog_loader is not None and not self.catalog.loaded:
             self.load_catalog()
         super().showEvent(event)
 
     def hideEvent(self, event) -> None:  # noqa: N802 - Qt override
         self.save_layout()
+        self._refresh_timer.stop()
+        QTimer.singleShot(0, self, self._watch)  # isVisible() is still true here
         super().hideEvent(event)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override

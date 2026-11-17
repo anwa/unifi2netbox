@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
 from PySide6.QtWidgets import QComboBox, QListWidget, QMessageBox
 
 from unifi2netbox.config import DeviceTypesConfig
@@ -27,7 +27,13 @@ def store(tmp_path):
 def editor(qtbot, store):
     window = DeviceTypeEditor(store, DeviceTypesConfig(), QThreadPool())
     qtbot.addWidget(window)
-    return window
+    yield window
+    # Delete the window now: hundreds of closed but living windows make
+    # later style changes (theme tests) fragile.
+    window.dirty = False
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
 
 
 def answer(monkeypatch, button):
