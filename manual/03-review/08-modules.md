@@ -16,7 +16,8 @@ Each module becomes a NetBox inventory item of the device:
 | Manufacturer | the NetBox manufacturer that matches the vendor (`UBNT` and `Ubiquiti Inc.` match `Ubiquiti`) |
 
 If no single NetBox manufacturer matches, the item has none and a note says
-so; the app never creates manufacturers. Create the manufacturer in NetBox and
+so; the app does not create manufacturers on its own. Create the
+manufacturer in NetBox (or with **New...** in the device type editor) and
 refresh to have it filled in.
 
 Items are created and updated, never deleted. When a module is removed, its

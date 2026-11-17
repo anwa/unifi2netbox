@@ -11,6 +11,9 @@ devicetype-library/
     Ubiquiti/
       UA-Intercom.yaml
       U6-Pro.yaml
+  elevation-images/
+    Ubiquiti/
+      ubiquiti-ua-intercom.front.png
 ```
 
 By default it is `devicetype-library` next to the configuration
@@ -22,7 +25,10 @@ Change it in **Settings > Device types**.
 ## Contributing to the library
 
 Files written by the app follow the library's `CONTRIBUTING.md` (file names,
-slugs, style) and validate against its schema. To submit them:
+slugs, style). Fields only NetBox knows (owner, default platform, tags,
+custom fields, cooling method, end of life, exclude from utilization and the
+cooling sections) are not part of the library schema: remove them from a
+copy before you submit it. To submit definitions:
 
 1. Fork [netbox-community/devicetype-library](https://github.com/netbox-community/devicetype-library)
    and clone your fork.

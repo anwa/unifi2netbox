@@ -42,6 +42,9 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	and rear images are uploaded after the templates (multipart PATCH).
 	References NetBox does not have stop that import before anything is
 	written, in dry runs too. Front/rear ports no longer block an import.
+- Manual: new page *NetBox fields* (drop-downs, New dialogs, tags, images,
+	custom fields) and updated editor, folder and import pages with demo
+	screenshots of the NetBox section and the New owner dialog.
 
 ### Changed
 

@@ -851,6 +851,25 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-17 the assistant checked M13 slices 1 to 4 (application 1.2.5
+working tree on `feature/netbox-device-types`). Offline: the extended schema
+accepts every NetBox 4.7 device type and template field and rejects wrong
+types, choices and component references; library files still round-trip
+byte-identical; the catalog reader and the New dialogs (no duplicates,
+interrupted create looked up, read-back, write history) use fake
+transports; the editor's drop-downs, New..., tags, custom fields, images
+(copy, rename, remove) and component reference lists are driven through the
+widgets; the import sends all fields, resolves references by name or slug,
+creates every template kind in dependency order with port mappings,
+interface parents and bridges and inventory hierarchies, uploads images as
+multipart and stops before any write when a reference is missing.
+Read-only live check against the developer NetBox 4.7.3 (counts only): the
+catalog read all six lists and the custom field definitions without errors
+(3 manufacturers; no platforms, owners, owner groups, tags, inventory item
+roles or device type custom fields yet). Manual screenshots come from demo
+data. Not yet done: the approved live write tests (New dialogs and an import
+with owner, tag, image and port mapping).
+
 On 2026-11-17 the assistant checked the resizable editor sections
 (application 1.2.1 working tree on `feature/editor-layout`): offline tests
 cover the three-section splitter, the validation splitter, restoring window

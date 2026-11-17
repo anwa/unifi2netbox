@@ -96,10 +96,37 @@ slug equals the request. SKUs may carry a regional suffix (`U6-Lite-US`),
 which is dropped for the part number. The bundled JSON schema comes from
 `schema/` of the library (CC0, see `resources/devicetype-schema/SOURCE.txt`).
 
-NetBox writes for imports: `dcim/device-types` and the template endpoints
-`interface-`, `console-port-`, `console-server-port-`, `power-port-`,
-`power-outlet-`, `module-bay-`, `device-bay-` and `inventory-item-templates`;
-reads `dcim/manufacturers` by name.
+NetBox writes for imports (M13): `dcim/device-types` with every writable
+field (owner, default platform and tags by ID, custom fields, cooling method,
+end of life, exclude from utilization) and the template endpoints
+`console-port-`, `console-server-port-`, `power-port-`, `power-outlet-`,
+`interface-` (parent and bridge set by `PATCH` afterwards), `rear-port-`,
+`front-port-` (`rear_ports`: `position`, `rear_port`, `rear_port_position`),
+`module-bay-`, `device-bay-`, `cooling-intake-`, `cooling-outflow-` and
+`inventory-item-templates` (parent, role, manufacturer, `component_type` and
+`component_id`). Front and rear images: multipart `PATCH` of
+`front_image`/`rear_image` on the new type. `module_bay_types` is not sent.
+Before writing, the import reads `dcim/manufacturers`, `users/owners`,
+`dcim/platforms`, `extras/tags` and `dcim/inventory-item-roles` by name or
+slug.
+
+The field lists come from `resources/netbox-metadata/netbox-4.7.json`,
+written by `tools/update_netbox_metadata.py` from `OPTIONS` requests
+(read-only) on `dcim/device-types`, all template endpoints and the objects
+below; regenerate it for a new NetBox series.
+
+NetBox catalog for the editor (read-only, paginated, on open and **Reload
+from NetBox**): `dcim/manufacturers`, `dcim/platforms`, `users/owners`,
+`users/owner-groups`, `extras/tags`, `dcim/inventory-item-roles`,
+`extras/custom-fields` (those whose `object_types` include
+`dcim.devicetype`) and `extras/custom-field-choice-sets`.
+
+NetBox writes from the **New...** dialogs (one object per confirmed dialog,
+looked up by name and slug first, read back, saved to the write history):
+`dcim/manufacturers` (name, slug, description), `dcim/platforms` (+
+manufacturer), `users/owner-groups` (name, description), `users/owners`
+(name, group, description), `extras/tags` (name, slug, color, description)
+and `dcim/inventory-item-roles` (name, slug, color, description).
 
 ## Extended UniFi Details (M11)
 
