@@ -120,6 +120,8 @@ from unifi2netbox.library import (
 )
 from unifi2netbox.library import client as library_client
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
+from unifi2netbox.netbox_catalog import NetBoxCatalog, read_catalog
+from unifi2netbox.netbox_objects import CreateResult, create_object
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
     WriteExecutionReport,
@@ -156,6 +158,7 @@ from unifi2netbox.typesearch import (
     netbox_candidates,
 )
 from unifi2netbox.window_frame import app_icon
+from unifi2netbox.write_execute import RequestsNetBoxWriteBackend
 from unifi2netbox.write_plan import WritePlan
 
 # Kept for callers that used the former private helper.
@@ -2521,6 +2524,8 @@ class MainWindow(QMainWindow):
                 self.pool,
                 self,
                 settings_path=self.path,
+                catalog_loader=self.type_catalog,
+                creator=self.create_netbox_object,
             )
             self.type_editor = editor
             self._hook_editor(editor)
@@ -2528,6 +2533,20 @@ class MainWindow(QMainWindow):
         editor.raise_()
         editor.activateWindow()
         return editor
+
+    def type_catalog(self) -> NetBoxCatalog:
+        """NetBox drop-down lists for the editor (runs on the thread pool)."""
+        config = self.netbox.config
+        if not config.configured:
+            return NetBoxCatalog(errors=("NetBox is not configured.",))
+        return read_catalog(config)
+
+    def create_netbox_object(
+        self, kind: str, values: dict, catalog: NetBoxCatalog
+    ) -> CreateResult:
+        """Create from a New dialog (its Create button is the approval)."""
+        backend = RequestsNetBoxWriteBackend(self.netbox.config)
+        return create_object(kind, values, catalog, backend, self.journal_path)
 
     # -- device type picker ---------------------------------------------------
 

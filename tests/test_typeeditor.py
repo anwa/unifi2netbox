@@ -245,7 +245,7 @@ def test_editor_remembers_window_and_section_sizes(qtbot, store, tmp_path):
 def test_sections_are_resizable_splitters(editor):
     from PySide6.QtWidgets import QSplitter
 
-    assert editor.table_view.splitter.count() == 3
+    assert editor.table_view.splitter.count() == 4
     assert not editor.table_view.splitter.childrenCollapsible()
     assert isinstance(editor.right_splitter, QSplitter)
     assert editor.right_splitter.widget(1).findChild(QListWidget, "typeIssues")
@@ -256,3 +256,169 @@ def test_saved_layout_is_validated():
 
     with pytest.raises(ConfigError, match="layout"):
         UiConfig(type_editor_geometry="not base64!")
+
+
+# -- M13 slice 3: NetBox fields ------------------------------------------------
+
+from unifi2netbox.gui_typeeditor import _TABLE_ATTRIBUTES  # noqa: E402
+from unifi2netbox.gui_typefields import ChoiceCell  # noqa: E402
+from unifi2netbox.netbox_catalog import (  # noqa: E402
+    CatalogObject,
+    CustomFieldDef,
+    NetBoxCatalog,
+)
+
+CATALOG = NetBoxCatalog(
+    {
+        "manufacturers": (CatalogObject("1", "Ubiquiti", "ubiquiti"),),
+        "owners": (CatalogObject("4", "Network team", detail="IT"),),
+        "platforms": (CatalogObject("6", "UniFi OS", "unifi-os"),),
+        "tags": (CatalogObject("7", "Core", "core"), CatalogObject("8", "Lab", "lab")),
+        "inventory_item_roles": (CatalogObject("9", "Power supply", "psu"),),
+    },
+    (
+        CustomFieldDef("support", "Support", "select", choices=("gold", "silver")),
+        CustomFieldDef("warranty_years", "Warranty", "integer"),
+    ),
+    loaded=True,
+)
+
+
+def attribute_cell(editor, name):
+    return editor.table_view.attributes.cellWidget(_TABLE_ATTRIBUTES.index(name), 1)
+
+
+def component_cell(editor, section, row, column):
+    table = editor.table_view.sections[section]
+    return table.table.cellWidget(row, table.columns.index(column))
+
+
+def test_references_are_drop_downs_of_the_catalog_and_own_components(editor):
+    doc = load_yaml(
+        "---\nmanufacturer: Ubiquiti\nmodel: Box\nslug: ubiquiti-box\n"
+        "owner: Facilities\n"
+        "power-ports:\n  - name: PSU 1\n    type: iec-60320-c14\n"
+        "power-outlets:\n  - name: Out 1\n    type: iec-60320-c13\n"
+        "    power_port: PSU 1\n"
+    )
+    editor.set_catalog(CATALOG)
+    editor.open_new(doc)
+
+    manufacturer = attribute_cell(editor, "manufacturer")
+    assert isinstance(manufacturer, ChoiceCell)
+    assert manufacturer.options() == ("Ubiquiti",) and manufacturer.text() == "Ubiquiti"
+    assert attribute_cell(editor, "default_platform").options() == ("UniFi OS",)
+    feed = component_cell(editor, "power-outlets", 0, "power_port")
+    assert feed.options() == ("PSU 1",) and feed.text() == "PSU 1"
+
+    ports = editor.table_view.sections["power-ports"]
+    ports.add_row()
+    ports.table.item(1, ports.columns.index("name")).setText("PSU 2")
+    assert feed.options() == ("PSU 1", "PSU 2")
+
+    editor.run_validation()
+    texts = [editor.issues.item(i).text() for i in range(editor.issues.count())]
+    assert any("Owner 'Facilities' is not in NetBox" in text for text in texts)
+
+
+def test_tags_custom_fields_and_unchanged_files(editor, store):
+    path = store.folder / "Ubiquiti" / "U6-Lite.yaml"
+    original = path.read_text(encoding="utf-8")
+    editor.set_catalog(CATALOG)
+    editor.open_path(path)
+    from unifi2netbox.devicetypes import dump_yaml
+
+    assert dump_yaml(editor.table_view.document()) == original
+
+    tags = editor.table_view.tags
+    tags.picker.setCurrentText("core")
+    tags.add_current()
+    tags.add_tag("lab")
+    tags.remove_tag("core")
+    custom = editor.table_view.custom_fields
+    custom.cellWidget(0, 1).setCurrentText("gold")
+    custom.item(1, 1).setText("5")
+
+    doc = editor.table_view.document()
+    assert doc["tags"] == ["lab"]
+    assert dict(doc["custom_fields"]) == {"support": "gold", "warranty_years": 5}
+    assert editor.dirty
+
+    editor.set_catalog(CATALOG)  # reloading keeps edited values
+    assert editor.table_view.document()["custom_fields"]["warranty_years"] == 5
+
+
+def test_images_are_copied_on_save_and_removed(editor, store, tmp_path):
+    from unifi2netbox.devicetypes import find_image
+
+    image = tmp_path / "front.png"
+    image.write_bytes(b"\x89PNG fake")
+    path = store.folder / "Ubiquiti" / "U6-Lite.yaml"
+    editor.open_path(path)
+    slug = str(editor.doc["slug"])
+
+    editor.table_view.images.set_pending("front", image)
+    assert editor.table_view.document()["front_image"] is True
+    assert editor.save()
+    saved = find_image(store, "Ubiquiti", slug, "front")
+    assert saved is not None and saved.name == f"{slug}.front.png"
+    assert saved.read_bytes() == b"\x89PNG fake"
+    assert editor.table_view.images.labels["front"].text() == saved.name
+
+    editor.table_view.images.set_pending("front", "remove")
+    assert "front_image" not in editor.table_view.document()
+    assert editor.save()
+    assert find_image(store, "Ubiquiti", slug, "front") is None
+
+
+def test_new_button_creates_the_object_and_selects_it(qtbot, store, monkeypatch):
+    import unifi2netbox.gui_typeeditor as module
+
+    class FakeDialog:
+        def __init__(self, kind, catalog, creator, pool, parent, name=""):
+            self.created = CatalogObject("11", name or "Ops", "ops")
+            self.catalog = catalog.with_object(kind, self.created)
+            seen.append((kind, name))
+
+        def exec(self):
+            return module.QDialog.DialogCode.Accepted
+
+    seen = []
+    monkeypatch.setattr(module, "NewObjectDialog", FakeDialog)
+    editor = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), creator=lambda *a: None
+    )
+    qtbot.addWidget(editor)
+    editor.set_catalog(CATALOG)
+    editor.open_new(new_document("Ubiquiti", "Box"))
+
+    owner = attribute_cell(editor, "owner")
+    owner.set_text("Ops")
+    owner.new_button.click()
+    assert seen == [("owners", "Ops")]
+    assert owner.text() == "Ops" and "Ops" in owner.options()
+    assert editor.catalog.find("owners", "Ops") is not None
+
+    tags = editor.table_view.tags
+    tags.picker.setCurrentText("wifi")
+    editor.table_view.findChild(module.QWidget, "new_tags").click()
+    assert tags.tags == ["ops"]  # tags store the created slug
+
+
+def test_editor_without_creator_has_no_new_buttons(editor):
+    editor.open_new(new_document("Ubiquiti", "Box"))
+    assert attribute_cell(editor, "owner").new_button is None
+    assert editor.catalog_status.text() == "NetBox not configured."
+    assert not editor.buttons["catalog"].isEnabled()
+
+
+def test_catalog_is_read_in_the_background_when_shown(qtbot, store):
+    editor = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), catalog_loader=lambda: CATALOG
+    )
+    qtbot.addWidget(editor)
+    with qtbot.waitSignal(editor.catalog_runner.finished, timeout=5000):
+        editor.show()
+    assert editor.catalog is CATALOG
+    assert "1 manufacturers" in editor.catalog_status.text()
+    assert "2 custom fields" in editor.catalog_status.text()

@@ -192,7 +192,12 @@ def test_netbox_fields_are_accepted_and_checked():
         "tags: [core, lab]\n"
         "custom_fields:\n"
         "  warranty_years: 5\n"
+        "power-ports:\n"
+        "  - name: PSU 1\n"
+        "    type: iec-60320-c14\n"
         "interfaces:\n"
+        "  - name: eth0\n"
+        "    type: 1000base-t\n"
         "  - name: wlan0\n"
         "    type: ieee802.11ax\n"
         "    channels: 2\n"
@@ -219,6 +224,15 @@ def test_netbox_fields_are_accepted_and_checked():
 
     assert errors(validate(doc)) == ()
     assert dump_yaml(doc).splitlines()[-1] == "    cooling_intake: In 1"
+
+    doc["interfaces"][1]["parent"] = "eth9"
+    doc["inventory-items"][0]["component_name"] = "PSU 2"
+    doc["cooling-outflows"][0]["cooling_intake"] = "wlan0"
+    assert sorted(issue.location for issue in errors(validate(doc))) == [
+        "cooling-outflows/0/cooling_intake",
+        "interfaces/1/parent",
+        "inventory-items/0/component_name",
+    ]
 
     bad = load_yaml(
         "---\nmanufacturer: Acme\nmodel: X\nslug: acme-x\nu_height: 1\n"

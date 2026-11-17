@@ -570,6 +570,7 @@ def validate(doc: Mapping, path: Path | None = None) -> tuple[Issue, ...]:
             issues.append(
                 Issue("error", section, f"Duplicate names: {', '.join(duplicates)}.")
             )
+    issues += _sibling_issues(doc)
     if doc.get("weight") is not None and not doc.get("weight_unit"):
         issues.append(Issue("error", "weight_unit", "A weight needs a weight unit."))
     for field in RECOMMENDED:
@@ -578,6 +579,87 @@ def validate(doc: Mapping, path: Path | None = None) -> tuple[Issue, ...]:
                 Issue("warning", field, "Recommended by the library; add it if known.")
             )
     return tuple(issues)
+
+
+# (section, column) -> section whose component names the column refers to.
+SIBLING_REFERENCES = {
+    ("power-outlets", "power_port"): "power-ports",
+    ("interfaces", "parent"): "interfaces",
+    ("interfaces", "bridge"): "interfaces",
+    ("port-mappings", "front_port"): "front-ports",
+    ("port-mappings", "rear_port"): "rear-ports",
+    ("inventory-items", "parent"): "inventory-items",
+    ("cooling-outflows", "cooling_intake"): "cooling-intakes",
+}
+# inventory-items component_type -> section holding the component.
+COMPONENT_TYPE_SECTIONS = {
+    "dcim.consoleporttemplate": "console-ports",
+    "dcim.consoleserverporttemplate": "console-server-ports",
+    "dcim.frontporttemplate": "front-ports",
+    "dcim.interfacetemplate": "interfaces",
+    "dcim.poweroutlettemplate": "power-outlets",
+    "dcim.powerporttemplate": "power-ports",
+    "dcim.rearporttemplate": "rear-ports",
+}
+# (section or None for attributes, column) -> NetBox catalog kind.
+CATALOG_REFERENCES = {
+    (None, "manufacturer"): "manufacturers",
+    (None, "owner"): "owners",
+    (None, "default_platform"): "platforms",
+    ("inventory-items", "manufacturer"): "manufacturers",
+    ("inventory-items", "role"): "inventory_item_roles",
+}
+
+
+def component_names(doc: Mapping, section: str) -> tuple[str, ...]:
+    return tuple(
+        str(item["name"])
+        for item in doc.get(section) or ()
+        if isinstance(item, Mapping) and item.get("name")
+    )
+
+
+def _sibling_issues(doc: Mapping) -> list[Issue]:
+    issues = []
+    for (section, column), target in SIBLING_REFERENCES.items():
+        known = set(component_names(doc, target))
+        for index, item in enumerate(doc.get(section) or ()):
+            if not isinstance(item, Mapping) or not item.get(column):
+                continue
+            value = str(item[column])
+            if value not in known:
+                issues.append(
+                    Issue(
+                        "error",
+                        f"{section}/{index}/{column}",
+                        f"'{value}' is not one of the {target} of this definition.",
+                    )
+                )
+            elif column in ("parent", "bridge") and value == item.get("name"):
+                issues.append(
+                    Issue(
+                        "error",
+                        f"{section}/{index}/{column}",
+                        "A component cannot refer to itself.",
+                    )
+                )
+    for index, item in enumerate(doc.get("inventory-items") or ()):
+        if not isinstance(item, Mapping):
+            continue
+        target = COMPONENT_TYPE_SECTIONS.get(str(item.get("component_type") or ""))
+        name = item.get("component_name")
+        where = f"inventory-items/{index}/component_name"
+        if name and target is None:
+            issues.append(Issue("error", where, "Choose the component type first."))
+        elif target and name and str(name) not in component_names(doc, target):
+            issues.append(
+                Issue(
+                    "error",
+                    where,
+                    f"'{name}' is not one of the {target} of this definition.",
+                )
+            )
+    return issues
 
 
 def _empty_values(value, where: str) -> list[Issue]:
@@ -739,3 +821,64 @@ def field_spec(section: str | None, name: str) -> FieldSpec:
     elif kind not in ("string", "number", "integer", "boolean"):
         kind = "string"
     return FieldSpec(kind, (), required)
+
+
+# -- images (elevation-images, like the library) -------------------------------
+
+IMAGES = "elevation-images"
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")
+IMAGE_SIDES = ("front", "rear")
+
+
+def image_folder(store: LocalTypeStore, manufacturer: str) -> Path:
+    return store.root / IMAGES / manufacturer
+
+
+def find_image(store: LocalTypeStore, manufacturer: str, slug: str, side: str):
+    """The local front or rear image of a device type, if any."""
+    if not manufacturer or not slug:
+        return None
+    folder = image_folder(store, manufacturer)
+    for suffix in IMAGE_SUFFIXES:
+        candidate = folder / f"{slug}.{side}{suffix}"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def store_image(
+    store: LocalTypeStore, manufacturer: str, slug: str, side: str, source: Path
+) -> Path:
+    """Copy ``source`` as ``<slug>.<side>.<ext>``; replaces an older image."""
+    suffix = Path(source).suffix.lower()
+    if side not in IMAGE_SIDES or suffix not in IMAGE_SUFFIXES:
+        raise DeviceTypeError(
+            "Choose a PNG, JPEG, GIF, WebP or SVG image for the front or rear."
+        )
+    if not safe_file_name(manufacturer) or not slug:
+        raise DeviceTypeError("Enter the manufacturer and the slug first.")
+    remove_image(store, manufacturer, slug, side)
+    target = image_folder(store, manufacturer) / f"{slug}.{side}{suffix}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(Path(source).read_bytes())
+    return target
+
+
+def remove_image(store: LocalTypeStore, manufacturer: str, slug: str, side: str):
+    while (found := find_image(store, manufacturer, slug, side)) is not None:
+        found.unlink()
+
+
+def rename_images(
+    store: LocalTypeStore, old: tuple[str, str], new: tuple[str, str]
+) -> None:
+    """Move images when the manufacturer or slug of a definition changes."""
+    if old == new or not all(old) or not all(new):
+        return
+    for side in IMAGE_SIDES:
+        found = find_image(store, old[0], old[1], side)
+        if found is None:
+            continue
+        target = image_folder(store, new[0]) / f"{new[1]}.{side}{found.suffix}"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        found.replace(target)

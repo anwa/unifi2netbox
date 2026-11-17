@@ -668,7 +668,7 @@ Slices:
 - [x] 2. NetBox catalog reader and "New" dialogs.
   (1.2.3, 2026-11-17: live catalog read: 3 manufacturers, no platforms,
   owners, owner groups, tags, roles or device type custom fields yet.)
-- [ ] 3. Editor: NetBox fields, drop-downs, tags, custom fields, images,
+- [x] 3. Editor: NetBox fields, drop-downs, tags, custom fields, images,
   all component tabs.
 - [ ] 4. Import of all fields, references, templates and images.
 - [ ] 5. Documentation, screenshots, live checks and approved tests.

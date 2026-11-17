@@ -90,7 +90,10 @@ def main() -> None:
 
     def call(method: str, path: str) -> dict:
         response = session.request(
-            method, base + path, timeout=config.timeout, verify=verify,
+            method,
+            base + path,
+            timeout=config.timeout,
+            verify=verify,
             allow_redirects=False,
         )
         response.raise_for_status()

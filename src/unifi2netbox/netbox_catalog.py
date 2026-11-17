@@ -170,3 +170,43 @@ def _message(error: Exception) -> str:
     if isinstance(error, RedirectError):
         return "NetBox redirected the request."
     return str(error) or error.__class__.__name__
+
+
+def reference_issues(doc: Mapping, catalog: NetBoxCatalog):
+    """Warnings for references to NetBox objects the catalog does not know."""
+    from unifi2netbox.devicetypes import Issue
+
+    if not catalog.loaded:
+        return ()
+    issues = []
+
+    def check(kind: str, value, where: str, label: str) -> None:
+        if value and catalog.find(kind, str(value)) is None:
+            issues.append(
+                Issue("warning", where, f"{label} '{value}' is not in NetBox.")
+            )
+
+    check("manufacturers", doc.get("manufacturer"), "manufacturer", "Manufacturer")
+    check("platforms", doc.get("default_platform"), "default_platform", "Platform")
+    check("owners", doc.get("owner"), "owner", "Owner")
+    for tag in doc.get("tags") or ():
+        check("tags", tag, "tags", "Tag")
+    for index, item in enumerate(doc.get("inventory-items") or ()):
+        if isinstance(item, Mapping):
+            where = f"inventory-items/{index}"
+            check("inventory_item_roles", item.get("role"), where, "Role")
+            check("manufacturers", item.get("manufacturer"), where, "Manufacturer")
+    known = {definition.name for definition in catalog.custom_fields}
+    custom = doc.get("custom_fields")
+    if isinstance(custom, Mapping):
+        for name in custom:
+            if name not in known:
+                issues.append(
+                    Issue(
+                        "warning",
+                        "custom_fields",
+                        f"Custom field '{name}' is not defined for device types "
+                        "in NetBox.",
+                    )
+                )
+    return tuple(issues)

@@ -22,10 +22,21 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	"New ..." dialogs that create such an object in NetBox right away: no
 	duplicates (an existing object is selected instead), interrupted creates
 	looked up, read back and saved to the write history.
+- M13 slice 3: the device type editor offers manufacturer, owner and default
+	platform (and inventory item roles and manufacturers) as drop-downs from
+	NetBox with **New...**, tags as chips with a picker and **New tag...**, a
+	custom field editor per NetBox definition, and front/rear images kept
+	under `elevation-images/<Manufacturer>/<slug>.front|rear.<ext>` (copied
+	when the definition is saved, moved with renames, removed with it).
+	References between components (power port, parent, bridge, port
+	mappings, cooling intake, inventory parent and component) are drop-downs
+	of the definition's own components and are validated; references NetBox
+	does not know are warnings. **Reload from NetBox** reads the lists in the
+	background; they are also read when the editor opens.
 
 ### Changed
 
-- Device type editor: the heights of Attributes, Comments, Components and
+- Device type editor: the heights of Attributes, Comments, NetBox, Components and
 	Validation are set by dragging the lines between them; the section
 	heights, the tree width and the window size and position are remembered
 	(`[ui]` in the configuration). Saving the theme keeps these values.
