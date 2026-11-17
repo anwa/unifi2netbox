@@ -178,6 +178,8 @@ Layers (service modules are Qt-free and work on frozen dataclasses):
 Domain invariants to preserve: UniFi is never written; no automatic deletions
 (NetBox-only delete proposals are scoped to the active UniFi site by default);
 no silently created Custom Fields or device types (device types only from a
-chosen definition as a selected write step); missing source values must not clear NetBox
+chosen definition as a selected write step; manufacturers, owners, owner groups,
+tags, platforms and inventory item roles only from a confirmed "New" dialog);
+missing source values must not clear NetBox
 values; offline/stale snapshots cannot authorize writes; never blindly retry a
 timed-out create.

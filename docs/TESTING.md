@@ -851,6 +851,41 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-17 the assistant checked M13 slices 1 to 4 (application 1.2.5
+working tree on `feature/netbox-device-types`). Offline: the extended schema
+accepts every NetBox 4.7 device type and template field and rejects wrong
+types, choices and component references; library files still round-trip
+byte-identical; the catalog reader and the New dialogs (no duplicates,
+interrupted create looked up, read-back, write history) use fake
+transports; the editor's drop-downs, New..., tags, custom fields, images
+(copy, rename, remove) and component reference lists are driven through the
+widgets; the import sends all fields, resolves references by name or slug,
+creates every template kind in dependency order with port mappings,
+interface parents and bridges and inventory hierarchies, uploads images as
+multipart and stops before any write when a reference is missing.
+Read-only live check against the developer NetBox 4.7.3 (counts only): the
+catalog read all six lists and the custom field definitions without errors
+(3 manufacturers; no platforms, owners, owner groups, tags, inventory item
+roles or device type custom fields yet). Manual screenshots come from demo
+data.
+
+Then, with the user's explicit approval, the assistant ran the M13 write test
+against the developer NetBox 4.7.3 (commit 6c6737c, application 1.2.6); UniFi
+was not touched. Through the functions behind the New dialogs: owner group
+`u2n test group`, owner `u2n test owner` (in that group) and tag `u2n-test`
+were created, read back as verified and saved to the write history. A test
+definition `u2n Test Box` (Ubiquiti, slug `ubiquiti-u2n-test-box`) with owner,
+tag, cooling method, end of life, exclude from utilization, a power port
+feeding an outlet, `eth0` with child `eth0.10`, a rear and a front port with a
+port mapping and a generated front image validated without errors. Results,
+all passed: the dry run wrote nothing; the import created type 378 with 6
+templates and 1 image, verified; an independent read-back showed the owner,
+the tag, `air`, `2035-12-31`, `exclude_from_utilization` true and a front
+image, 1 power port, 1 outlet fed by `PSU 1`, 2 interfaces with `eth0.10`
+parented to `eth0`, rear port `Rear 1` of type 378 mapped 1:1 to `Front 1`;
+a second run reused the slug and created nothing. The test objects stay in
+NetBox (the app never deletes); no device was created.
+
 On 2026-11-17 the assistant checked the resizable editor sections
 (application 1.2.1 working tree on `feature/editor-layout`): offline tests
 cover the three-section splitter, the validation splitter, restoring window

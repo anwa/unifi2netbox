@@ -85,7 +85,12 @@ from unifi2netbox.connections import (
     check_unifi_connection,
 )
 from unifi2netbox.custom_fields import select_custom_field
-from unifi2netbox.devicetypes import LocalTypeStore, load_yaml
+from unifi2netbox.devicetypes import (
+    IMAGE_SIDES,
+    LocalTypeStore,
+    find_image,
+    load_yaml,
+)
 from unifi2netbox.gui_devicetypes import DeviceTypeSettingsPage
 from unifi2netbox.gui_jobs import TaskRunner
 from unifi2netbox.gui_manual import ManualWindow
@@ -120,6 +125,8 @@ from unifi2netbox.library import (
 )
 from unifi2netbox.library import client as library_client
 from unifi2netbox.netbox import ConnectionResult, ConnectionState, check_connection
+from unifi2netbox.netbox_catalog import NetBoxCatalog, read_catalog
+from unifi2netbox.netbox_objects import CreateResult, create_object
 from unifi2netbox.pipeline import (
     InventoryPreviewResult,
     WriteExecutionReport,
@@ -156,6 +163,7 @@ from unifi2netbox.typesearch import (
     netbox_candidates,
 )
 from unifi2netbox.window_frame import app_icon
+from unifi2netbox.write_execute import RequestsNetBoxWriteBackend
 from unifi2netbox.write_plan import WritePlan
 
 # Kept for callers that used the former private helper.
@@ -2521,6 +2529,8 @@ class MainWindow(QMainWindow):
                 self.pool,
                 self,
                 settings_path=self.path,
+                catalog_loader=self.type_catalog,
+                creator=self.create_netbox_object,
             )
             self.type_editor = editor
             self._hook_editor(editor)
@@ -2528,6 +2538,20 @@ class MainWindow(QMainWindow):
         editor.raise_()
         editor.activateWindow()
         return editor
+
+    def type_catalog(self) -> NetBoxCatalog:
+        """NetBox drop-down lists for the editor (runs on the thread pool)."""
+        config = self.netbox.config
+        if not config.configured:
+            return NetBoxCatalog(errors=("NetBox is not configured.",))
+        return read_catalog(config)
+
+    def create_netbox_object(
+        self, kind: str, values: dict, catalog: NetBoxCatalog
+    ) -> CreateResult:
+        """Create from a New dialog (its Create button is the approval)."""
+        backend = RequestsNetBoxWriteBackend(self.netbox.config)
+        return create_object(kind, values, catalog, backend, self.journal_path)
 
     # -- device type picker ---------------------------------------------------
 
@@ -2595,6 +2619,9 @@ class MainWindow(QMainWindow):
                 self.review.import_docs[value] = self.type_store().read(
                     Path(candidate.path)
                 )
+                self.review.import_images[value] = self.local_images(
+                    self.review.import_docs[value]
+                )
             except Exception as error:  # noqa: BLE001 - shown to the user
                 self.statusBar().showMessage(f"Cannot read the definition: {error}")
                 return
@@ -2631,6 +2658,18 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage("Library definition downloaded.")
         self._apply_type_choice(key, value)
+
+    def local_images(self, doc) -> dict[str, str]:
+        """Local front/rear image files of a definition, by side."""
+        store = self.type_store()
+        manufacturer = str(doc.get("manufacturer") or "")
+        slug = str(doc.get("slug") or "")
+        result = {}
+        for side in IMAGE_SIDES:
+            found = find_image(store, manufacturer, slug, side)
+            if found is not None:
+                result[side] = str(found)
+        return result
 
     def _apply_type_choice(self, key: str, value: str) -> None:
         self.review.set_choice("type", key, value)
@@ -2669,6 +2708,9 @@ class MainWindow(QMainWindow):
         if value in self.review.import_docs:
             try:
                 self.review.import_docs[value] = self.type_store().read(path)
+                self.review.import_images[value] = self.local_images(
+                    self.review.import_docs[value]
+                )
             except Exception:  # noqa: BLE001 - the previous version stays
                 pass
             self.on_detail_changed()

@@ -6,12 +6,78 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.3.0
+
+### Summary
+
+- Milestone M13 (NetBox-complete device types): local definitions keep the
+	devicetype-library form but may carry every NetBox 4.7 device type field
+	and template kind (owner, default platform, tags, custom fields, cooling,
+	end of life, images, front/rear port mappings, cooling intakes and
+	outflows). The editor offers NetBox objects as drop-downs read from
+	NetBox, with **New...** dialogs that create manufacturers, platforms,
+	owners, owner groups, tags and inventory item roles after confirmation.
+	The import writes all fields, templates and images. The library is only
+	read; sites and device roles are never created.
+
+### Added
+
+- M13 slice 1: local device type files may carry every NetBox 4.7 device type
+	field (owner, default platform, tags, custom fields, cooling method, end of
+	life, exclude from utilization) and every template kind and field,
+	including cooling intakes and outflows, interface channels and parents,
+	bay states, inventory item roles and components. Validation uses the
+	devicetype-library schema extended with NetBox field metadata, bundled
+	from the API of NetBox 4.7.3 (`tools/update_netbox_metadata.py`). The
+	library itself is only read.
+- M13 slice 2: the NetBox catalog for the editor's drop-downs
+	(manufacturers, platforms, owners, owner groups, tags, inventory item
+	roles and the custom fields of device types, read-only and paginated) and
+	"New ..." dialogs that create such an object in NetBox right away: no
+	duplicates (an existing object is selected instead), interrupted creates
+	looked up, read back and saved to the write history.
+- M13 slice 3: the device type editor offers manufacturer, owner and default
+	platform (and inventory item roles and manufacturers) as drop-downs from
+	NetBox with **New...**, tags as chips with a picker and **New tag...**, a
+	custom field editor per NetBox definition, and front/rear images kept
+	under `elevation-images/<Manufacturer>/<slug>.front|rear.<ext>` (copied
+	when the definition is saved, moved with renames, removed with it).
+	References between components (power port, parent, bridge, port
+	mappings, cooling intake, inventory parent and component) are drop-downs
+	of the definition's own components and are validated; references NetBox
+	does not know are warnings. **Reload from NetBox** reads the lists in the
+	background; they are also read when the editor opens.
+- M13 slice 4: the device type import sends every NetBox field (owner,
+	default platform and tags looked up by name or slug, custom fields, cooling
+	method, end of life, exclude from utilization) and creates all template
+	kinds in dependency order: front ports with their rear port mappings,
+	cooling intakes and outflows, interface parents and bridges, inventory
+	item hierarchies with roles, manufacturers and components. Local front
+	and rear images are uploaded after the templates (multipart PATCH).
+	References NetBox does not have stop that import before anything is
+	written, in dry runs too. Front/rear ports no longer block an import.
+- Manual: new page *NetBox fields* (drop-downs, New dialogs, tags, images,
+	custom fields) and updated editor, folder and import pages with demo
+	screenshots of the NetBox section and the New owner dialog.
+
 ### Changed
 
-- Device type editor: the heights of Attributes, Comments, Components and
+- Device type editor: the heights of Attributes, Comments, NetBox, Components and
 	Validation are set by dragging the lines between them; the section
 	heights, the tree width and the window size and position are remembered
 	(`[ui]` in the configuration). Saving the theme keeps these values.
+
+### Validation
+
+- Offline gate: 690 passed, 2 skipped; Ruff lint and format pass.
+- Live on the developer workstation (NetBox 4.7.3, 2026-11-17): read-only
+	catalog check, then an approved write test: owner group, owner and tag
+	created through the New dialog functions, and a test device type imported
+	with owner, tag, image, power outlet, interface parent and a front/rear
+	port mapping, all verified; a second run reused the slug. UniFi was not
+	touched. The test objects stay in NetBox.
+- Not imported: module bay types (a note says so).
+- Packaged builds of this version are not verified yet.
 
 ## v1.2.0
 

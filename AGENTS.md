@@ -16,8 +16,14 @@
 - Do not implement automatic deletions or silently create Custom Fields or
   device types. The only Custom Field the app may create is `firmware`;
   device types are created only from a chosen local or devicetype-library
-  definition, as a visible, selected and confirmed write step. Never create
-  manufacturers, sites or roles.
+  definition, as a visible, selected and confirmed write step.
+  Manufacturers, owners, owner groups, tags, platforms and inventory item
+  roles are created only through an explicit "New" dialog the user confirms
+  (immediate write, journaled, read back). Never create sites or device
+  roles.
+- The netbox-community devicetype-library is only read. Local device type
+  files keep its form (layout, file names, slugs) but may carry every field
+  NetBox supports.
 - Public internet sources (techspecs.ui.com, the GitHub devicetype-library)
   are read-only, used only on a user action or a Settings opt-in, and never
   receive data about the user's network beyond a model name or slug.

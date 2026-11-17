@@ -1,17 +1,22 @@
-"""Device type editor window (M12 slice 4).
+"""Device type editor window (M12 slice 4, M13 slice 3).
 
 Laid out like the manual window: the local type folder as a tree on the left
 (``device-types/<Manufacturer>/<file>``), the selected definition on the
 right. The definition can be edited as raw YAML or as tables with an
 explanation per field; both views edit the same document. Saving validates
-against the library schema and the CONTRIBUTING rules and writes the file
-under its library name. UniFi models can be completed from techspecs.ui.com.
+against the extended schema (library plus NetBox fields) and the formal
+library rules and writes the file under its library name. References to
+NetBox objects (manufacturer, owner, platform, tags, inventory item roles)
+are drop-downs from the NetBox catalog with **New...**; references between
+components are drop-downs of the definition's own components. Front and rear
+images are kept under ``elevation-images/<Manufacturer>/``. UniFi models can
+be completed from techspecs.ui.com.
 """
 
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from pathlib import Path
 
@@ -51,9 +56,13 @@ from unifi2netbox.config import (
 )
 from unifi2netbox.devicetypes import (
     ATTRIBUTES,
+    CATALOG_REFERENCES,
     COLUMN_HELP,
+    COMPONENT_TYPE_SECTIONS,
     COMPONENTS,
     FIELD_HELP,
+    IMAGE_SIDES,
+    SIBLING_REFERENCES,
     DeviceTypeError,
     Issue,
     LocalTypeStore,
@@ -61,17 +70,35 @@ from unifi2netbox.devicetypes import (
     dump_yaml,
     errors,
     field_spec,
+    find_image,
     load_yaml,
     new_document,
+    remove_image,
+    rename_images,
+    store_image,
     validate,
 )
 from unifi2netbox.gui_jobs import TaskRunner
+from unifi2netbox.gui_newobject import Creator, NewObjectDialog
+from unifi2netbox.gui_typefields import (
+    ChoiceCell,
+    CustomFieldsTable,
+    ImagePanel,
+    NewHandler,
+    TagEditor,
+    list_text,
+)
 from unifi2netbox.library import client
+from unifi2netbox.netbox_catalog import NetBoxCatalog, reference_issues
 from unifi2netbox.techspecs import TechSpec, fetch_url, lookup
 from unifi2netbox.typedraft import merge_spec
 
 PATH_ROLE = Qt.ItemDataRole.UserRole + 1
-_TABLE_ATTRIBUTES = tuple(name for name in ATTRIBUTES if name != "comments")
+# Shown in their own editors: comments, tags, custom fields and images.
+_OWN_EDITORS = ("comments", "tags", "custom_fields", "front_image", "rear_image")
+_TABLE_ATTRIBUTES = tuple(name for name in ATTRIBUTES if name not in _OWN_EDITORS)
+# (section, column) -> (options, catalog kind for New... or "").
+References = Callable[[str | None, str], tuple[tuple[str, ...], str] | None]
 
 
 def _base64(data: QByteArray) -> str:
@@ -114,15 +141,27 @@ def text_value(section: str | None, name: str, text: str):
 
 
 class _Cells:
-    """Read and write one table cell, plain or as a choice box."""
+    """Read and write one table cell: plain, a choice box or a reference."""
 
-    def __init__(self, table: QTableWidget) -> None:
+    def __init__(
+        self,
+        table: QTableWidget,
+        references: References | None = None,
+        on_new: NewHandler | None = None,
+    ) -> None:
         self.table = table
+        self.references = references
+        self.on_new = on_new
 
     def put(self, row: int, column: int, section, name, value, changed) -> None:
         spec = field_spec(section, name)
         text = value_text(value)
-        if spec.kind in ("enum", "boolean"):
+        reference = self.references(section, name) if self.references else None
+        if reference is not None:
+            options, kind = reference
+            cell = ChoiceCell(text, options, kind, self.on_new, changed)
+            self.table.setCellWidget(row, column, cell)
+        elif spec.kind in ("enum", "boolean"):
             box = QComboBox()
             choices = spec.choices if spec.kind == "enum" else ("true", "false")
             box.addItems(("",) + tuple(choices))
@@ -136,6 +175,8 @@ class _Cells:
 
     def get(self, row: int, column: int) -> str:
         widget = self.table.cellWidget(row, column)
+        if isinstance(widget, ChoiceCell):
+            return widget.text()
         if isinstance(widget, QComboBox):
             return widget.currentText()
         item = self.table.item(row, column)
@@ -147,10 +188,17 @@ class ComponentTable(QWidget):
 
     changed = Signal()
 
-    def __init__(self, section: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        section: str,
+        parent: QWidget | None = None,
+        references: References | None = None,
+        on_new: NewHandler | None = None,
+    ) -> None:
         super().__init__(parent)
         self.section = section
         self.columns = component_columns(section)
+        self.references = references
         self.originals: list = []
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 6, 0, 0)
@@ -169,7 +217,7 @@ class ComponentTable(QWidget):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.itemChanged.connect(lambda _i: self.changed.emit())
-        self.cells = _Cells(self.table)
+        self.cells = _Cells(self.table, references, on_new)
         buttons = QHBoxLayout()
         add = QPushButton("Add row")
         add.setObjectName(f"add_{section}")
@@ -219,6 +267,29 @@ class ComponentTable(QWidget):
                 result.append(item)
         return result, unchanged
 
+    def names(self) -> tuple[str, ...]:
+        if "name" not in self.columns:
+            return ()
+        column = self.columns.index("name")
+        names = (self.cells.get(row, column) for row in range(self.table.rowCount()))
+        return tuple(name.strip() for name in names if name.strip())
+
+    def refresh_references(self, columns: Iterable[str] | None = None) -> None:
+        """New drop-down options for reference columns; values are kept."""
+        if self.references is None:
+            return
+        wanted = set(self.columns if columns is None else columns)
+        for index, name in enumerate(self.columns):
+            if name not in wanted:
+                continue
+            reference = self.references(self.section, name)
+            if reference is None:
+                continue
+            for row in range(self.table.rowCount()):
+                widget = self.table.cellWidget(row, index)
+                if isinstance(widget, ChoiceCell):
+                    widget.set_options(reference[0])
+
     def add_row(self) -> None:
         self._append({})
         self.table.scrollToBottom()
@@ -248,8 +319,15 @@ class TableView(QWidget):
 
     changed = Signal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        on_new: NewHandler | None = None,
+        image_lookup=None,
+    ) -> None:
         super().__init__(parent)
+        self.catalog = NetBoxCatalog()
+        self.sections: dict[str, ComponentTable] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.attributes = QTableWidget(len(_TABLE_ATTRIBUTES), 3)
@@ -261,7 +339,7 @@ class TableView(QWidget):
         )
         self.attributes.setWordWrap(True)
         self.attributes.setMinimumHeight(60)
-        self.cells = _Cells(self.attributes)
+        self.cells = _Cells(self.attributes, self.reference, on_new)
         for row, name in enumerate(_TABLE_ATTRIBUTES):
             spec = field_spec(None, name)
             label = QTableWidgetItem(f"{name} *" if spec.required else name)
@@ -277,21 +355,44 @@ class TableView(QWidget):
         self.comments.setPlaceholderText(FIELD_HELP["comments"])
         self.comments.setMinimumHeight(40)
         self.comments.textChanged.connect(self.changed.emit)
+        self.tags = TagEditor(on_new)
+        self.tags.changed.connect(self.changed.emit)
+        self.images = ImagePanel(image_lookup)
+        self.images.changed.connect(self.changed.emit)
+        self.custom_fields = CustomFieldsTable()
+        self.custom_fields.changed.connect(self.changed.emit)
+        netbox = QWidget()
+        netbox.setObjectName("typeNetBox")
+        netbox_layout = QVBoxLayout(netbox)
+        netbox_layout.setContentsMargins(0, 0, 0, 0)
+        tags_row = QHBoxLayout()
+        tags_row.addWidget(QLabel("Tags"))
+        tags_row.addWidget(self.tags, 1)
+        netbox_layout.addLayout(tags_row)
+        netbox_layout.addWidget(self.images)
+        netbox_layout.addWidget(
+            _label(
+                "Custom fields NetBox defines for device types "
+                "(Reload from NetBox to update):",
+                "caption",
+            )
+        )
+        netbox_layout.addWidget(self.custom_fields, 1)
         self.tabs = QTabWidget()
         self.tabs.setObjectName("typeComponents")
-        self.sections: dict[str, ComponentTable] = {}
         for section in COMPONENTS:
-            table = ComponentTable(section)
-            table.changed.connect(self._section_changed)
+            table = ComponentTable(section, None, self.reference, on_new)
+            table.changed.connect(lambda s=section: self._section_changed(s))
             self.sections[section] = table
             self.tabs.addTab(table, section)
-        # Attributes, comments and components: heights set by dragging.
+        # Attributes, comments, NetBox and components: heights set by dragging.
         self.splitter = QSplitter(Qt.Orientation.Vertical)
         self.splitter.setObjectName("typeTableSplitter")
         self.splitter.setChildrenCollapsible(False)
         for title, widget, stretch in (
             ("Attributes (* required)", self.attributes, 3),
             ("Comments", self.comments, 1),
+            ("NetBox: tags, images, custom fields", netbox, 2),
             ("Components", self.tabs, 4),
         ):
             section = QWidget()
@@ -301,7 +402,7 @@ class TableView(QWidget):
             section_layout.addWidget(widget, 1)
             self.splitter.addWidget(section)
             self.splitter.setStretchFactor(self.splitter.count() - 1, stretch)
-        self.splitter.setSizes([280, 110, 330])
+        self.splitter.setSizes([250, 70, 210, 300])
         layout.addWidget(self.splitter)
         self.base = CommentedMap()
 
@@ -317,8 +418,21 @@ class TableView(QWidget):
         self.comments.blockSignals(True)
         self.comments.setPlainText(value_text(doc.get("comments")).rstrip("\n"))
         self.comments.blockSignals(False)
+        self.tags.set_options(self.catalog.names("tags"))
+        self.tags.blockSignals(True)
+        self.tags.set_tags(doc.get("tags") or ())
+        self.tags.blockSignals(False)
+        self.images.show_for(
+            str(doc.get("manufacturer") or ""), str(doc.get("slug") or "")
+        )
+        custom = doc.get("custom_fields")
+        self.custom_fields.set_fields(
+            self.catalog.custom_fields, custom if isinstance(custom, dict) else {}
+        )
         for section, table in self.sections.items():
             table.set_rows(doc.get(section) or ())
+        for table in self.sections.values():
+            table.refresh_references()
         self._update_tab_titles()
         first = next(
             (i for i, s in enumerate(COMPONENTS) if doc.get(s)),
@@ -345,6 +459,33 @@ class TableView(QWidget):
             doc["comments"] = comments + ("\n" if "\n" in comments else "")
         else:
             doc.pop("comments", None)
+        tags = list(self.tags.tags)
+        if [str(tag) for tag in doc.get("tags") or ()] != tags:
+            if tags:
+                doc["tags"] = tags
+            else:
+                doc.pop("tags", None)
+        original_custom = doc.get("custom_fields")
+        original_texts = {
+            name: list_text(value)
+            for name, value in (
+                original_custom.items() if isinstance(original_custom, dict) else ()
+            )
+        }
+        texts = {k: v for k, v in self.custom_fields.texts().items() if v}
+        if texts != original_texts:
+            values = self.custom_fields.values()
+            if values:
+                doc["custom_fields"] = values
+            else:
+                doc.pop("custom_fields", None)
+        for side in IMAGE_SIDES:
+            name = f"{side}_image"
+            flag = self.images.flag(side, doc.get(name))
+            if flag is None:
+                doc.pop(name, None)
+            elif flag != doc.get(name):
+                doc[name] = flag
         for section, table in self.sections.items():
             rows, unchanged = table.rows()
             if unchanged and len(rows) == len(doc.get(section) or ()):
@@ -355,7 +496,51 @@ class TableView(QWidget):
                 doc.pop(section, None)
         return doc
 
-    def _section_changed(self) -> None:
+    def reference(self, section: str | None, name: str):
+        """Options of a reference column, or None for ordinary columns."""
+        kind = CATALOG_REFERENCES.get((section, name))
+        if kind is not None:
+            return self.catalog.names(kind), kind
+        target = SIBLING_REFERENCES.get((section, name))
+        if target is not None:
+            table = self.sections.get(target)
+            return (table.names() if table else ()), ""
+        if (section, name) == ("inventory-items", "component_name"):
+            names: list[str] = []
+            for target in COMPONENT_TYPE_SECTIONS.values():
+                table = self.sections.get(target)
+                names += table.names() if table else ()
+            return tuple(names), ""
+        return None
+
+    def set_catalog(self, catalog: NetBoxCatalog) -> None:
+        """New drop-down lists and custom fields; the edited values stay."""
+        self.catalog = catalog
+        for row, name in enumerate(_TABLE_ATTRIBUTES):
+            widget = self.attributes.cellWidget(row, 1)
+            reference = self.reference(None, name)
+            if isinstance(widget, ChoiceCell) and reference is not None:
+                widget.set_options(reference[0])
+        self.tags.set_options(catalog.names("tags"))
+        texts = self.custom_fields.texts()
+        self.custom_fields.blockSignals(True)
+        self.custom_fields.set_fields(
+            catalog.custom_fields, {k: v for k, v in texts.items() if v}
+        )
+        self.custom_fields.blockSignals(False)
+        for table in self.sections.values():
+            table.refresh_references(
+                column
+                for section, column in CATALOG_REFERENCES
+                if section == table.section
+            )
+
+    def _section_changed(self, section: str) -> None:
+        for (owner, column), target in SIBLING_REFERENCES.items():
+            if target == section:
+                self.sections[owner].refresh_references([column])
+        if section in COMPONENT_TYPE_SECTIONS.values():
+            self.sections["inventory-items"].refresh_references(["component_name"])
         self._update_tab_titles()
         self.changed.emit()
 
@@ -377,9 +562,16 @@ class DeviceTypeEditor(QDialog):
         pool: QThreadPool,
         parent: QWidget | None = None,
         settings_path: Path | None = None,
+        catalog_loader: Callable[[], NetBoxCatalog] | None = None,
+        creator: Creator | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings_path = settings_path
+        self.pool = pool
+        self.catalog = NetBoxCatalog()
+        self.catalog_loader = catalog_loader
+        self.creator = creator
+        self.saved_key = ("", "")
         self._layout_restored = False
         self.setObjectName("typeEditor")
         self.setWindowTitle("Device types")
@@ -394,6 +586,8 @@ class DeviceTypeEditor(QDialog):
         self._loading = False
         self.runner = TaskRunner(pool, self)
         self.runner.finished.connect(self._lookup_finished)
+        self.catalog_runner = TaskRunner(pool, self)
+        self.catalog_runner.finished.connect(self._catalog_finished)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -408,6 +602,7 @@ class DeviceTypeEditor(QDialog):
             ("delete", "Delete", self.delete),
             ("validate", "Validate", self.run_validation),
             ("folder", "Open folder", self.open_folder),
+            ("catalog", "Reload from NetBox", self.load_catalog),
         ):
             button = QPushButton(text)
             button.setObjectName(f"typeEditor_{name}")
@@ -415,6 +610,17 @@ class DeviceTypeEditor(QDialog):
             button.clicked.connect(slot)
             self.buttons[name] = button
             bar.addWidget(button)
+        self.buttons["catalog"].setEnabled(catalog_loader is not None)
+        self.buttons["catalog"].setToolTip(
+            "Read manufacturers, owners, platforms, tags, inventory item roles "
+            "and custom fields from NetBox (read-only)"
+        )
+        self.catalog_status = _label("", "caption")
+        self.catalog_status.setObjectName("typeCatalogStatus")
+        self.catalog_status.setText(
+            "NetBox lists not loaded." if catalog_loader else "NetBox not configured."
+        )
+        bar.addWidget(self.catalog_status)
         bar.addStretch()
         self.yaml_button = QPushButton("YAML")
         self.table_button = QPushButton("Table")
@@ -462,7 +668,12 @@ class DeviceTypeEditor(QDialog):
         self.notes.setObjectName("typeNotes")
         right_layout.addWidget(self.notes)
         self.stack = QStackedWidget()
-        self.table_view = TableView()
+        self.table_view = TableView(
+            on_new=self.new_object if creator is not None else None,
+            image_lookup=lambda manufacturer, slug, side: find_image(
+                self.store, manufacturer, slug, side
+            ),
+        )
         self.table_view.changed.connect(self._edited)
         self.yaml_view = QPlainTextEdit()
         self.yaml_view.setObjectName("typeYaml")
@@ -564,6 +775,32 @@ class DeviceTypeEditor(QDialog):
         self._loading = False
         self._sync_mode_buttons()
 
+    def set_catalog(self, catalog: NetBoxCatalog) -> None:
+        self.catalog = catalog
+        self.table_view.set_catalog(catalog)
+        if self.doc:
+            self.run_validation()
+
+    def load_catalog(self) -> None:
+        """Read the NetBox drop-down lists in the background."""
+        if self.catalog_loader is None or self.catalog_runner.busy:
+            return
+        self.buttons["catalog"].setEnabled(False)
+        self.catalog_status.setText("Reading NetBox lists...")
+        self.catalog_runner.start(self.catalog_loader)
+
+    def new_object(self, kind: str, target) -> None:
+        """Open the New dialog for a NetBox object and select the result."""
+        if self.creator is None:
+            return
+        dialog = NewObjectDialog(
+            kind, self.catalog, self.creator, self.pool, self, name=target.text()
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.created:
+            self.set_catalog(dialog.catalog)
+            created = dialog.created
+            target.set_text(created.slug if kind == "tags" else created.name)
+
     # -- actions -------------------------------------------------------------------
 
     def new_type(self) -> None:
@@ -582,7 +819,7 @@ class DeviceTypeEditor(QDialog):
         except DeviceTypeError as error:
             self._show_issues((Issue("error", "", str(error)),))
             return False
-        issues = validate(doc, target)
+        issues = self.issues_for(doc, target)
         self._show_issues(issues)
         problems = errors(issues)
         if problems:
@@ -598,9 +835,12 @@ class DeviceTypeEditor(QDialog):
         except (DeviceTypeError, OSError) as error:
             self._show_issues((Issue("error", "file", str(error)),))
             return False
+        image_problem = self._save_images(doc)
         self.reload_tree()
         self._show_document(self.store.read(path), path, ())
         self._select_tree(path)
+        if image_problem:
+            self._show_issues((Issue("error", "images", image_problem),))
         self.saved.emit(path)
         return True
 
@@ -615,11 +855,13 @@ class DeviceTypeEditor(QDialog):
         answer = QMessageBox.question(
             self,
             "Delete device type",
-            f"Delete {self.path.name} from the local type folder?",
+            f"Delete {self.path.name} and its images from the local type folder?",
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
         self.store.delete(self.path)
+        for side in IMAGE_SIDES:
+            remove_image(self.store, *self.saved_key, side)
         self.dirty = False
         self.reload_tree()
         self._show_document(CommentedMap(), None, ("The file was deleted.",))
@@ -634,7 +876,11 @@ class DeviceTypeEditor(QDialog):
             target = self.path or self.store.path_for(doc)
         except DeviceTypeError:
             target = None
-        self._show_issues(validate(doc, target))
+        self._show_issues(self.issues_for(doc, target))
+
+    def issues_for(self, doc, target: Path | None) -> tuple[Issue, ...]:
+        """Validation plus references the NetBox catalog does not know."""
+        return validate(doc, target) + reference_issues(doc, self.catalog)
 
     def open_folder(self) -> None:
         self.store.folder.mkdir(parents=True, exist_ok=True)
@@ -707,6 +953,12 @@ class DeviceTypeEditor(QDialog):
         self._loading = True
         self.doc = doc
         self.path = path
+        self.saved_key = (
+            (str(doc.get("manufacturer") or ""), str(doc.get("slug") or ""))
+            if path is not None
+            else ("", "")
+        )
+        self.table_view.images.clear_pending()
         self.table_view.set_document(doc)
         self.yaml_view.setPlainText(dump_yaml(doc) if doc else "")
         self.stack.setCurrentIndex(0 if self.mode == "table" else 1)
@@ -720,7 +972,7 @@ class DeviceTypeEditor(QDialog):
                 target = path or self.store.path_for(doc)
             except DeviceTypeError:
                 target = None
-            self._show_issues(validate(doc, target))
+            self._show_issues(self.issues_for(doc, target))
         else:
             self.issues.clear()
 
@@ -750,6 +1002,41 @@ class DeviceTypeEditor(QDialog):
         except DeviceTypeError:
             pass
         self._update_title()
+
+    def _save_images(self, doc) -> str:
+        """Move images to a new name and apply the pending choices."""
+        key = (str(doc.get("manufacturer") or ""), str(doc.get("slug") or ""))
+        try:
+            rename_images(self.store, self.saved_key, key)
+            for side, choice in self.table_view.images.pending.items():
+                if isinstance(choice, Path):
+                    store_image(self.store, *key, side, choice)
+                else:
+                    remove_image(self.store, *key, side)
+        except (DeviceTypeError, OSError) as error:
+            return f"The images were not saved: {error}"
+        return ""
+
+    def _catalog_finished(self, result: object) -> None:
+        self.buttons["catalog"].setEnabled(True)
+        if not isinstance(result, NetBoxCatalog):
+            self.catalog_status.setText(f"NetBox lists not loaded: {result}")
+            return
+        self.set_catalog(result)
+        counts = ", ".join(
+            f"{len(result.items(kind))} {label}"
+            for kind, label in (
+                ("manufacturers", "manufacturers"),
+                ("owners", "owners"),
+                ("platforms", "platforms"),
+                ("tags", "tags"),
+            )
+        )
+        text = f"NetBox: {counts}, {len(result.custom_fields)} custom fields."
+        if result.errors:
+            text += f" Not readable: {'; '.join(result.errors)}"
+        self.catalog_status.setText(text)
+        self.catalog_status.setToolTip(text)
 
     def _confirm_discard(self) -> bool:
         if not self.dirty:
@@ -850,6 +1137,8 @@ class DeviceTypeEditor(QDialog):
     def showEvent(self, event) -> None:  # noqa: N802 - Qt override
         if not self._layout_restored:
             self.restore_layout()
+        if self.catalog_loader is not None and not self.catalog.loaded:
+            self.load_catalog()
         super().showEvent(event)
 
     def hideEvent(self, event) -> None:  # noqa: N802 - Qt override

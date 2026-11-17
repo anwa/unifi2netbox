@@ -646,6 +646,38 @@ Slices:
 - [x] Complete the approved main merge and tag v1.2.0; build the Windows exe
   and installer from the tag. (2026-11-16; see `docs/DEPLOYMENT.md`.)
 
+## M13: NetBox-Complete Device Types -> v1.3.0
+
+Branch `feature/netbox-device-types`. Decisions (2026-11-17, user):
+
+- The devicetype-library is only read (search source). Local files keep its
+  form (YAML layout, file names, slugs) but may carry every NetBox 4.7 device
+  type field: owner, default platform, tags, custom fields, cooling method,
+  end of life, exclude from utilization, front/rear images.
+- References to NetBox objects are drop-downs read from NetBox; "New..."
+  dialogs create manufacturers, owners (with owner groups), tags, platforms
+  and inventory item roles immediately after confirmation.
+- All template kinds and fields are supported, including front/rear ports
+  with mappings and cooling intakes/outflows; images are uploaded on import.
+
+Slices:
+
+- [x] 1. NetBox metadata (bundled from OPTIONS) and the extended schema.
+  (1.2.2, 2026-11-17: metadata of NetBox 4.7.3, 19 endpoints; library files
+  still round-trip byte-identical.)
+- [x] 2. NetBox catalog reader and "New" dialogs.
+  (1.2.3, 2026-11-17: live catalog read: 3 manufacturers, no platforms,
+  owners, owner groups, tags, roles or device type custom fields yet.)
+- [x] 3. Editor: NetBox fields, drop-downs, tags, custom fields, images,
+  all component tabs.
+- [x] 4. Import of all fields, references, templates and images.
+- [x] 5. Documentation, screenshots, live checks and approved tests.
+
+- [x] Obtain explicit merge approval; prepare version 1.3.0. (Approved
+  2026-11-17.)
+- [ ] Complete the approved main merge and tag v1.3.0; build the Windows exe
+  and installer from the tag.
+
 ## Security and Configuration
 
 Explicit URL schemes; no HTTP downgrade. TLS verification defaults on, with per-

@@ -236,6 +236,8 @@ class ReviewState:
         self.type_labels: dict[str, str] = {}
         # Loaded definitions of import choices and deselected imports.
         self.import_docs: dict[str, object] = {}
+        # Local front/rear image files per import choice ({side: path}).
+        self.import_images: dict[str, dict[str, str]] = {}
         self.import_deselected: set[str] = set()
         self.role_by_key: dict[str, str] = {}
         self.site_by_key: dict[str, str] = {}
@@ -1010,6 +1012,7 @@ class ReviewState:
             result.netbox_manufacturers if result else (),
             result.netbox_type_records if result else (),
             self.import_deselected,
+            self.import_images,
         )
 
     def set_import_selected(self, choice: str, selected: bool) -> None:

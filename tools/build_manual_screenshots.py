@@ -24,6 +24,7 @@ if sys.platform == "win32":
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QThreadPool  # noqa: E402
+from PySide6.QtGui import QColor, QImage  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QLabel,
@@ -56,6 +57,7 @@ from unifi2netbox.details import (  # noqa: E402
 from unifi2netbox.devicetypes import LocalTypeStore  # noqa: E402
 from unifi2netbox.gui import MainWindow, SettingsDialog  # noqa: E402
 from unifi2netbox.gui_manual import ManualWindow  # noqa: E402
+from unifi2netbox.gui_newobject import NewObjectDialog  # noqa: E402
 from unifi2netbox.gui_review import ConfirmDialog, HistoryDialog  # noqa: E402
 from unifi2netbox.gui_typepicker import DeviceTypePicker  # noqa: E402
 from unifi2netbox.inventory import (  # noqa: E402
@@ -80,6 +82,11 @@ from unifi2netbox.library import (  # noqa: E402
 )
 from unifi2netbox.links import UPLINK, InventoryLink  # noqa: E402
 from unifi2netbox.netbox import ConnectionResult, ConnectionState  # noqa: E402
+from unifi2netbox.netbox_catalog import (  # noqa: E402
+    CatalogObject,
+    CustomFieldDef,
+    NetBoxCatalog,
+)
 from unifi2netbox.port_config import ACCESS, TAGGED, InventoryPortConfig  # noqa: E402
 from unifi2netbox.refresh import RefreshResult, RefreshStatus  # noqa: E402
 from unifi2netbox.techspecs import SpecPorts, TechSpec  # noqa: E402
@@ -409,6 +416,41 @@ LIBRARY_NAMES = (
 )
 
 
+# NetBox lists of the demo editor (fictional; nothing is read or written).
+DEMO_CATALOG = NetBoxCatalog(
+    {
+        "manufacturers": (
+            CatalogObject("1", "APC", "apc"),
+            CatalogObject("2", "Ubiquiti", "ubiquiti"),
+        ),
+        "owner_groups": (CatalogObject("3", "Operations"),),
+        "owners": (
+            CatalogObject("4", "Facilities", detail="Operations"),
+            CatalogObject("5", "Network team", detail="Operations"),
+        ),
+        "platforms": (CatalogObject("6", "UniFi OS", "unifi-os"),),
+        "tags": (
+            CatalogObject("7", "Access", "access", color="4caf50"),
+            CatalogObject("8", "Core", "core", color="2196f3"),
+        ),
+        "inventory_item_roles": (CatalogObject("9", "Fan tray", "fan-tray"),),
+    },
+    (
+        CustomFieldDef(
+            "support_contract",
+            "Support contract",
+            "select",
+            description="Support level of this model.",
+            choices=("gold", "silver"),
+        ),
+        CustomFieldDef(
+            "purchase_year", "Purchase year", "integer", description="First bought."
+        ),
+    ),
+    loaded=True,
+)
+
+
 def write_demo_types(folder: Path, config_path: Path) -> None:
     """A local definition (UA-Intercom) and a small fake library index."""
     device = InventoryDevice(
@@ -416,7 +458,17 @@ def write_demo_types(folder: Path, config_path: Path) -> None:
     )
     doc, _notes = draft_from_unifi(device, (), DEMO_SPEC)
     doc["airflow"] = "passive"
-    LocalTypeStore(folder / "devicetype-library").write(doc)
+    doc["owner"] = "Facilities"
+    doc["tags"] = ["access"]
+    doc["custom_fields"] = {"support_contract": "gold"}
+    doc["front_image"] = True
+    store = LocalTypeStore(folder / "devicetype-library")
+    store.write(doc)
+    image = QImage(320, 112, QImage.Format.Format_RGB32)
+    image.fill(QColor("#e8eaed"))
+    target = store.root / "elevation-images" / "Ubiquiti"
+    target.mkdir(parents=True, exist_ok=True)
+    image.save(str(target / f"{doc['slug']}.front.png"))
     entries = tuple(
         LibraryEntry(maker, name, f"{maker}/{name}.yaml", f"{index:040x}")
         for index, (maker, name) in enumerate(LIBRARY_NAMES, start=1)
@@ -583,11 +635,35 @@ class Shooter:
         picker.show()
         self.save(picker, "type-picker")
         picker.close()
+        window.type_catalog = lambda: DEMO_CATALOG
+        window.create_netbox_object = lambda *args: None
         editor = window.show_type_editor()
         editor.resize(WIDTH, HEIGHT)
         local = next(c for c in candidates if c.source == "local")
         editor.open_path(Path(local.path))
+        for _ in range(200):
+            self.app.processEvents()
+            if editor.catalog.loaded and not editor.catalog_runner.busy:
+                break
+        editor.set_catalog(DEMO_CATALOG)
+        editor.run_validation()
         self.save(editor, "type-editor-table")
+        sizes = editor.table_view.splitter.sizes()
+        total = sum(sizes)
+        editor.table_view.splitter.setSizes(
+            [total // 5, total // 10, total * 2 // 5, total - total * 7 // 10]
+        )
+        self.save(editor, "type-editor-netbox")
+        editor.table_view.splitter.setSizes(sizes)
+        dialog = NewObjectDialog(
+            "owners", DEMO_CATALOG, lambda *args: None, self.pool, editor
+        )
+        dialog.fields["name"].setText("Building services")
+        dialog.fields["group"].setCurrentText("Operations")
+        dialog.fields["description"].setText("Owns the door access hardware.")
+        dialog.show()
+        self.save(dialog, "type-new-owner")
+        dialog.close()
         editor.set_mode("yaml")
         self.save(editor, "type-editor-yaml")
         editor.set_mode("table")
