@@ -861,8 +861,20 @@ remembered in `[ui]`); the date picker for end of life and date custom
 fields; **Delete in NetBox** for NetBox-only templates against the
 API-shaped fake (children before parents, interrupted delete checked by a
 read, blocker for an inventory parent without its children). Screenshots
-rendered offscreen at 1280x720 and in the manual tool. Not checked yet on
-the live NetBox: a real template delete (needs the user's approval).
+rendered offscreen at 1280x720 and in the manual tool.
+
+Then, with the user's explicit approval, the assistant ran the delete test
+against the developer NetBox 4.7.3 (commit 5d4a2a8, application 1.4.2). Test
+type 378 had been removed meanwhile, so a new test type `u2n Test Box`
+(Ubiquiti, slug `ubiquiti-u2n-test-box`, no devices) was imported with
+`eth0` and `eth1` (type 379, verified). A guard allowed writes only to that
+type and its templates and only the delete of `eth1`. With `eth1` removed
+locally the comparison showed it as NetBox-only; **Delete in NetBox**
+passed the preflight without findings, the dry run wrote nothing, the sync
+deleted the template and read back verified (`eth0` only), and a second
+comparison was equal. Writes: one type, two interface templates created,
+one interface template deleted; all runs are in the write history. Type 379
+stays in NetBox as a test object.
 
 On 2026-11-17 the assistant checked M14 slices 1 to 5 (application 1.3.8
 working tree on `feature/netbox-type-sync`). Offline: tree refresh (show,
