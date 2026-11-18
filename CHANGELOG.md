@@ -6,6 +6,27 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Changed
+
+- Device type editor: Attributes, Comments, NetBox, Components and
+	Validation fold away with a click on their title (folded sections are
+	remembered), so the open sections get the room on small screens; empty
+	note lines take no room.
+
+### Fixed
+
+- The connection chips now notice a server that goes away: every
+	configured connection is checked again in the background every 60
+	seconds and right after a failed refresh, without the "Checking"
+	flicker; a restarting server turns red and back.
+- Device type editor: **Remove selected** removed nothing when a drop-down
+	cell had the focus (rows were not selected); it now removes the selected
+	rows or the row of the current cell. Right-click on any row offers
+	**Remove this row**, and right-clicking a drop-down opens the table's
+	menu (with **Use NetBox value**) instead of the text field's.
+- Device type editor: component and attribute rows are as high as their
+	drop-downs, so parent and bridge are no longer cut off.
+
 ## v1.4.0
 
 ### Summary

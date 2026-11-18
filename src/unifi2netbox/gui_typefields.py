@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 from ruamel.yaml.comments import CommentedMap
@@ -386,3 +387,56 @@ def typed_value(kind: str, text: str):
         except ValueError:
             return text
     return text
+
+
+class CollapsibleSection(QWidget):
+    """A titled section with an arrow button that folds its content away.
+
+    Folded, the section is only as high as its title, so the other sections
+    of the surrounding splitter get the room (small screens).
+    """
+
+    toggled = Signal(bool)  # True when folded
+
+    def __init__(self, key: str, title: str, content: QWidget) -> None:
+        super().__init__()
+        self.key = key
+        self.content = content
+        self.collapsed = False
+        self.expanded_height = 0
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(2)
+        self.header = QToolButton()
+        self.header.setObjectName(f"section_{key}")
+        self.header.setText(title)
+        self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.header.setArrowType(Qt.ArrowType.DownArrow)
+        self.header.setAutoRaise(True)
+        self.header.setProperty("role", "subheading")
+        font = self.header.font()
+        font.setBold(True)
+        self.header.setFont(font)
+        self.header.setToolTip("Click to fold or unfold this section")
+        self.header.clicked.connect(
+            lambda _c=False: self.set_collapsed(not self.collapsed)
+        )
+        layout.addWidget(self.header)
+        layout.addWidget(content, 1)
+
+    def folded_height(self) -> int:
+        margins = self.layout().contentsMargins()
+        return self.header.sizeHint().height() + margins.top() + margins.bottom() + 2
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        if collapsed == self.collapsed:
+            return
+        if collapsed:
+            self.expanded_height = self.height()
+        self.collapsed = collapsed
+        self.content.setVisible(not collapsed)
+        self.header.setArrowType(
+            Qt.ArrowType.RightArrow if collapsed else Qt.ArrowType.DownArrow
+        )
+        self.setMaximumHeight(self.folded_height() if collapsed else 16777215)
+        self.toggled.emit(collapsed)

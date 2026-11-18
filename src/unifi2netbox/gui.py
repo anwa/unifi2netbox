@@ -1088,6 +1088,11 @@ class SettingsDialog(QDialog):
             super().closeEvent(event)
 
 
+# Configured connections are checked again in the background at this interval,
+# so a chip turns red when a server goes away (and back when it returns).
+AUTO_CHECK_MS = 60_000
+
+
 class ConnectionPanel(QFrame):
     """Connection controller plus its detail card, shown from the header chip."""
 
@@ -1186,6 +1191,10 @@ class ConnectionPanel(QFrame):
             self.show_result(ConnectionResult(ConnectionState.ERROR, self.config_error))
         elif self.config.configured:
             QTimer.singleShot(0, self.recheck)
+        self.monitor = QTimer(self)
+        self.monitor.setInterval(AUTO_CHECK_MS)
+        self.monitor.timeout.connect(self.quiet_check)
+        self.monitor.start()
 
     @property
     def current_state(self) -> str:
@@ -1236,6 +1245,19 @@ class ConnectionPanel(QFrame):
         theme.set_variant(self.state, "badge", state_tone(state))
         self.status_changed.emit()
 
+    def quiet_check(self) -> None:
+        """Check again without showing 'Checking' (the chip keeps its state
+        until the result arrives)."""
+        if (
+            self.closing
+            or self.runner.busy
+            or self.config_error
+            or not self.config.configured
+        ):
+            return
+        self.runner.start(self.config)
+        self.activity_changed.emit()
+
     def recheck(self) -> None:
         if self.closing:
             return
@@ -1278,6 +1300,7 @@ class ConnectionPanel(QFrame):
     def stop_for_close(self) -> None:
         self.closing = True
         self.pending_check = False
+        self.monitor.stop()
         if self.runner.busy:
             self.details.setText("Finishing the connection check before closing...")
 
@@ -2374,6 +2397,9 @@ class MainWindow(QMainWindow):
         )
         self.update_check_action()
 
+    def connection_panels(self) -> tuple[ConnectionPanel, ...]:
+        return (self.netbox, self.unifi, self.protect, self.access, self.drive)
+
     def inventory_preview_finished(self, result: InventoryPreviewResult) -> None:
         self.last_result = result
         if result.difference_preview is not None:
@@ -2386,6 +2412,10 @@ class MainWindow(QMainWindow):
             tone = "danger" if result.status == "Error" else "warning"
             detail = result.detail_lines[0] if result.detail_lines else result.details
             self.set_banner(f"{result.status}: {detail}", tone)
+        if result.status != "Ready":
+            # A failed read often means a server went away: update the chips.
+            for panel in self.connection_panels():
+                panel.quiet_check()
         self.update_review()
         when = humanize_timestamp(result.last_updated)
         self.statusBar().showMessage(f"Last refresh {when}  ·  {self.path}")
