@@ -12,6 +12,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	Validation fold away with a click on their title (folded sections are
 	remembered), so the open sections get the room on small screens; empty
 	note lines take no room.
+- Device type editor: end of life and date custom fields have a date
+	picker (calendar button, **×** removes the date).
+- Device type sync: a template that exists only in NetBox can be deleted
+	there with the new choice **Delete in NetBox** (never preselected, not by
+	Overwrite NetBox or Sync all). Deletes run dependents first, an
+	interrupted delete is checked by reading the object, and deleting an
+	inventory item without its child items is blocked (NetBox would delete
+	them with it). Existing devices keep their components.
 
 ### Fixed
 

@@ -30,8 +30,9 @@ where definitions are kept and how to contribute them to the library.
 - The app creates a device type in NetBox only when you chose it for a new
   device and the import step is checked, or when you sync a definition that
   NetBox does not have. It changes an existing type only through a confirmed
-  sync; it never deletes types or templates and never changes existing
-  devices.
+  sync; it never deletes device types, deletes a template only when you
+  choose **Delete in NetBox** for it in the sync, and never changes
+  existing devices.
 - Manufacturers, owners, owner groups, tags, platforms and inventory item
   roles are created only from a **New...** dialog in the editor, after you
   click **Create** there. The app never creates sites or device roles.

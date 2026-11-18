@@ -115,8 +115,8 @@ class SyncDialog(QDialog):
             f"{found.device_count if found else 0} device(s). "
             "Local writes the file's value to NetBox, NetBox takes NetBox's value "
             "into the file. Values missing in the file are never cleared in "
-            "NetBox, and templates only in NetBox are never deleted. Existing "
-            "devices keep their components."
+            "NetBox. A template only in NetBox is deleted only when you choose "
+            "Delete in NetBox for it. Existing devices keep their components."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -324,7 +324,7 @@ class SyncAllDialog(QDialog):
         layout = QVBoxLayout(self)
         intro = QLabel(
             "Yellow types overwrite NetBox with the local values (missing values "
-            "are never cleared, NetBox-only templates never deleted); red types "
+            "are never cleared, nothing is deleted); red types "
             "are imported. To decide per value, use Sync with NetBox on one type."
         )
         intro.setWordWrap(True)

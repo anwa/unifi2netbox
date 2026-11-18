@@ -658,7 +658,9 @@ class Shooter:
                 break
         editor.set_catalog(DEMO_CATALOG)
         editor.run_validation()
+        editor.table_view.folds["netbox"].set_collapsed(True)
         self.save(editor, "type-editor-table")
+        editor.table_view.folds["netbox"].set_collapsed(False)
         sizes = editor.table_view.splitter.sizes()
         total = sum(sizes)
         editor.table_view.splitter.setSizes(

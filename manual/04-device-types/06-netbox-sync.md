@@ -31,13 +31,17 @@ differences, one row each, with a choice:
 - **NetBox**: the file gets NetBox's value. A template only in NetBox is
   added to the file; one only in the file is removed from it.
 - **Skip**: nothing changes.
+- **Delete in NetBox** (only for a template that exists only in NetBox):
+  the template is deleted in NetBox. It is never preselected, not even by
+  **Overwrite NetBox**. Existing devices keep the components that were
+  made from it. An inventory item can only be deleted together with its
+  child items (NetBox would delete them with it).
 
 ![Sync with NetBox](../images/type-sync.png)
 
 **Overwrite NetBox** selects Local wherever possible, **Take all from
-NetBox** the other way. Two rules always hold: a value missing in the file
-never clears the NetBox value, and a template that exists only in NetBox is
-never deleted. A definition that is not in NetBox yet is imported instead.
+NetBox** the other way. A value missing in the file never clears the
+NetBox value. A definition that is not in NetBox yet is imported instead.
 
 **Apply** first checks NetBox (read only):
 
@@ -72,8 +76,9 @@ warnings per type; blocked types are skipped. To decide per value, use
 
 - Field changes (model, part number, height, airflow, weight, owner, tags,
   ...) apply at once to every device of the type.
-- Template changes apply only to devices created later. NetBox does not add
-  or remove components of existing devices, and neither does the app.
+- Template changes, including deleted templates, apply only to devices
+  created later. NetBox does not add or remove components of existing
+  devices, and neither does the app.
 - NetBox refuses changes that do not fit placed devices; the app's checks
   catch the usual cases before anything is written.
 - A device type that devices use cannot be deleted, and the app never

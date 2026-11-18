@@ -817,3 +817,32 @@ def test_sections_fold_away_and_are_remembered(qtbot, store, tmp_path):
     assert not second.table_view.folds["netbox"].collapsed
     assert second.table_view.splitter.sizes()[2] >= 100
     second.hide()
+
+
+def test_dates_are_picked_from_a_calendar_or_cleared(editor, store):
+    from PySide6.QtCore import QDate
+
+    from unifi2netbox.gui_typeeditor import _TABLE_ATTRIBUTES
+    from unifi2netbox.gui_typefields import DateCell
+    from unifi2netbox.netbox_catalog import CustomFieldDef, NetBoxCatalog
+
+    editor.set_catalog(
+        NetBoxCatalog(
+            custom_fields=(CustomFieldDef("bought", "Bought", "date"),), loaded=True
+        )
+    )
+    editor.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    view = editor.table_view
+    cell = view.attributes.cellWidget(_TABLE_ATTRIBUTES.index("end_of_life"), 1)
+    assert isinstance(cell, DateCell) and cell.text() == ""
+    calendar = cell.calendar()
+    calendar.clicked.emit(QDate(2031, 12, 31))
+    assert view.document()["end_of_life"] == "2031-12-31"
+    assert editor.dirty
+    cell.clear.click()
+    assert "end_of_life" not in view.document()
+
+    bought = view.custom_fields.cellWidget(0, 1)
+    assert isinstance(bought, DateCell)
+    bought.calendar().clicked.emit(QDate(2024, 2, 29))
+    assert dict(view.document()["custom_fields"]) == {"bought": "2024-02-29"}

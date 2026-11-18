@@ -632,6 +632,20 @@ class RequestsNetBoxWriteBackend:
                 f"NetBox upload failed with HTTP {response.status_code}: {detail}"
             )
 
+    def delete_object(self, path: str) -> None:
+        """DELETE one object; one that is already gone counts as deleted."""
+        response = self._request("DELETE", path)
+        if response.status_code in {200, 204, 404}:
+            return
+        if response.status_code in {502, 503, 504}:
+            raise AmbiguousWriteError(
+                f"NetBox or its proxy answered HTTP {response.status_code}"
+            )
+        detail = _response_error_detail(response)
+        raise WriteExecutionError(
+            f"NetBox delete failed with HTTP {response.status_code}: {detail}"
+        )
+
     def update_object(self, path: str, payload: dict[str, object]) -> None:
         response = self._request("PATCH", path, json=payload)
         if response.status_code not in {200, 204}:

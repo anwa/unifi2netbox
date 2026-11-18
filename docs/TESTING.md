@@ -851,6 +851,19 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-18 the assistant checked the usability fixes (application 1.4.2
+working tree on `fix/editor-usability`), offline: background connection
+checks turn a chip red when the server answers offline and green again,
+without a "Checking" state in between; **Remove selected** with a focused
+or current drop-down cell, **Remove this row** and right-clicks forwarded
+from drop-downs; row heights; folding sections (room goes to the open ones,
+remembered in `[ui]`); the date picker for end of life and date custom
+fields; **Delete in NetBox** for NetBox-only templates against the
+API-shaped fake (children before parents, interrupted delete checked by a
+read, blocker for an inventory parent without its children). Screenshots
+rendered offscreen at 1280x720 and in the manual tool. Not checked yet on
+the live NetBox: a real template delete (needs the user's approval).
+
 On 2026-11-17 the assistant checked M14 slices 1 to 5 (application 1.3.8
 working tree on `feature/netbox-type-sync`). Offline: tree refresh (show,
 Refresh, file watcher, changed open file), the bulk read and conversion of

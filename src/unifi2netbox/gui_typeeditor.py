@@ -110,6 +110,7 @@ from unifi2netbox.gui_typefields import (
     ChoiceCell,
     CollapsibleSection,
     CustomFieldsTable,
+    DateCell,
     ImagePanel,
     NewHandler,
     TagEditor,
@@ -283,6 +284,10 @@ class _Cells:
             cell = ChoiceCell(text, options, kind, self.on_new, changed)
             self.table.setCellWidget(row, column, cell)
             forward_context_menu(cell, self.table)
+        elif spec.kind == "date":
+            cell = DateCell(text, changed)
+            self.table.setCellWidget(row, column, cell)
+            forward_context_menu(cell, self.table)
         elif spec.kind in ("enum", "boolean"):
             box = QComboBox()
             choices = spec.choices if spec.kind == "enum" else ("true", "false")
@@ -298,7 +303,7 @@ class _Cells:
 
     def get(self, row: int, column: int) -> str:
         widget = self.table.cellWidget(row, column)
-        if isinstance(widget, ChoiceCell):
+        if isinstance(widget, ChoiceCell | DateCell):
             return widget.text()
         if isinstance(widget, QComboBox):
             return widget.currentText()
@@ -521,7 +526,9 @@ class ComponentTable(QWidget):
                 )
                 self.table.setItem(row, column, item)
             header = QTableWidgetItem("NetBox")
-            header.setToolTip("Only in NetBox; never deleted by a sync.")
+            header.setToolTip(
+                "Only in NetBox; deleted only by Delete in NetBox in the sync."
+            )
             self.table.setVerticalHeaderItem(row, header)
             self.ghosts.append(diff)
         self.table.blockSignals(False)
@@ -1796,10 +1803,12 @@ class DeviceTypeEditor(QDialog):
         self.netbox_types = result
         if result.loaded:
             self._status_parts["types"] = f"{len(result.types)} NetBox device types."
-        else:
+        elif result.errors:
             self._status_parts["types"] = (
                 f"NetBox device types not loaded: {'; '.join(result.errors)}"
             )
+        else:
+            self._status_parts["types"] = ""
         self._show_status()
         self._update_comparison()
         self.update_statuses()
