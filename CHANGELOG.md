@@ -6,6 +6,16 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.4.2
+
+### Summary
+
+- Usability fixes: connection chips notice servers that go away, the device
+	type editor's sections fold away for small screens, dates have a picker,
+	rows can be removed reliably and are high enough for their drop-downs,
+	and a template that exists only in NetBox can be deleted through the sync
+	when chosen explicitly.
+
 ### Changed
 
 - Device type editor: Attributes, Comments, NetBox, Components and
@@ -20,6 +30,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	interrupted delete is checked by reading the object, and deleting an
 	inventory item without its child items is blocked (NetBox would delete
 	them with it). Existing devices keep their components.
+
+### Validation
+
+- Offline gate: 722 passed, 2 skipped; Ruff lint and format pass.
+- Live (NetBox 4.7.3, 2026-11-18): approved template delete test on a new
+	test type (import verified, Delete in NetBox verified, second comparison
+	equal); UniFi was not touched.
+- Packaged builds of this version are not verified beyond the smoke test.
 
 ### Fixed
 
