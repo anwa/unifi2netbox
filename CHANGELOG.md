@@ -6,6 +6,53 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.4.2
+
+### Summary
+
+- Usability fixes: connection chips notice servers that go away, the device
+	type editor's sections fold away for small screens, dates have a picker,
+	rows can be removed reliably and are high enough for their drop-downs,
+	and a template that exists only in NetBox can be deleted through the sync
+	when chosen explicitly.
+
+### Changed
+
+- Device type editor: Attributes, Comments, NetBox, Components and
+	Validation fold away with a click on their title (folded sections are
+	remembered), so the open sections get the room on small screens; empty
+	note lines take no room.
+- Device type editor: end of life and date custom fields have a date
+	picker (calendar button, **×** removes the date).
+- Device type sync: a template that exists only in NetBox can be deleted
+	there with the new choice **Delete in NetBox** (never preselected, not by
+	Overwrite NetBox or Sync all). Deletes run dependents first, an
+	interrupted delete is checked by reading the object, and deleting an
+	inventory item without its child items is blocked (NetBox would delete
+	them with it). Existing devices keep their components.
+
+### Validation
+
+- Offline gate: 722 passed, 2 skipped; Ruff lint and format pass.
+- Live (NetBox 4.7.3, 2026-11-18): approved template delete test on a new
+	test type (import verified, Delete in NetBox verified, second comparison
+	equal); UniFi was not touched.
+- Packaged builds of this version are not verified beyond the smoke test.
+
+### Fixed
+
+- The connection chips now notice a server that goes away: every
+	configured connection is checked again in the background every 60
+	seconds and right after a failed refresh, without the "Checking"
+	flicker; a restarting server turns red and back.
+- Device type editor: **Remove selected** removed nothing when a drop-down
+	cell had the focus (rows were not selected); it now removes the selected
+	rows or the row of the current cell. Right-click on any row offers
+	**Remove this row**, and right-clicking a drop-down opens the table's
+	menu (with **Use NetBox value**) instead of the text field's.
+- Device type editor: component and attribute rows are as high as their
+	drop-downs, so parent and bridge are no longer cut off.
+
 ## v1.4.0
 
 ### Summary

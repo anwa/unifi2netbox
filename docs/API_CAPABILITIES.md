@@ -139,8 +139,10 @@ role changes `dcim/device-bays?device_id=`. Writes (only after the
 confirmed sync): `PATCH dcim/device-types/{id}` with the chosen fields
 (references by ID), `POST` of new templates (dependency order as on
 import), `PATCH` of changed templates and of front ports' `rear_ports`,
-`PATCH` of interface `parent`/`bridge`, multipart image upload. Never:
-deleting device types or templates, or changing devices.
+`PATCH` of interface `parent`/`bridge`, multipart image upload, and
+`DELETE` of a NetBox-only template only when the user chose **Delete in
+NetBox** for that row (dependents first; an interrupted delete is checked by
+reading the object). Never: deleting device types, or changing devices.
 
 ## Extended UniFi Details (M11)
 

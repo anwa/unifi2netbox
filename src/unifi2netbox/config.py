@@ -209,10 +209,16 @@ class UiConfig:
     # Device type editor window: geometry and splitter states (Qt, base64).
     type_editor_geometry: str = ""
     type_editor_splitters: str = ""
+    # Collapsed editor sections, comma separated (for example "comments").
+    type_editor_collapsed: str = ""
 
     def __post_init__(self) -> None:
         if self.theme not in THEME_CHOICES:
             raise ConfigError("Theme must be system, light or dark.")
+        if not isinstance(self.type_editor_collapsed, str) or not re.fullmatch(
+            r"[a-z,]{0,200}", self.type_editor_collapsed
+        ):
+            raise ConfigError("Saved window layout is invalid.")
         for value in (self.type_editor_geometry, self.type_editor_splitters):
             if (
                 not isinstance(value, str)

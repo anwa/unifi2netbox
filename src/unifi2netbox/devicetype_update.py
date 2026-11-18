@@ -9,10 +9,11 @@ position). Each item is decided:
 - ``netbox``: the local file gets the NetBox value (a NetBox-only row is
   added to it, a local-only row is removed from it).
 - ``skip``: nothing changes.
+- ``delete``: only for a template row that exists only in NetBox: it is
+  deleted in NetBox (never preselected, also not by **Overwrite NetBox**).
 
-A value missing in the file is never written as "clear" to NetBox, and a
-template that exists only in NetBox is never deleted. **Overwrite NetBox**
-decides ``local`` wherever that is possible.
+A value missing in the file is never written as "clear" to NetBox.
+**Overwrite NetBox** decides ``local`` wherever that is possible.
 
 ``execute_sync`` re-reads the type and its templates first and stops when
 NetBox changed since the comparison (drift), runs the preflight blockers,
@@ -74,12 +75,14 @@ from unifi2netbox.write_execute import AMBIGUOUS_CREATE_ERRORS
 LOCAL = "local"
 NETBOX = "netbox"
 SKIP = "skip"
+DELETE = "delete"
 FIELD = "field"
 OPERATION = "sync_device_type"
 CHOICE_LABELS = {
     LOCAL: "Local",
     NETBOX: "NetBox",
     SKIP: "Skip",
+    DELETE: "Delete in NetBox",
 }
 
 
@@ -97,7 +100,7 @@ class SyncItem:
     @property
     def choices(self) -> tuple[str, ...]:
         if self.kind == NETBOX_ONLY:
-            return (NETBOX, SKIP)  # never deleted in NetBox
+            return (NETBOX, SKIP, DELETE)  # delete only when chosen
         if self.kind == FIELD and self.local in (None, "", [], {}):
             return (NETBOX, SKIP)  # never "clear" in NetBox
         return (LOCAL, NETBOX, SKIP)
@@ -116,7 +119,10 @@ class SyncItem:
                 "NetBox: remove it from the file."
             )
         if self.kind == NETBOX_ONLY:
-            return "Only in NetBox (never deleted). NetBox: add it to the file."
+            return (
+                "Only in NetBox. NetBox: add it to the file. Delete in NetBox: "
+                "delete the template (existing devices keep their components)."
+            )
         if self.columns:
             return f"Differs in {', '.join(self.columns)}."
         return ""
@@ -145,7 +151,7 @@ def sync_items(comparison: TypeComparison) -> list[SyncItem]:
 
 
 def overwrite_decisions(items: Iterable[SyncItem]) -> dict[str, str]:
-    """Overwrite NetBox: local wherever possible, NetBox-only rows stay."""
+    """Overwrite NetBox: local wherever possible; nothing is deleted."""
     return {i.key: LOCAL if LOCAL in i.choices else SKIP for i in items}
 
 
@@ -160,6 +166,7 @@ class SyncPlan:
     updates: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
     mapping_fronts: tuple[str, ...] = ()
     images: tuple[tuple[str, str], ...] = ()  # (front_image, path)
+    deletes: tuple[tuple[str, str], ...] = ()  # NetBox-only rows to delete
     local_keys: tuple[str, ...] = ()  # items decided local (read-back)
     local_changed: bool = False
     device_count: int = 0
@@ -172,6 +179,7 @@ class SyncPlan:
             + len(self.updates)
             + len(self.mapping_fronts)
             + len(self.images)
+            + len(self.deletes)
         )
 
     def describe(self) -> list[str]:
@@ -186,6 +194,8 @@ class SyncPlan:
             lines.append(f"Update the port mappings of front port {front}")
         for name, _path in self.images:
             lines.append(f"Upload the {name.replace('_', ' ')}")
+        for section, key in self.deletes:
+            lines.append(f"Delete {section}: {key} in NetBox")
         if self.local_changed:
             lines.append("Update the local file with the NetBox values")
         return lines
@@ -203,6 +213,7 @@ def build_sync_plan(
     images = images or {}
     doc = copy.deepcopy(local)
     fields, creates, updates, fronts, uploads, local_keys = [], [], [], [], [], []
+    deletes = []
     local_changed = False
     for item in sync_items(comparison):
         choice = decisions.get(item.key, SKIP)
@@ -213,6 +224,14 @@ def build_sync_plan(
             _take_netbox(doc, item)
             continue
         local_keys.append(item.key)
+        if choice == DELETE:
+            if item.section == "port-mappings":
+                front = item.name.rsplit("/", 1)[0]
+                if front not in fronts:
+                    fronts.append(front)  # the file's mappings replace NetBox's
+            else:
+                deletes.append((item.section, item.name))
+            continue
         if item.section is None:
             if item.name in IMAGE_FIELDS:
                 side = item.name.split("_")[0]
@@ -241,6 +260,7 @@ def build_sync_plan(
         tuple(updates),
         tuple(fronts),
         tuple(uploads),
+        tuple(deletes),
         tuple(local_keys),
         local_changed,
         comparison.netbox.device_count,
@@ -551,6 +571,14 @@ def _write(plan, backend, ids, refs, manufacturer) -> list[str]:
                 )
             except NETWORK_ERRORS as error:
                 failures.append(f"{name}: {error}")
+    for section, key in _deletion_order(plan):
+        object_id = ids.get(section, {}).get(key)
+        if object_id is None:
+            failures.append(f"{key}: not found in NetBox.")
+            continue
+        problem = _delete(backend, f"{TEMPLATES[section]}{object_id}/")
+        if problem:
+            failures.append(f"{key}: {problem}")
     if plan.images:
         upload = getattr(backend, "upload_files", None)
         files = {name: Path(path) for name, path in plan.images}
@@ -561,6 +589,48 @@ def _write(plan, backend, ids, refs, manufacturer) -> list[str]:
         except (*NETWORK_ERRORS, OSError) as error:
             failures.append(f"images: {error}")
     return failures
+
+
+def _deletion_order(plan: SyncPlan) -> list[tuple[str, str]]:
+    """Dependents first: reverse creation order, inventory children first."""
+    parents = {
+        str(r.get("name")): str(r.get("parent") or "")
+        for r in plan.netbox_doc.get("inventory-items") or ()
+        if isinstance(r, Mapping)
+    }
+
+    def depth(name: str) -> int:
+        level, seen = 0, set()
+        while parents.get(name) and name not in seen:
+            seen.add(name)
+            name = parents[name]
+            level += 1
+        return level
+
+    order = {section: index for index, section in enumerate(ORDER)}
+
+    def key(item):
+        section, name = item
+        return (-order.get(section, 0), -depth(name))
+
+    return sorted(plan.deletes, key=key)
+
+
+def _delete(backend, path: str) -> str:
+    delete = getattr(backend, "delete_object", None)
+    if delete is None:
+        return "this backend cannot delete."
+    try:
+        delete(path)
+    except AMBIGUOUS_CREATE_ERRORS as error:
+        try:
+            gone = backend.read_object(path) is None
+        except NETWORK_ERRORS as lookup:
+            return f"delete interrupted ({error}) and the check failed ({lookup})."
+        return "" if gone else f"delete interrupted ({error}); it still exists."
+    except NETWORK_ERRORS as error:
+        return str(error)
+    return ""
 
 
 def _payload(section, item, doc, ids, refs, type_id):
@@ -618,6 +688,7 @@ def journal_sync(path: Path, outcomes: Iterable[NetworkOutcome], dry_run: bool):
 
 
 __all__ = [
+    "DELETE",
     "LOCAL",
     "NETBOX",
     "SKIP",

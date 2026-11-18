@@ -24,11 +24,12 @@ Open it with **Device types** in the header, **⋯ More > Device types...**, or
   - **Sync with NetBox** and **Sync all...** (see
     [Syncing with NetBox](06-netbox-sync.md)).
 
-Drag the lines between Attributes, Comments, NetBox, Components and
-Validation to
-change their heights, and the line next to the tree to change its width. The
-editor remembers these sizes and its window size and position for the next
-time.
+Click a section title (Attributes, Comments, NetBox, Components,
+Validation) to fold it away or open it again; folded sections give their
+room to the open ones, which helps on small screens. Drag the lines between
+the sections to change their heights, and the line next to the tree to
+change its width. The editor remembers folded sections, these sizes and its
+window size and position for the next time.
 
 ## New definitions
 
@@ -48,15 +49,18 @@ time.
   unit, yes/no) offer a list. **Manufacturer**, **owner** and **default
   platform** are drop-downs of the objects in NetBox; you can also type a
   name. **New...** creates the object in NetBox (see
-  [NetBox fields](05-netbox-fields.md)). End of life is a date
-  (`YYYY-MM-DD`).
+  [NetBox fields](05-netbox-fields.md)). End of life is a date: type it
+  (`YYYY-MM-DD`), pick it with the calendar button or remove it with
+  **×**. Date custom fields work the same way.
 - **Comments**: free text, for example the techspecs link.
 - **NetBox**: tags, front and rear image and custom fields (see
   [NetBox fields](05-netbox-fields.md)).
 - **Components**: one tab per template kind (console ports, power ports and
   outlets, interfaces, front and rear ports, port mappings, module and device
-  bays, inventory items, cooling intakes and outflows). **Add row** and
-  **Remove selected** edit the rows; hover a column header for its meaning.
+  bays, inventory items, cooling intakes and outflows). **Add row** adds a
+  row; **Remove selected** removes the selected rows, or the row you are
+  editing; right-click a row for **Remove this row**. Hover a column header
+  for its meaning.
   Connector, PoE and cooling types come as lists. Columns that name another
   component (an outlet's power port, an interface's parent or bridge, a port
   mapping's front and rear port, an outflow's cooling intake, an inventory

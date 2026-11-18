@@ -248,6 +248,38 @@ def test_stale_result_does_not_replace_new_settings(qtbot, tmp_path, pool):
     assert "Old result" not in window.details.text()
 
 
+def test_connections_are_rechecked_quietly_and_turn_red_when_down(
+    qtbot, tmp_path, pool
+):
+    from unifi2netbox import gui
+
+    up = [True]
+
+    def checker(config):
+        if up[0]:
+            return online(config)
+        return ConnectionResult(ConnectionState.OFFLINE, "Server is restarting.")
+
+    window = MainWindow(tmp_path / "config.toml", pool, checker, open_first_run=False)
+    qtbot.addWidget(window)
+    window.apply_config(NetBoxConfig("https://netbox.invalid", "token"))
+    qtbot.waitUntil(lambda: window.netbox.current_state == "Online")
+    panel = window.netbox
+    assert panel.monitor.isActive() and panel.monitor.interval() == gui.AUTO_CHECK_MS
+
+    up[0] = False
+    with qtbot.waitSignal(panel.runner.finished, timeout=5000):
+        panel.quiet_check()
+        assert panel.current_state == "Online"  # no "Checking" flicker
+    assert panel.current_state == "Offline"
+    assert window.netbox_chip.property("chip") == "danger"
+
+    up[0] = True
+    with qtbot.waitSignal(panel.runner.finished, timeout=5000):
+        panel.monitor.timeout.emit()
+    assert window.netbox_chip.property("chip") == "success"
+
+
 def test_dialog_close_waits_for_worker(qtbot, tmp_path, pool):
     release = Event()
     running = Event()

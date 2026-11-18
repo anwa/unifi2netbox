@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
-from PySide6.QtWidgets import QComboBox, QListWidget, QMessageBox
+from PySide6.QtWidgets import QComboBox, QListWidget, QMessageBox, QPushButton
 
 from unifi2netbox.config import DeviceTypesConfig
 from unifi2netbox.devicetypes import LocalTypeStore, load_yaml, new_document
@@ -710,3 +710,139 @@ def test_sync_buttons_open_the_right_dialog_and_save_netbox_values(
     window.close()
     window.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+
+
+# -- usability fixes (2026-11-18) ------------------------------------------------------
+
+
+def test_remove_selected_works_on_rows_of_drop_downs(editor, store):
+    editor.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    interfaces = editor.table_view.sections["interfaces"]
+    table = interfaces.table
+    # Clicking a drop-down does not select the row; the current cell counts.
+    table.clearSelection()
+    table.setCurrentCell(1, 0)
+    table.clearSelection()
+    editor.findChild(QPushButton, "remove_interfaces").click()
+    assert [i["name"] for i in editor.table_view.document()["interfaces"]] == [
+        "lan0",
+        "wlan1",
+    ]
+    table.selectRow(0)
+    interfaces.remove_rows()
+    assert [i["name"] for i in editor.table_view.document()["interfaces"]] == ["wlan1"]
+    assert editor.dirty
+
+
+def test_rows_are_high_enough_for_drop_downs(editor, store):
+    from unifi2netbox.gui_typefields import ChoiceCell
+
+    editor.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    table = editor.table_view.sections["interfaces"].table
+    cell = next(
+        table.cellWidget(0, c)
+        for c in range(table.columnCount())
+        if isinstance(table.cellWidget(0, c), ChoiceCell)
+    )
+    assert table.rowHeight(0) >= cell.sizeHint().height()
+    attributes = editor.table_view.attributes
+    assert attributes.verticalHeader().defaultSectionSize() == table.rowHeight(0)
+
+
+def test_right_click_on_a_drop_down_opens_the_table_menu(editor, store, monkeypatch):
+    from PySide6.QtCore import QPoint
+
+    import unifi2netbox.gui_typeeditor as module
+
+    actions = []
+
+    class Menu:  # records the entries instead of opening a modal menu
+        def __init__(self, *_a):
+            pass
+
+        def addAction(self, text, *_a):  # noqa: N802 - Qt name
+            actions.append(text)
+            return type("A", (), {"setEnabled": lambda *a: None})()
+
+        def addSeparator(self):  # noqa: N802 - Qt name
+            pass
+
+        def exec(self, *_a):
+            pass
+
+    monkeypatch.setattr(module, "QMenu", Menu)
+    editor.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    table = editor.table_view.sections["interfaces"].table
+    seen = []
+    table.customContextMenuRequested.connect(lambda pos: seen.append(pos))
+    combo = table.cellWidget(0, 2)  # type
+    combo.customContextMenuRequested.emit(QPoint(2, 2))
+    assert seen and table.indexAt(seen[0]).row() == 0
+    assert "Remove this row" in actions
+
+
+def test_sections_fold_away_and_are_remembered(qtbot, store, tmp_path):
+    from unifi2netbox.config import UiConfig, load_ui_config, save_ui_config
+
+    settings = tmp_path / "config.toml"
+    save_ui_config(settings, UiConfig())
+    first = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), settings_path=settings
+    )
+    qtbot.addWidget(first)
+    first.resize(1100, 700)
+    first.show()
+    view = first.table_view
+    before = view.splitter.sizes()[0]
+    for key in ("comments", "netbox", "components"):
+        view.folds[key].header.click()
+    first.validation_fold.header.click()
+    qtbot.wait(10)
+    sizes = view.splitter.sizes()
+    assert view.folds["comments"].collapsed and not view.comments.isVisible()
+    assert sizes[1] <= view.folds["comments"].folded_height()
+    assert sizes[0] > before  # the attributes got the room
+    first.hide()
+    assert load_ui_config(settings).type_editor_collapsed == (
+        "comments,netbox,components,validation"
+    )
+
+    second = DeviceTypeEditor(
+        store, DeviceTypesConfig(), QThreadPool(), settings_path=settings
+    )
+    qtbot.addWidget(second)
+    second.show()
+    assert second.table_view.folds["netbox"].collapsed
+    second.table_view.folds["netbox"].header.click()
+    assert not second.table_view.folds["netbox"].collapsed
+    assert second.table_view.splitter.sizes()[2] >= 100
+    second.hide()
+
+
+def test_dates_are_picked_from_a_calendar_or_cleared(editor, store):
+    from PySide6.QtCore import QDate
+
+    from unifi2netbox.gui_typeeditor import _TABLE_ATTRIBUTES
+    from unifi2netbox.gui_typefields import DateCell
+    from unifi2netbox.netbox_catalog import CustomFieldDef, NetBoxCatalog
+
+    editor.set_catalog(
+        NetBoxCatalog(
+            custom_fields=(CustomFieldDef("bought", "Bought", "date"),), loaded=True
+        )
+    )
+    editor.open_path(store.folder / "Ubiquiti" / "U6-Lite.yaml")
+    view = editor.table_view
+    cell = view.attributes.cellWidget(_TABLE_ATTRIBUTES.index("end_of_life"), 1)
+    assert isinstance(cell, DateCell) and cell.text() == ""
+    calendar = cell.calendar()
+    calendar.clicked.emit(QDate(2031, 12, 31))
+    assert view.document()["end_of_life"] == "2031-12-31"
+    assert editor.dirty
+    cell.clear.click()
+    assert "end_of_life" not in view.document()
+
+    bought = view.custom_fields.cellWidget(0, 1)
+    assert isinstance(bought, DateCell)
+    bought.calendar().clicked.emit(QDate(2024, 2, 29))
+    assert dict(view.document()["custom_fields"]) == {"bought": "2024-02-29"}

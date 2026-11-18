@@ -11,7 +11,9 @@ or it would break placed devices:
 - a ``subdevice_role`` change while devices of the type are racked as
   children, sit in device bays, or hold devices in their bays;
 - a slug, or a manufacturer and model, that another NetBox type already
-  uses.
+  uses;
+- deleting an inventory item template whose children would be deleted with
+  it but are not chosen for deletion.
 
 **Warnings** need the user's confirmation: field changes that apply to every
 device of the type at once, and template changes, which NetBox applies only
@@ -83,6 +85,7 @@ def preflight(plan, types: NetBoxTypes, backend) -> tuple[Finding, ...]:
             racked,
             backend,
         )
+    findings += _deletions(plan)
     if plan.device_count:
         visible = sorted(fields & set(VISIBLE))
         if visible:
@@ -93,7 +96,7 @@ def preflight(plan, types: NetBoxTypes, backend) -> tuple[Finding, ...]:
                     f"{plan.device_count} device(s) of this type.",
                 )
             )
-        if plan.creates or plan.updates or plan.mapping_fronts:
+        if plan.creates or plan.updates or plan.mapping_fronts or plan.deletes:
             findings.append(
                 Finding(
                     WARNING,
@@ -102,6 +105,24 @@ def preflight(plan, types: NetBoxTypes, backend) -> tuple[Finding, ...]:
                 )
             )
     return tuple(findings)
+
+
+def _deletions(plan) -> list[Finding]:
+    """NetBox deletes an inventory item template's children with it."""
+    deleted = {key for section, key in plan.deletes if section == "inventory-items"}
+    result = []
+    for row in plan.netbox_doc.get("inventory-items") or ():
+        parent = str(row.get("parent") or "")
+        name = str(row.get("name") or "")
+        if parent in deleted and name not in deleted:
+            result.append(
+                Finding(
+                    BLOCKER,
+                    f"Deleting inventory item {parent} would also delete its child "
+                    f"{name} in NetBox; delete or keep both.",
+                )
+            )
+    return result
 
 
 def _conflicts(plan, types: NetBoxTypes, fields) -> list[Finding]:

@@ -19,8 +19,10 @@
   definition, as a visible, selected and confirmed write step. Existing
   device types are updated only through the editor's confirmed **Sync with
   NetBox** (preflight, dry run, drift check, read-back, write history);
-  templates that exist only in NetBox are never deleted, and existing
-  devices are not changed.
+  a template that exists only in NetBox is deleted only when the user
+  chooses **Delete in NetBox** for that row (never preselected, preflight
+  and read-back as for every sync step), and existing devices are not
+  changed.
   Manufacturers, owners, owner groups, tags, platforms and inventory item
   roles are created only through an explicit "New" dialog the user confirms
   (immediate write, journaled, read back). Never create sites or device

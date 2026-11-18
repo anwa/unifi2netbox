@@ -14,17 +14,21 @@ import json
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtWidgets import (
+    QCalendarWidget,
     QComboBox,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QTableWidget,
     QTableWidgetItem,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 from ruamel.yaml.comments import CommentedMap
@@ -321,6 +325,8 @@ class CustomFieldsTable(QTableWidget):
                 box.setCurrentText(text)
                 box.currentTextChanged.connect(lambda _t: self.changed.emit())
                 self.setCellWidget(row, 1, box)
+            elif definition and definition.type == "date":
+                self.setCellWidget(row, 1, DateCell(text, self.changed.emit))
             else:
                 self.removeCellWidget(row, 1)
                 self.setItem(row, 1, QTableWidgetItem(text))
@@ -352,6 +358,8 @@ class CustomFieldsTable(QTableWidget):
             widget = self.cellWidget(row, 1)
             if isinstance(widget, QComboBox):
                 result[name] = widget.currentText().strip()
+            elif isinstance(widget, DateCell):
+                result[name] = widget.text().strip()
             else:
                 item = self.item(row, 1)
                 result[name] = item.text().strip() if item is not None else ""
@@ -386,3 +394,115 @@ def typed_value(kind: str, text: str):
         except ValueError:
             return text
     return text
+
+
+class CollapsibleSection(QWidget):
+    """A titled section with an arrow button that folds its content away.
+
+    Folded, the section is only as high as its title, so the other sections
+    of the surrounding splitter get the room (small screens).
+    """
+
+    toggled = Signal(bool)  # True when folded
+
+    def __init__(self, key: str, title: str, content: QWidget) -> None:
+        super().__init__()
+        self.key = key
+        self.content = content
+        self.collapsed = False
+        self.expanded_height = 0
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(2)
+        self.header = QToolButton()
+        self.header.setObjectName(f"section_{key}")
+        self.header.setText(title)
+        self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.header.setArrowType(Qt.ArrowType.DownArrow)
+        self.header.setAutoRaise(True)
+        self.header.setProperty("role", "subheading")
+        font = self.header.font()
+        font.setBold(True)
+        self.header.setFont(font)
+        self.header.setToolTip("Click to fold or unfold this section")
+        self.header.clicked.connect(
+            lambda _c=False: self.set_collapsed(not self.collapsed)
+        )
+        layout.addWidget(self.header)
+        layout.addWidget(content, 1)
+
+    def folded_height(self) -> int:
+        margins = self.layout().contentsMargins()
+        return self.header.sizeHint().height() + margins.top() + margins.bottom() + 2
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        if collapsed == self.collapsed:
+            return
+        if collapsed:
+            self.expanded_height = self.height()
+        self.collapsed = collapsed
+        self.content.setVisible(not collapsed)
+        self.header.setArrowType(
+            Qt.ArrowType.RightArrow if collapsed else Qt.ArrowType.DownArrow
+        )
+        self.setMaximumHeight(self.folded_height() if collapsed else 16777215)
+        self.toggled.emit(collapsed)
+
+
+class DateCell(QWidget):
+    """A date as ``YYYY-MM-DD``: typed, or picked from a calendar; may be empty."""
+
+    def __init__(self, text: str = "", changed: Callable[[], None] | None = None):
+        super().__init__()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        self.edit = QLineEdit(text)
+        self.edit.setObjectName("dateEdit")
+        self.edit.setPlaceholderText("YYYY-MM-DD")
+        if changed is not None:
+            self.edit.textChanged.connect(lambda _t: changed())
+        layout.addWidget(self.edit, 1)
+        self.pick = QToolButton()
+        self.pick.setText("\U0001f4c5")
+        self.pick.setObjectName("datePick")
+        self.pick.setToolTip("Choose the date in a calendar")
+        self.pick.clicked.connect(self.open_calendar)
+        layout.addWidget(self.pick)
+        self.clear = QToolButton()
+        self.clear.setText("×")
+        self.clear.setObjectName("dateClear")
+        self.clear.setToolTip("Remove the date")
+        self.clear.clicked.connect(lambda _c=False: self.edit.setText(""))
+        layout.addWidget(self.clear)
+        self.popup: QFrame | None = None
+
+    def text(self) -> str:
+        return self.edit.text()
+
+    def set_text(self, text: str) -> None:
+        self.edit.setText(text)
+
+    def calendar(self) -> QCalendarWidget:
+        popup = QFrame(self, Qt.WindowType.Popup)
+        layout = QVBoxLayout(popup)
+        layout.setContentsMargins(4, 4, 4, 4)
+        calendar = QCalendarWidget()
+        calendar.setObjectName("dateCalendar")
+        current = QDate.fromString(self.text().strip(), "yyyy-MM-dd")
+        calendar.setSelectedDate(current if current.isValid() else QDate.currentDate())
+        calendar.clicked.connect(lambda date: self._picked(date))
+        calendar.activated.connect(lambda date: self._picked(date))
+        layout.addWidget(calendar)
+        self.popup = popup
+        return calendar
+
+    def open_calendar(self) -> None:
+        self.calendar()
+        self.popup.move(self.mapToGlobal(self.rect().bottomLeft()))
+        self.popup.show()
+
+    def _picked(self, date: QDate) -> None:
+        self.edit.setText(date.toString("yyyy-MM-dd"))
+        if self.popup is not None:
+            self.popup.close()

@@ -24,6 +24,7 @@ from typing import Protocol
 from PySide6.QtCore import (
     QByteArray,
     QFileSystemWatcher,
+    QPoint,
     Qt,
     QThreadPool,
     QTimer,
@@ -39,6 +40,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QDialog,
     QHBoxLayout,
@@ -106,7 +108,9 @@ from unifi2netbox.gui_typediff import (
 )
 from unifi2netbox.gui_typefields import (
     ChoiceCell,
+    CollapsibleSection,
     CustomFieldsTable,
+    DateCell,
     ImagePanel,
     NewHandler,
     TagEditor,
@@ -163,12 +167,28 @@ def _base64(data: QByteArray) -> str:
     return bytes(data.toBase64()).decode("ascii")
 
 
+class _NoteLabel(QLabel):
+    """A caption that takes no room while it is empty."""
+
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt override
+        super().setText(text)
+        self.setVisible(bool(text))
+
+
 def _label(text: str, role: str = "") -> QLabel:
     widget = QLabel(text)
     widget.setWordWrap(True)
     if role:
         widget.setProperty("role", role)
     return widget
+
+
+def row_height() -> int:
+    """Height of a table row holding a drop-down with a New... button."""
+    probe = ChoiceCell("", (), "manufacturers", lambda *_a: None)
+    height = probe.sizeHint().height()
+    probe.deleteLater()
+    return max(height + 8, 30)
 
 
 def value_text(value) -> str:
@@ -198,6 +218,50 @@ def text_value(section: str | None, name: str, text: str):
     return text
 
 
+def forward_context_menu(widget: QWidget, table: QTableWidget) -> None:
+    """Right-click on a cell widget opens the table's menu, not the editor's."""
+    for part in [widget, *widget.findChildren(QWidget)]:
+        part.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        part.customContextMenuRequested.connect(
+            lambda pos, p=part: table.customContextMenuRequested.emit(
+                p.mapTo(table.viewport(), pos)
+            )
+        )
+
+
+def unfold_in_splitter(
+    splitter: QSplitter, section: CollapsibleSection, folded: bool
+) -> None:
+    """Give a folded section's room to the others, and take it back."""
+    index = splitter.indexOf(section)
+    sizes = splitter.sizes()
+    if index < 0 or not sizes:
+        return
+    total = sum(sizes)
+    if folded:
+        sizes[index] = section.folded_height()
+    else:
+        want = max(section.expanded_height, 120)
+        others = [i for i in range(len(sizes)) if i != index]
+        # Take the room from the largest other sections.
+        for i in sorted(others, key=lambda i: -sizes[i]):
+            spare = max(0, sizes[i] - 120)
+            take = min(spare, want - sizes[index])
+            sizes[i] -= take
+            sizes[index] += take
+            if sizes[index] >= want:
+                break
+    rest = total - sum(sizes)
+    open_ = [
+        i
+        for i in range(len(sizes))
+        if i != index and not getattr(splitter.widget(i), "collapsed", False)
+    ]
+    for i in open_[:1]:
+        sizes[i] += rest
+    splitter.setSizes(sizes)
+
+
 class _Cells:
     """Read and write one table cell: plain, a choice box or a reference."""
 
@@ -219,6 +283,11 @@ class _Cells:
             options, kind = reference
             cell = ChoiceCell(text, options, kind, self.on_new, changed)
             self.table.setCellWidget(row, column, cell)
+            forward_context_menu(cell, self.table)
+        elif spec.kind == "date":
+            cell = DateCell(text, changed)
+            self.table.setCellWidget(row, column, cell)
+            forward_context_menu(cell, self.table)
         elif spec.kind in ("enum", "boolean"):
             box = QComboBox()
             choices = spec.choices if spec.kind == "enum" else ("true", "false")
@@ -228,12 +297,13 @@ class _Cells:
             box.setCurrentText(text)
             box.currentTextChanged.connect(lambda _t: changed())
             self.table.setCellWidget(row, column, box)
+            forward_context_menu(box, self.table)
         else:
             self.table.setItem(row, column, QTableWidgetItem(text))
 
     def get(self, row: int, column: int) -> str:
         widget = self.table.cellWidget(row, column)
-        if isinstance(widget, ChoiceCell):
+        if isinstance(widget, ChoiceCell | DateCell):
             return widget.text()
         if isinstance(widget, QComboBox):
             return widget.currentText()
@@ -266,6 +336,8 @@ class ComponentTable(QWidget):
         self.table = QTableWidget(0, len(self.columns))
         self.table.setObjectName(f"component_{section}")
         self.table.setMinimumHeight(60)
+        # Rows hold drop-downs: as high as one, so nothing is cut off.
+        self.table.verticalHeader().setDefaultSectionSize(row_height())
         self.table.setHorizontalHeaderLabels(
             [f"{c} *" if field_spec(section, c).required else c for c in self.columns]
         )
@@ -287,7 +359,7 @@ class ComponentTable(QWidget):
         add.clicked.connect(self.add_row)
         remove = QPushButton("Remove selected")
         remove.setObjectName(f"remove_{section}")
-        remove.clicked.connect(self.remove_rows)
+        remove.clicked.connect(lambda _checked=False: self.remove_rows())
         buttons.addWidget(add)
         buttons.addWidget(remove)
         buttons.addStretch()
@@ -364,10 +436,26 @@ class ComponentTable(QWidget):
         self.table.scrollToBottom()
         self.changed.emit()
 
-    def remove_rows(self) -> None:
-        for row in sorted(
-            {i.row() for i in self.table.selectedIndexes()}, reverse=True
-        ):
+    def target_rows(self) -> set[int]:
+        """Selected rows, else the row of the focused or current cell.
+
+        Most cells are drop-downs: clicking one does not select its row.
+        """
+        rows = {i.row() for i in self.table.selectionModel().selectedRows()}
+        rows |= {i.row() for i in self.table.selectedIndexes()}
+        if rows:
+            return rows
+        focus = QApplication.focusWidget()
+        viewport = self.table.viewport()
+        if focus is not None and viewport.isAncestorOf(focus):
+            index = self.table.indexAt(focus.mapTo(viewport, QPoint(1, 1)))
+            if index.isValid():
+                return {index.row()}
+        return {self.table.currentRow()} if self.table.currentRow() >= 0 else set()
+
+    def remove_rows(self, rows: Iterable[int] | None = None) -> None:
+        targets = self.target_rows() if rows is None else set(rows)
+        for row in sorted(targets, reverse=True):
             if row >= self.real_rows():
                 continue  # NetBox-only rows are not part of the definition
             self.table.removeRow(row)
@@ -438,7 +526,9 @@ class ComponentTable(QWidget):
                 )
                 self.table.setItem(row, column, item)
             header = QTableWidgetItem("NetBox")
-            header.setToolTip("Only in NetBox; never deleted by a sync.")
+            header.setToolTip(
+                "Only in NetBox; deleted only by Delete in NetBox in the sync."
+            )
             self.table.setVerticalHeaderItem(row, header)
             self.ghosts.append(diff)
         self.table.blockSignals(False)
@@ -488,6 +578,10 @@ class ComponentTable(QWidget):
         menu = QMenu(self)
         if row >= self.real_rows():
             menu.addAction("Add to the definition", lambda: self.use_netbox(row))
+            hint = menu.addAction(
+                "Delete it in NetBox: choose 'Delete in NetBox' in Sync with NetBox"
+            )
+            hint.setEnabled(False)
         else:
             diff = next(
                 (
@@ -498,18 +592,19 @@ class ComponentTable(QWidget):
                 ),
                 None,
             )
-            if diff is None:
-                return
-            name = self.columns[column]
-            change = next((f for f in diff.fields if f.name == name), None)
-            if change is not None:
+            if diff is not None:
+                name = self.columns[column]
+                change = next((f for f in diff.fields if f.name == name), None)
+                if change is not None:
+                    menu.addAction(
+                        f"Use NetBox value: {netbox_text(change.netbox)}",
+                        lambda: self.use_netbox(row, [name]),
+                    )
                 menu.addAction(
-                    f"Use NetBox value: {netbox_text(change.netbox)}",
-                    lambda: self.use_netbox(row, [name]),
+                    "Use NetBox values for this row", lambda: self.use_netbox(row)
                 )
-            menu.addAction(
-                "Use NetBox values for this row", lambda: self.use_netbox(row)
-            )
+                menu.addSeparator()
+            menu.addAction("Remove this row", lambda: self.remove_rows([row]))
         menu.exec(self.table.viewport().mapToGlobal(position))
 
 
@@ -538,6 +633,7 @@ class TableView(QWidget):
         )
         self.attributes.setWordWrap(True)
         self.attributes.setMinimumHeight(60)
+        self.attributes.verticalHeader().setDefaultSectionSize(row_height())
         self.cells = _Cells(self.attributes, self.reference, on_new)
         for row, name in enumerate(_TABLE_ATTRIBUTES):
             spec = field_spec(None, name)
@@ -596,17 +692,18 @@ class TableView(QWidget):
         self.splitter = QSplitter(Qt.Orientation.Vertical)
         self.splitter.setObjectName("typeTableSplitter")
         self.splitter.setChildrenCollapsible(False)
-        for title, widget, stretch in (
-            ("Attributes (* required)", self.attributes, 3),
-            ("Comments", self.comments, 1),
-            ("NetBox: tags, images, custom fields", netbox, 2),
-            ("Components", self.tabs, 4),
+        self.folds: dict[str, CollapsibleSection] = {}
+        for key, title, widget, stretch in (
+            ("attributes", "Attributes (* required)", self.attributes, 3),
+            ("comments", "Comments", self.comments, 1),
+            ("netbox", "NetBox: tags, images, custom fields", netbox, 2),
+            ("components", "Components", self.tabs, 4),
         ):
-            section = QWidget()
-            section_layout = QVBoxLayout(section)
-            section_layout.setContentsMargins(0, 4, 0, 0)
-            section_layout.addWidget(_label(title, "subheading"))
-            section_layout.addWidget(widget, 1)
+            section = CollapsibleSection(key, title, widget)
+            section.toggled.connect(
+                lambda folded, s=section: unfold_in_splitter(self.splitter, s, folded)
+            )
+            self.folds[key] = section
             self.splitter.addWidget(section)
             self.splitter.setStretchFactor(self.splitter.count() - 1, stretch)
         self.splitter.setSizes([250, 70, 210, 300])
@@ -1055,10 +1152,16 @@ class DeviceTypeEditor(QDialog):
         lookup_layout.addWidget(self.spec_url, 1)
         lookup_layout.addWidget(self.lookup_button)
         right_layout.addWidget(self.lookup_row)
-        self.notes = _label("", "caption")
+        self.notes = _NoteLabel("")
+        self.notes.setWordWrap(True)
+        self.notes.setProperty("role", "caption")
+        self.notes.setVisible(False)
         self.notes.setObjectName("typeNotes")
         right_layout.addWidget(self.notes)
-        self.netbox_note = _label("", "caption")
+        self.netbox_note = _NoteLabel("")
+        self.netbox_note.setWordWrap(True)
+        self.netbox_note.setProperty("role", "caption")
+        self.netbox_note.setVisible(False)
         self.netbox_note.setObjectName("typeNetBoxNote")
         right_layout.addWidget(self.netbox_note)
         self.stack = QStackedWidget()
@@ -1085,11 +1188,11 @@ class DeviceTypeEditor(QDialog):
         self.issues = QListWidget()
         self.issues.setObjectName("typeIssues")
         self.issues.setMinimumHeight(40)
-        validation = QWidget()
-        validation_layout = QVBoxLayout(validation)
-        validation_layout.setContentsMargins(0, 4, 0, 0)
-        validation_layout.addWidget(_label("Validation", "subheading"))
-        validation_layout.addWidget(self.issues, 1)
+        validation = CollapsibleSection("validation", "Validation", self.issues)
+        validation.toggled.connect(
+            lambda folded: unfold_in_splitter(self.right_splitter, validation, folded)
+        )
+        self.validation_fold = validation
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
         self.right_splitter.setObjectName("typeRightSplitter")
         self.right_splitter.setChildrenCollapsible(False)
@@ -1700,10 +1803,12 @@ class DeviceTypeEditor(QDialog):
         self.netbox_types = result
         if result.loaded:
             self._status_parts["types"] = f"{len(result.types)} NetBox device types."
-        else:
+        elif result.errors:
             self._status_parts["types"] = (
                 f"NetBox device types not loaded: {'; '.join(result.errors)}"
             )
+        else:
+            self._status_parts["types"] = ""
         self._show_status()
         self._update_comparison()
         self.update_statuses()
@@ -1842,6 +1947,9 @@ class DeviceTypeEditor(QDialog):
 
     # -- window layout ---------------------------------------------------------
 
+    def folds(self) -> dict[str, CollapsibleSection]:
+        return {**self.table_view.folds, "validation": self.validation_fold}
+
     def splitters(self) -> tuple[QSplitter, ...]:
         return (self.tree_splitter, self.right_splitter, self.table_view.splitter)
 
@@ -1862,6 +1970,9 @@ class DeviceTypeEditor(QDialog):
         for splitter, state in zip(self.splitters(), states, strict=False):
             if state:
                 splitter.restoreState(QByteArray.fromBase64(state.encode()))
+        folded = set(filter(None, ui.type_editor_collapsed.split(",")))
+        for key, section in self.folds().items():
+            section.set_collapsed(key in folded)
 
     def save_layout(self) -> None:
         if self.settings_path is None or not self._layout_restored:
@@ -1875,6 +1986,9 @@ class DeviceTypeEditor(QDialog):
                     type_editor_geometry=_base64(self.saveGeometry()),
                     type_editor_splitters=",".join(
                         _base64(s.saveState()) for s in self.splitters()
+                    ),
+                    type_editor_collapsed=",".join(
+                        key for key, s in self.folds().items() if s.collapsed
                     ),
                 ),
             )

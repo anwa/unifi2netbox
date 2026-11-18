@@ -7,6 +7,7 @@ from test_devicetype_import import FULL, FULL_CHOICE, MAKERS
 
 from unifi2netbox.devicetype_import import build_import_plan, execute_import_plan
 from unifi2netbox.devicetype_update import (
+    DELETE,
     LOCAL,
     NETBOX,
     SKIP,
@@ -43,6 +44,7 @@ class ApiNetBox:
         self.rows: dict[str, tuple[str, dict]] = {}
         self.writes = []
         self.fail_create = None
+        self.fail_delete = False
         self.seed("/api/dcim/manufacturers/", 41, name="Ubiquiti", slug="ubiquiti")
         self.seed("/api/users/owners/", 51, name="Network team")
         self.seed("/api/dcim/platforms/", 52, name="UniFi OS", slug="unifi-os")
@@ -116,6 +118,14 @@ class ApiNetBox:
         row.update(self._parent_refs(kind, self._convert(payload)))
         self.writes.append(("update", path, payload))
 
+    def delete_object(self, path):
+        key = path.rstrip("/").rsplit("/", 1)[-1]
+        if self.fail_delete:
+            self.rows.pop(key, None)
+            raise requests.exceptions.Timeout("timed out")
+        self.rows.pop(key, None)
+        self.writes.append(("delete", path, None))
+
     def upload_files(self, path, files):
         key = path.rstrip("/").rsplit("/", 1)[-1]
         for name in files:
@@ -170,7 +180,7 @@ def test_overwrite_netbox_writes_local_values_and_keeps_netbox_only_rows():
     comparison = compare(local, netbox_view(backend, type_id))
     items = {i.key: i for i in sync_items(comparison)}
     assert items["field:owner"].choices == (NETBOX, SKIP)
-    assert items["rear-ports:R9"].choices == (NETBOX, SKIP)
+    assert items["rear-ports:R9"].choices == (NETBOX, SKIP, DELETE)
     assert items["interfaces:eth2"].kind == "local-only"
     decisions = overwrite_decisions(items.values())
     assert decisions["field:owner"] == SKIP and decisions["rear-ports:R9"] == SKIP
@@ -357,3 +367,55 @@ def test_preflight_subdevice_role_conflicts_and_warnings():
     messages = [f.message for f in preflight(plan, types, backend)]
     assert any("airflow change(s) at once on the 3 device(s)" in m for m in messages)
     assert any("only to devices created later" in m for m in messages)
+
+
+def test_netbox_only_rows_are_deleted_only_when_chosen():
+    backend, type_id = imported()
+    backend.seed(
+        "/api/dcim/rear-port-templates/",
+        900,
+        name="R9",
+        type="8p8c",
+        positions=1,
+        device_type={"id": int(type_id)},
+    )
+    local = copy.deepcopy(BASE)
+    comparison = compare(local, netbox_view(backend, type_id, devices=2))
+    assert overwrite_decisions(sync_items(comparison))["rear-ports:R9"] == SKIP
+    plan = build_sync_plan(local, comparison, {"rear-ports:R9": DELETE})
+    assert plan.deletes == (("rear-ports", "R9"),)
+    assert "Delete rear-ports: R9 in NetBox" in plan.describe()
+    messages = [
+        f.message for f in preflight(plan, netbox_view(backend, type_id, 2), backend)
+    ]
+    assert any("existing device(s) keep their components" in m for m in messages)
+    backend.fail_delete = True  # interrupted: the row is gone, so it counts
+    report = execute_sync(plan, backend)
+    assert report.outcome.status == "success", report.outcome.message
+    assert report.outcome.verification == "verified"
+    assert compare(local, netbox_view(backend, type_id)).status == "same"
+
+
+def test_deleting_an_inventory_parent_needs_its_children_too():
+    backend, type_id = imported()
+    local = copy.deepcopy(BASE)
+    local["inventory-items"] = []  # Tray and Fan 1 are now only in NetBox
+    del local["inventory-items"]
+    comparison = compare(local, netbox_view(backend, type_id))
+    plan = build_sync_plan(local, comparison, {"inventory-items:Tray": DELETE})
+    findings = preflight(plan, netbox_view(backend, type_id), backend)
+    assert findings[0].level == BLOCKER and "child Fan 1" in findings[0].message
+
+    both = build_sync_plan(
+        local,
+        comparison,
+        {"inventory-items:Tray": DELETE, "inventory-items:Fan 1": DELETE},
+    )
+    assert {k for _s, k in both.deletes} == {"Tray", "Fan 1"}
+    ids = {r.get("name"): str(r["id"]) for _p, r in backend.rows.values()}
+    report = execute_sync(both, backend)
+    assert report.outcome.verification == "verified", report.outcome.verification_detail
+    deleted = [
+        w[1].rstrip("/").rsplit("/", 1)[-1] for w in backend.writes if w[0] == "delete"
+    ]
+    assert deleted == [ids["Fan 1"], ids["Tray"]]  # children first
