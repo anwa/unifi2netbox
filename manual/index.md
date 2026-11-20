@@ -70,4 +70,11 @@ Open this manual at any time with **Manual** in the header or **F1**. The
 tree on the left lists all chapters and pages; links between pages, **Back**,
 **Forward** and **Overview** work like in a browser.
 
+To search, type into the field at the top right (**Ctrl+F**). The pages that
+contain all your words replace the tree, best matches first, each with its
+chapter and a short excerpt. Click a result (or press **Enter** for the
+first one): the words are marked on the page and the page scrolls to the
+first one; **F3** and **Shift+F3** move to the next and previous one.
+**Escape** or clearing the field brings the tree back.
+
 ![This manual inside the app](images/manual-window.png)

@@ -6,6 +6,14 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Added
+
+- Manual: full-text search (field at the top right, Ctrl+F). The pages that
+	contain all words replace the tree, best first (title, then headings,
+	then text), with chapter and an excerpt in which the words are marked;
+	opening a result marks the words on the page and scrolls to the first,
+	F3 and Shift+F3 move between them, Escape ends the search.
+
 ## v1.5.0
 
 ### Summary

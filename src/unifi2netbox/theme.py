@@ -267,6 +267,10 @@ QListWidget#historyRuns {{
     outline: none; padding: 4px;
 }}
 QListWidget#historyRuns::item {{ padding: 8px 10px; border-radius: 6px; }}
+QListWidget#manualResults::item {{ border-radius: 6px; }}
+QListWidget#manualResults::item:selected {{
+    background: {c.accent_soft}; color: {c.text};
+}}
 QListWidget#historyRuns::item:selected {{
     background: {c.accent_soft}; color: {c.text};
 }}

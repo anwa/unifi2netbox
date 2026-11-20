@@ -172,7 +172,9 @@ header), and the app has its own icon in title bars, taskbar and executable.
   target and typing its host name), always after a dry-run check.
 - **Manual** opens the user manual from [`manual/`](manual/index.md): the
   chapter tree on the left, the page with screenshots on the right, starting
-  at the overview. The same Markdown pages can be read on GitHub.
+  at the overview, and a full-text search (Ctrl+F) with results, marked
+  words and F3 to move between them. The same Markdown pages can be read on
+  GitHub.
 - Summary cards count new devices, devices with changes, devices in sync,
   devices that need attention and NetBox-only devices; clicking a card filters
   the table. Filter chips and a name/model search narrow the list further.
