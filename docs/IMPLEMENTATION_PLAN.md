@@ -753,7 +753,8 @@ Slices:
 - [x] 5. Documentation, screenshots, live checks and approved tests.
   (2026-11-20: four restore tests on the user's test NetBox passed.)
 
-- [ ] Obtain explicit merge approval; prepare version 1.5.0.
+- [x] Obtain explicit merge approval; prepare version 1.5.0. (Approved
+  2026-11-20.)
 - [ ] Complete the approved main merge and tag v1.5.0; build the Windows exe
   and installer from the tag.
 

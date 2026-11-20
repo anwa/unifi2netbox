@@ -6,6 +6,20 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.5.0
+
+### Summary
+
+- Milestone M15 (NetBox backup and restore): **Backup NetBox...** saves all
+	NetBox data (DCIM, IPAM, circuits, tenancy, virtualization, VPN,
+	wireless, extras, owners; images optional) to a JSON or YAML file, read
+	only and without users, tokens, permissions, secrets or the change log.
+	**Restore NetBox...** writes a backup into a target entered in the
+	dialog (not saved), in dependency order, matching existing objects by
+	natural keys: create missing, update differing, or empty first (after an
+	automatic backup of the target and typing its host name), always after a
+	dry-run check, with progress, cancel, read-back and write history.
+
 ### Added
 
 - M15 slice 1: backup engine for a whole NetBox instance (read-only): it
@@ -46,6 +60,17 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	that NetBox copies from the device type are cleared again when the
 	backup has none; images are uploaded only for new objects or when
 	missing.
+
+### Validation
+
+- Offline gate: 741 passed, 2 skipped; Ruff lint and format pass.
+- Live (2026-11-20): full backup of the developer NetBox 4.7.3 (6,072
+	objects, 155 images, complete) and a dry-run restore into it (all
+	equal); approved restore tests on the user's separate test NetBox 4.7.5:
+	into an empty instance, update mode, empty first with the automatic
+	backup, and a final comparison: identical counts per endpoint, all
+	checks equal. UniFi was not touched.
+- Packaged builds of this version are not verified yet.
 - Manual: new chapter *Backup and restore* (what is included, backup,
 	restore steps, modes, matching, order and safeguards) with demo
 	screenshots.

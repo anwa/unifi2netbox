@@ -1,12 +1,11 @@
 # unifi2netbox
 
-Latest main release: **v1.4.2** (M14 device types synced with NetBox plus
-usability fixes: connection status, foldable editor sections, date picker,
-row removal, deleting NetBox-only templates on request). Download the Windows installer or the
+Latest main release: **v1.5.0** (M15 NetBox backup and restore: one-file
+backups, restore into any NetBox in dependency order with dry-run check). Download the Windows installer or the
 Ubuntu `.deb` from the
 [GitHub releases](https://github.com/anwa/unifi2netbox/releases).
 
-Release **v1.4.2** compares UniFi Network inventory with NetBox in a modern
+Release **v1.5.0** compares UniFi Network inventory with NetBox in a modern
 review window (light and dark mode), explains matches, conflicts and Device
 Type suggestions, and applies selected, confirmed changes to NetBox with
 re-reads before writing, read-back verification afterwards and a saved write
@@ -21,7 +20,7 @@ version-specific verification limits.
 
 Python desktop application for reviewing UniFi inventory differences before
 applying selected changes to NetBox. The capabilities below are part of
-release v1.4.2; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
+release v1.5.0; see [CHANGELOG.md](CHANGELOG.md) for the version-by-version
 history.
 
 ## Current Capabilities
