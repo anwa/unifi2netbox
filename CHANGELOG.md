@@ -4,7 +4,7 @@ All application changes are documented here. Versions use `vx.y.z`: patch for
 ordinary code commits, minor for an approved functional milestone merge, major
 only on explicit user instruction. Documentation-only changes have no release tag.
 
-## Unreleased
+## v1.5.1
 
 ### Added
 

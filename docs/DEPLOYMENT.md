@@ -174,6 +174,10 @@ installer `unifi2netbox-1.5.1-setup.exe` is 45.1 MB (SHA-256
 copied to the local `dist\installer\`. Not verified: installer
 upgrade/uninstall, and the manual search inside the packaged app. The
 Windows build is not code-signed.
+The Offline Tests and Packages workflows passed for the tag; the Packages
+workflow built `unifi2netbox_1.5.1_amd64.deb` and the Linux tarball. All
+three files and `SHA256SUMS.txt` are attached to the public GitHub release
+v1.5.1 (approved by the user on 2026-11-20).
 
 ```powershell
 python -m pip install -r requirements-build.txt
