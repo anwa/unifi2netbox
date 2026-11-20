@@ -632,6 +632,82 @@ class RequestsNetBoxWriteBackend:
                 f"NetBox upload failed with HTTP {response.status_code}: {detail}"
             )
 
+    def count(self, path: str) -> int:
+        """Number of objects of a list endpoint."""
+        response = self._request("GET", path, params={"limit": 1, "brief": 1})
+        if response.status_code != 200:
+            raise WriteExecutionError(
+                f"NetBox read {path} failed with HTTP {response.status_code}."
+            )
+        payload = response.json()
+        count = payload.get("count") if isinstance(payload, dict) else None
+        if not isinstance(count, int):
+            raise WriteExecutionError(f"NetBox read {path} payload is invalid.")
+        return count
+
+    def bulk_create(self, path: str, payloads: list[dict]) -> list[str]:
+        """Create several objects in one request; their IDs in order."""
+        response = self._request("POST", path, json=payloads)
+        if response.status_code in {502, 503, 504}:
+            raise AmbiguousWriteError(
+                f"NetBox or its proxy answered HTTP {response.status_code}"
+            )
+        if response.status_code not in {200, 201}:
+            detail = _response_error_detail(response)
+            raise WriteExecutionError(
+                f"NetBox create failed with HTTP {response.status_code}: {detail}"
+            )
+        try:
+            data = response.json()
+        except ValueError:
+            data = None
+        if isinstance(data, dict):
+            data = [data]
+        if not isinstance(data, list) or len(data) != len(payloads):
+            raise AmbiguousWriteError("NetBox create response did not list the IDs")
+        return [str(item.get("id")) for item in data]
+
+    def bulk_update(self, path: str, payloads: list[dict]) -> None:
+        """PATCH several objects (each payload carries its ``id``)."""
+        response = self._request("PATCH", path, json=payloads)
+        if response.status_code not in {200, 204}:
+            detail = _response_error_detail(response)
+            raise WriteExecutionError(
+                f"NetBox update failed with HTTP {response.status_code}: {detail}"
+            )
+
+    def bulk_delete(self, path: str, ids: list[int]) -> None:
+        """DELETE several objects of one endpoint."""
+        response = self._request("DELETE", path, json=[{"id": i} for i in ids])
+        if response.status_code in {200, 204}:
+            return
+        if response.status_code in {502, 503, 504}:
+            raise AmbiguousWriteError(
+                f"NetBox or its proxy answered HTTP {response.status_code}"
+            )
+        detail = _response_error_detail(response)
+        raise WriteExecutionError(
+            f"NetBox delete failed with HTTP {response.status_code}: {detail}"
+        )
+
+    def create_with_files(
+        self, path: str, data: Mapping[str, object], files: Mapping[str, Path]
+    ) -> str:
+        """POST multipart (for example an image attachment with its image)."""
+        parts = {name: (file.name, file.read_bytes()) for name, file in files.items()}
+        fields = {
+            k: ("" if v is None else str(v)) for k, v in data.items() if v is not None
+        }
+        response = self._request(
+            "POST", path, data=fields, files=parts, headers={"Content-Type": None}
+        )
+        if response.status_code not in {200, 201}:
+            detail = _response_error_detail(response)
+            raise WriteExecutionError(
+                f"NetBox create failed with HTTP {response.status_code}: {detail}"
+            )
+        return str(response.json().get("id"))
+
     def delete_object(self, path: str) -> None:
         """DELETE one object; one that is already gone counts as deleted."""
         response = self._request("DELETE", path)

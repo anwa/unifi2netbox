@@ -27,6 +27,7 @@ def test_manual_is_found_and_starts_with_the_overview():
         "Device types",
         "Applying changes",
         "Reference",
+        "Backup and restore",
     ]
     assert all(entry.children for entry in toc.children)
 

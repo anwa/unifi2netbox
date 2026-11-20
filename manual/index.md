@@ -52,8 +52,9 @@ changes you select to NetBox. UniFi is only ever read.
   prefix) is reported as a conflict instead of being overwritten.
 - **One Custom Field only:** the app creates the Custom Field `firmware`, and
   only as a visible, selectable step. Device types are created only from a
-  definition you chose, also as a visible step; manufacturers, sites and roles
-  never.
+  definition you chose, also as a visible step; manufacturers, owners, tags,
+  platforms and inventory item roles only from a confirmed **New...**
+  dialog; sites and roles only by a restore.
 
 ## Where to go next
 
@@ -62,6 +63,7 @@ changes you select to NetBox. UniFi is only ever read.
 - Settings for each service: [Settings](02-settings/index.md).
 - A tour of the window: [The review window](03-review/index.md).
 - A model is missing in NetBox: [Device types](04-device-types/index.md).
+- Save or restore a whole NetBox: [Backup and restore](07-backup-restore/index.md).
 - Something does not work: [Troubleshooting](06-reference/04-troubleshooting.md).
 
 Open this manual at any time with **Manual** in the header or **F1**. The

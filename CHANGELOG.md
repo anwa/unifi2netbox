@@ -6,6 +6,75 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+## v1.5.0
+
+### Summary
+
+- Milestone M15 (NetBox backup and restore): **Backup NetBox...** saves all
+	NetBox data (DCIM, IPAM, circuits, tenancy, virtualization, VPN,
+	wireless, extras, owners; images optional) to a JSON or YAML file, read
+	only and without users, tokens, permissions, secrets or the change log.
+	**Restore NetBox...** writes a backup into a target entered in the
+	dialog (not saved), in dependency order, matching existing objects by
+	natural keys: create missing, update differing, or empty first (after an
+	automatic backup of the target and typing its host name), always after a
+	dry-run check, with progress, cancel, read-back and write history.
+
+### Added
+
+- M15 slice 1: backup engine for a whole NetBox instance (read-only): it
+	discovers the API endpoints, reads the writable fields with OPTIONS and
+	every object with paginated GET, keeps references as endpoint and ID
+	(also generic relations such as IP assignments and cable terminations),
+	embeds images base64 and writes one JSON or YAML file atomically. Users,
+	tokens, permissions, the change log, jobs, plugin and user-bound
+	endpoints and journal entries are never backed up; secret fields are left
+	out and listed. A failed endpoint marks the backup incomplete. The
+	read-only NetBox session now also allows OPTIONS and HEAD.
+- M15 slices 2-3: restore engine. One walker plans (dry run: reads and
+	matches, writes nothing) and runs a restore: endpoints in dependency
+	order (cycles over optional references such as a device's primary IP are
+	broken and patched afterwards), objects matched in the target by natural
+	key (slug, device name and site, parent and name, address and VRF, cable
+	terminations, ...; components NetBox creates from templates are matched,
+	not duplicated), modes create missing, update (backup values, also empty
+	ones) and replace (empty the selected endpoints first, reverse order).
+	Bulk create, update and delete in batches of 100, interrupted batches
+	looked up by key, drift check against the dry run's counts, cancel,
+	images uploaded afterwards (image attachments with their image), and a
+	count read-back. Backend: count, bulk create/update/delete and multipart
+	create.
+- M15 slice 4: **⋯ More > Backup NetBox...** saves the configured NetBox to
+	a JSON or YAML file you choose (images optional, progress, cancel, a
+	summary with left-out secrets). **⋯ More > Restore NetBox...** loads a
+	backup, takes its own target (URL, token, TLS; prefilled, never saved),
+	the mode and the endpoints, checks with a dry run (counts per endpoint;
+	in update mode the objects that would change, each can be unchecked),
+	asks for confirmation (for "empty first": an automatic backup of the
+	target and typing its host name) and restores with progress and cancel;
+	every restore is saved to the write history.
+- M15 restore, found in the live tests on a test NetBox: empty values are
+	left out of creates; components NetBox makes from device type templates
+	during a restore get the backup's values (also in create mode) and the
+	ones the backup does not have are removed; airflow and cooling method
+	that NetBox copies from the device type are cleared again when the
+	backup has none; images are uploaded only for new objects or when
+	missing.
+
+### Validation
+
+- Offline gate: 741 passed, 2 skipped; Ruff lint and format pass.
+- Live (2026-11-20): full backup of the developer NetBox 4.7.3 (6,072
+	objects, 155 images, complete) and a dry-run restore into it (all
+	equal); approved restore tests on the user's separate test NetBox 4.7.5:
+	into an empty instance, update mode, empty first with the automatic
+	backup, and a final comparison: identical counts per endpoint, all
+	checks equal. UniFi was not touched.
+- Packaged builds of this version are not verified yet.
+- Manual: new chapter *Backup and restore* (what is included, backup,
+	restore steps, modes, matching, order and safeguards) with demo
+	screenshots.
+
 ## v1.4.2
 
 ### Summary

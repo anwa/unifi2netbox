@@ -851,6 +851,59 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-20 the assistant checked M15 slices 1 to 4 (application 1.4.7
+working tree on `feature/netbox-backup`). Offline: the backup against an
+API-shaped fake (endpoint discovery and exclusions, OPTIONS metadata,
+references and generic relations, cable terminations, port mappings,
+secrets left out, images embedded, incomplete marker, cancel, JSON/YAML
+round trip); the restore against an in-memory NetBox that also serves as
+backup source and creates interfaces from templates like NetBox: backup of
+a populated instance restored into an empty one reproduces it exactly
+(compared by natural keys incl. images), a second check is all equal,
+update and replace modes, skipped objects, interrupted batches looked up,
+drift check, cancel, dependency order with the device-IP-interface cycle;
+the dialogs (check, settings change invalidates the check, confirmation,
+host name for replace with the automatic target backup, write history).
+Live, read-only, on the developer NetBox 4.7.3 (counts only): a full backup
+(6,072 objects, 155 images, 6.7 s, 60.8 MB, complete, only the wireless PSK
+left out) and a dry-run restore of it into the same NetBox in create and
+update mode (all 6,072 equal, nothing to create, update or patch; a guard
+refused any write). Found and fixed on the way: sub-actions such as
+`extras/scripts/upload` were read as endpoints, `auth_type` was taken for a
+secret, cables were ordered before interfaces in the device/IP cycle, and
+existing objects would have received no-op reference patches.
+
+Then, with the user's explicit approval, the assistant ran the restore
+write tests against the user's separate test NetBox 4.7.5 (port 8008, a
+disposable instance the user can reset; the development NetBox on port 8000
+was only read). Code: 8790b20 plus the fixes below (application 1.4.8).
+Source: a fresh backup of the development NetBox (6,072 objects, 155
+images). Results, all passed in the end:
+
+1. Restore into the empty test server (create missing): dry run 6,064 to
+   create and 8 equal (NetBox's own module type profiles); the run created
+   5,803 objects, set the backup values on 195 interfaces NetBox had made
+   from templates, removed 8 template interfaces the source devices no
+   longer have, uploaded 155 images, read back verified; a following update
+   check found all 6,072 objects equal.
+2. Update mode after changing a site description and a device serial on the
+   test server: both restored, read back verified, a second check equal.
+3. Empty first: automatic backup of the test server (6,072 objects), 6,072
+   objects deleted, everything restored (137.8 s), read back verified, an
+   update check all equal.
+4. Final comparison: test server and source both 6,072 objects and 155
+   images, no count difference per endpoint; create and update checks all
+   equal.
+
+Fixed on the way (offline tests added): empty values are left out of
+creates (NetBox 4.7.5 rejects a blank cable `profile`); components NetBox
+creates from templates for devices of the same restore get the backup's
+values also in create mode, and the ones the backup does not have are
+removed (never components of other devices); `airflow` and
+`cooling_method` that NetBox copies from the device type are cleared again
+when the backup has none; images are uploaded only for new objects or when
+the target lacks them.
+
 On 2026-11-18 the assistant checked the usability fixes (application 1.4.2
 working tree on `fix/editor-usability`), offline: background connection
 checks turn a chip red when the server answers offline and green again,

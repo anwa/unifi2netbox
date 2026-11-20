@@ -26,7 +26,13 @@
   Manufacturers, owners, owner groups, tags, platforms and inventory item
   roles are created only through an explicit "New" dialog the user confirms
   (immediate write, journaled, read back). Never create sites or device
-  roles.
+  roles, except when restoring a backup.
+- Backup and restore (M15): a backup only reads. A restore writes only after
+  the confirmed restore dialog (target, mode, selection, dry run available)
+  into the target chosen there. Empty NetBox first is the only bulk delete
+  the app may do: only after an automatic backup of the target, a dry run
+  and typing the target host name. Users, tokens and permissions are never
+  read into a backup, restored or deleted; secrets are left out of backups.
 - The netbox-community devicetype-library is only read. Local device type
   files keep its form (layout, file names, slugs) but may carry every field
   NetBox supports.
