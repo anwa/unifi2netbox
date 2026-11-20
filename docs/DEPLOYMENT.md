@@ -165,6 +165,16 @@ Packages workflow built `unifi2netbox_1.5.0_amd64.deb` and the Linux tarball
 `SHA256SUMS.txt` are attached to the public GitHub release v1.5.0 (approved
 by the user on 2026-11-20).
 
+Release v1.5.1 (tag v1.5.1 on merge commit 573a206, full-text search in the
+manual viewer) was built on 2026-11-20 the same way from a clean detached
+worktree at the tag: bundle check and native smoke test passed (1 passed,
+1 skipped), the exe reports `1.5.1`, the directory is about 135 MB and the
+installer `unifi2netbox-1.5.1-setup.exe` is 45.1 MB (SHA-256
+`A8D1333AEA95161A0B1B25B5CC9E42BAFA81466DDA22EBB11922CF115A008CB9`), also
+copied to the local `dist\installer\`. Not verified: installer
+upgrade/uninstall, and the manual search inside the packaged app. The
+Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
