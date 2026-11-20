@@ -184,4 +184,7 @@ Delete in NetBox for it; manufacturers, owners, owner groups,
 tags, platforms and inventory item roles only from a confirmed "New" dialog);
 missing source values must not clear NetBox
 values; offline/stale snapshots cannot authorize writes; never blindly retry a
-timed-out create.
+timed-out create. Backups only read; restores write only after the confirmed
+restore dialog, and "empty NetBox first" (the only bulk delete) needs an
+automatic backup of the target, a dry run and the typed host name; users,
+tokens, permissions and secrets are never backed up, restored or deleted.

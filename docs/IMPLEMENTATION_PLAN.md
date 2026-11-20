@@ -717,16 +717,44 @@ Slices:
   and installer from the tag. (Done 2026-11-17: merge f555ada,
   release v1.4.0 published.)
 
-## M15: NetBox Backup and Restore -> v1.5.0 (outline)
+## M15: NetBox Backup and Restore -> v1.5.0
 
-Branch `feature/netbox-backup`, detailed after M14. Decisions (2026-11-17,
-user): back up all NetBox data (without users, tokens, secrets and change
-logs) to a JSON or YAML file chosen by the user; restore in dependency order
-with a selectable mode: create missing only, create and update after a diff,
-or empty NetBox first and then restore. The last mode needs an explicit rule
-change (bulk deletion only as a separately confirmed restore option, after a
-fresh backup and typing the host name). Live write tests only on a separate
-NetBox test instance.
+Branch `feature/netbox-backup`. Decisions (user, 2026-11-17 and 2026-11-20):
+
+- Back up all NetBox data to one JSON (default) or YAML file whose name the
+  user chooses: the apps circuits, dcim, extras, ipam, tenancy,
+  virtualization, vpn and wireless plus owners and owner groups. Never
+  users, tokens, permissions, secrets, the change log, jobs or user-bound
+  objects. Images are embedded base64.
+- Restore in dependency order into a target chosen in the dialog (URL,
+  token, TLS; prefilled, not saved), with the mode create missing, create
+  and update after a diff, or empty NetBox first and then restore.
+- Empty first is the only bulk delete: after an automatic backup of the
+  target, a dry run and typing the target host name.
+- Restore write tests only on the user's separate test NetBox.
+
+Survey of the developer NetBox 4.7.3 (read-only, 2026-11-20): 13 API apps,
+154 endpoints, about 15,000 objects (6,821 change log entries and 1,923
+jobs are not backed up).
+
+Slices:
+
+- [ ] 1. Backup engine (endpoint discovery, OPTIONS metadata, paginated
+  reads, references and generic relations, secrets left out, images,
+  atomic JSON/YAML file).
+- [ ] 2. Restore planning (dependency order with deferred optional
+  references, natural-key matching incl. components created from
+  templates, per-object create/update/equal, delete list for empty first).
+- [ ] 3. Restore execution (bulk create with ID mapping, updates, deferred
+  references, files, automatic backup and bulk delete for empty first,
+  dry run, drift check, interrupted creates looked up, read-back, write
+  history).
+- [ ] 4. Backup and restore dialogs in the More menu.
+- [ ] 5. Documentation, screenshots, live checks and approved tests.
+
+- [ ] Obtain explicit merge approval; prepare version 1.5.0.
+- [ ] Complete the approved main merge and tag v1.5.0; build the Windows exe
+  and installer from the tag.
 
 ## Security and Configuration
 
