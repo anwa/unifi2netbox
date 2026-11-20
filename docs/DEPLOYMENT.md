@@ -159,6 +159,11 @@ manual chapter, the directory is about 135 MB and the installer
 copied to the local `dist\installer\`. Not verified: installer
 upgrade/uninstall, and backup or restore inside the packaged app. The
 Windows build is not code-signed.
+The Offline Tests and Packages workflows passed for main and the tag; the
+Packages workflow built `unifi2netbox_1.5.0_amd64.deb` and the Linux tarball
+(which contains the new manual chapter). All three files and
+`SHA256SUMS.txt` are attached to the public GitHub release v1.5.0 (approved
+by the user on 2026-11-20).
 
 ```powershell
 python -m pip install -r requirements-build.txt

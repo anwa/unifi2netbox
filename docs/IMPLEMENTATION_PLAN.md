@@ -755,8 +755,9 @@ Slices:
 
 - [x] Obtain explicit merge approval; prepare version 1.5.0. (Approved
   2026-11-20.)
-- [ ] Complete the approved main merge and tag v1.5.0; build the Windows exe
-  and installer from the tag.
+- [x] Complete the approved main merge and tag v1.5.0; build the Windows exe
+  and installer from the tag. (Done 2026-11-20: merge 12dfd7a,
+  release v1.5.0 published.)
 
 ## Security and Configuration
 
