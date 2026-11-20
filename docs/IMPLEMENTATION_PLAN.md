@@ -742,7 +742,7 @@ Slices:
 - [x] 1. Backup engine (endpoint discovery, OPTIONS metadata, paginated
   reads, references and generic relations, secrets left out, images,
   atomic JSON/YAML file).
-- [ ] 2. Restore planning (dependency order with deferred optional
+- [x] 2. Restore planning (dependency order with deferred optional
   references, natural-key matching incl. components created from
   templates, per-object create/update/equal, delete list for empty first).
 - [ ] 3. Restore execution (bulk create with ID mapping, updates, deferred

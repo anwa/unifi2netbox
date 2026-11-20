@@ -17,6 +17,19 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	endpoints and journal entries are never backed up; secret fields are left
 	out and listed. A failed endpoint marks the backup incomplete. The
 	read-only NetBox session now also allows OPTIONS and HEAD.
+- M15 slices 2-3: restore engine. One walker plans (dry run: reads and
+	matches, writes nothing) and runs a restore: endpoints in dependency
+	order (cycles over optional references such as a device's primary IP are
+	broken and patched afterwards), objects matched in the target by natural
+	key (slug, device name and site, parent and name, address and VRF, cable
+	terminations, ...; components NetBox creates from templates are matched,
+	not duplicated), modes create missing, update (backup values, also empty
+	ones) and replace (empty the selected endpoints first, reverse order).
+	Bulk create, update and delete in batches of 100, interrupted batches
+	looked up by key, drift check against the dry run's counts, cancel,
+	images uploaded afterwards (image attachments with their image), and a
+	count read-back. Backend: count, bulk create/update/delete and multipart
+	create.
 
 ## v1.4.2
 
