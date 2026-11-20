@@ -39,6 +39,9 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	asks for confirmation (for "empty first": an automatic backup of the
 	target and typing its host name) and restores with progress and cancel;
 	every restore is saved to the write history.
+- Manual: new chapter *Backup and restore* (what is included, backup,
+	restore steps, modes, matching, order and safeguards) with demo
+	screenshots.
 
 ## v1.4.2
 

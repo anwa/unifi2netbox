@@ -18,6 +18,7 @@ import copy
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -57,6 +58,7 @@ from unifi2netbox.details import (  # noqa: E402
 )
 from unifi2netbox.devicetypes import LocalTypeStore  # noqa: E402
 from unifi2netbox.gui import MainWindow, SettingsDialog  # noqa: E402
+from unifi2netbox.gui_backup import BackupDialog, RestoreDialog  # noqa: E402
 from unifi2netbox.gui_manual import ManualWindow  # noqa: E402
 from unifi2netbox.gui_newobject import NewObjectDialog  # noqa: E402
 from unifi2netbox.gui_review import ConfirmDialog, HistoryDialog  # noqa: E402
@@ -85,6 +87,7 @@ from unifi2netbox.library import (  # noqa: E402
 )
 from unifi2netbox.links import UPLINK, InventoryLink  # noqa: E402
 from unifi2netbox.netbox import ConnectionResult, ConnectionState  # noqa: E402
+from unifi2netbox.netbox_backup import Backup, write_backup  # noqa: E402
 from unifi2netbox.netbox_catalog import (  # noqa: E402
     CatalogObject,
     CustomFieldDef,
@@ -499,6 +502,56 @@ def write_demo_config(folder: Path) -> Path:
     return path
 
 
+class EmptyTarget:
+    """A fictional, empty restore target (reads only; the check is a dry run)."""
+
+    def count(self, path):
+        return 0
+
+    def list_objects(self, path, **filters):
+        return []
+
+
+def demo_backup() -> Backup:
+    """A small fictional backup for the restore dialog."""
+    names = {
+        "extras/tags": ["core", "access"],
+        "dcim/manufacturers": ["ubiquiti", "apc"],
+        "dcim/sites": ["example-lab"],
+        "dcim/device-types": [f"type-{i}" for i in range(12)],
+        "dcim/devices": [f"device-{i}" for i in range(9)],
+        "dcim/interfaces": [f"if-{i}" for i in range(48)],
+        "ipam/prefixes": [f"10.20.{i}.0/24" for i in range(6)],
+        "ipam/ip-addresses": [f"10.20.0.{i}/24" for i in range(30)],
+        "wireless/wireless-lans": ["Example Guest", "Example Office"],
+    }
+    objects, fields, next_id = {}, {}, 1
+    for endpoint, values in names.items():
+        rows = []
+        for value in values:
+            rows.append({"id": next_id, "name": value, "slug": value})
+            next_id += 1
+        objects[endpoint] = rows
+        fields[endpoint] = {"name": {"type": "string"}, "slug": {"type": "slug"}}
+    return Backup(
+        {
+            "format": "unifi2netbox-backup",
+            "version": 1,
+            "created": "2026-11-20T08:00:00+00:00",
+            "netbox_version": "4.7.3",
+            "source": "netbox.example.com",
+            "complete": True,
+            "errors": [],
+            "skipped": [],
+            "omitted": ["wireless/wireless-lans.auth_psk"],
+            "object_types": {},
+            "fields": fields,
+            "objects": objects,
+            "files": [],
+        }
+    )
+
+
 class Shooter:
     def __init__(self, app: QApplication, out: Path, folder: Path) -> None:
         self.app = app
@@ -776,6 +829,43 @@ class Shooter:
         history.show()
         self.save(history, "write-history")
         history.close()
+
+        backup = BackupDialog(
+            window.netbox.config, self.pool, window, folder=self.folder
+        )
+        backup.resize(760, 400)
+        backup.bar.setMaximum(37)
+        backup.bar.setValue(37)
+        backup.message.setText(
+            "Saved 6072 objects of 37 endpoints and 155 images to "
+            "netbox-backup-netbox.example.com-2026-11-20.json (60.8 MB). Left out "
+            "(secrets): wireless/wireless-lans.auth_psk."
+        )
+        backup.path_edit.setText("netbox-backup-netbox.example.com-2026-11-20.json")
+        backup.show()
+        self.save(backup, "backup-dialog")
+        backup.close()
+        demo_file = self.folder / "netbox-backup-netbox.example.com-2026-11-20.json"
+        write_backup(demo_backup(), demo_file)
+        restore_dialog = RestoreDialog(
+            window.netbox.config,
+            self.pool,
+            window,
+            backend_factory=lambda config: EmptyTarget(),
+        )
+        restore_dialog.resize(940, 760)
+        restore_dialog.load(demo_file)
+        restore_dialog.file_edit.setText(demo_file.name)
+        restore_dialog.url.setText("https://netbox-test.example.com")
+        restore_dialog.show()
+        restore_dialog.check()
+        for _ in range(400):
+            self.app.processEvents()
+            if restore_dialog.restore_button.isEnabled():
+                break
+            time.sleep(0.005)
+        self.save(restore_dialog, "restore-dialog")
+        restore_dialog.close()
 
         manual = ManualWindow(window)
         manual.resize(WIDTH, HEIGHT)

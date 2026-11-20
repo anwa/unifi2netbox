@@ -851,6 +851,29 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-20 the assistant checked M15 slices 1 to 4 (application 1.4.7
+working tree on `feature/netbox-backup`). Offline: the backup against an
+API-shaped fake (endpoint discovery and exclusions, OPTIONS metadata,
+references and generic relations, cable terminations, port mappings,
+secrets left out, images embedded, incomplete marker, cancel, JSON/YAML
+round trip); the restore against an in-memory NetBox that also serves as
+backup source and creates interfaces from templates like NetBox: backup of
+a populated instance restored into an empty one reproduces it exactly
+(compared by natural keys incl. images), a second check is all equal,
+update and replace modes, skipped objects, interrupted batches looked up,
+drift check, cancel, dependency order with the device-IP-interface cycle;
+the dialogs (check, settings change invalidates the check, confirmation,
+host name for replace with the automatic target backup, write history).
+Live, read-only, on the developer NetBox 4.7.3 (counts only): a full backup
+(6,072 objects, 155 images, 6.7 s, 60.8 MB, complete, only the wireless PSK
+left out) and a dry-run restore of it into the same NetBox in create and
+update mode (all 6,072 equal, nothing to create, update or patch; a guard
+refused any write). Found and fixed on the way: sub-actions such as
+`extras/scripts/upload` were read as endpoints, `auth_type` was taken for a
+secret, cables were ordered before interfaces in the device/IP cycle, and
+existing objects would have received no-op reference patches. Not done yet:
+restore writes on the user's test NetBox (needs the user's approval).
+
 On 2026-11-18 the assistant checked the usability fixes (application 1.4.2
 working tree on `fix/editor-usability`), offline: background connection
 checks turn a chip red when the server answers offline and green again,

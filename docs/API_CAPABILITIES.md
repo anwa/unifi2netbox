@@ -144,6 +144,34 @@ import), `PATCH` of changed templates and of front ports' `rear_ports`,
 NetBox** for that row (dependents first; an interrupted delete is checked by
 reading the object). Never: deleting device types, or changing devices.
 
+## NetBox Backup and Restore (M15)
+
+Backup (read-only, `ReadOnlySession` with GET, OPTIONS and HEAD): `/api/`
+and every app root to discover endpoints; `OPTIONS` of every included
+endpoint for the writable fields (`actions.POST`, without `read_only`);
+`core/object-types` to map generic relations to endpoints; paginated `GET`
+(1,000 per page) of every included endpoint; `GET` of media URLs for images.
+Included apps: circuits, dcim, extras, ipam, tenancy, virtualization, vpn,
+wireless, plus `users/owners` and `users/owner-groups`. Excluded: core,
+status, plugins, the rest of users, `dcim/cable-terminations`,
+`dcim/connected-device`, scripts, reports, journal entries, bookmarks,
+notifications, subscriptions, dashboard, table configs, saved filters and
+sub-actions. Secret fields (names with secret, password, token, psk,
+pre-shared or private key, API key, additional headers) are left out.
+Developer NetBox 4.7.3 (2026-11-20): 37 endpoints with data, 6,072 objects
+and 155 images in 6.7 s, 60.8 MB JSON; only `wireless-lans.auth_psk` left
+out.
+
+Restore into the target entered in the dialog: paginated `GET` of each
+restored endpoint (matching by natural key) and `GET ?limit=1` counts (drift
+check, read-back); writes only after the confirmed dialog: list `POST`
+(bulk create, 100 per request), list `PATCH` (updates and deferred
+references), multipart `PATCH` of image fields, multipart `POST` of image
+attachments, and for "empty first" list `DELETE` in reverse dependency
+order (100 per request) after an automatic backup of the target. A dry run
+against the developer NetBox with its own backup found all 6,072 objects
+equal and nothing to write.
+
 ## Extended UniFi Details (M11)
 
 Read-only probe on 2026-11-15 against Network 11.0.99, assistant-executed on

@@ -26,6 +26,13 @@ then kept next to it.
 - A broken `config.toml` is reported and never overwritten. Move it to a
   private backup, restart and enter the settings again.
 
+## Backups
+
+NetBox backups (**⋯ More > Backup NetBox...**) are saved where you choose,
+by default in your Documents folder; they are not part of this folder. They
+contain your network data but no tokens or secrets. See
+[Backup and restore](../07-backup-restore/index.md).
+
 ## Exports
 
 **Export UniFi API dump** and **Export UniFi data** (detail panel) write the
