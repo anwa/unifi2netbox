@@ -41,8 +41,10 @@ class ReadOnlySession(requests.Session):
         self.timeout = config.timeout
 
     def request(self, method: str, url: str, **kwargs) -> requests.Response:
-        if method.lower() != "get":
-            raise ValueError("This milestone only permits read-only API requests.")
+        # Read-only verbs only: OPTIONS (field metadata) and HEAD read nothing
+        # but metadata and never change NetBox.
+        if method.lower() not in ("get", "options", "head"):
+            raise ValueError("This session only permits read-only API requests.")
         kwargs["timeout"] = (self.timeout, self.timeout)
         kwargs["allow_redirects"] = False
         response = super().request(method, url, **kwargs)

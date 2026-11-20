@@ -6,6 +6,18 @@ only on explicit user instruction. Documentation-only changes have no release ta
 
 ## Unreleased
 
+### Added
+
+- M15 slice 1: backup engine for a whole NetBox instance (read-only): it
+	discovers the API endpoints, reads the writable fields with OPTIONS and
+	every object with paginated GET, keeps references as endpoint and ID
+	(also generic relations such as IP assignments and cable terminations),
+	embeds images base64 and writes one JSON or YAML file atomically. Users,
+	tokens, permissions, the change log, jobs, plugin and user-bound
+	endpoints and journal entries are never backed up; secret fields are left
+	out and listed. A failed endpoint marks the backup incomplete. The
+	read-only NetBox session now also allows OPTIONS and HEAD.
+
 ## v1.4.2
 
 ### Summary
