@@ -77,7 +77,7 @@ EXCLUDED = {
 # Field names that hold secrets; left out of every backup.
 SECRET = re.compile(
     r"(^|_)(secret|password|token|preshared_key|private_key|api_key|"
-    r"additional_headers|auth)(_|$)"
+    r"additional_headers|psk)(_|$)"
 )
 # Read-derived fields that must not be written back.
 DROP = {
@@ -238,8 +238,8 @@ def _discover(session, config, skipped: list[str]) -> list[str]:
             endpoint = f"{app}/{name}"
             if app == "users" and name not in USERS_ENDPOINTS:
                 continue
-            if endpoint in EXCLUDED:
-                continue
+            if endpoint in EXCLUDED or "/" in name:
+                continue  # sub-actions such as extras/scripts/upload
             endpoints.append(endpoint)
     return endpoints
 

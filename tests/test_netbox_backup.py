@@ -35,7 +35,7 @@ def field(kind="string", required=False, read_only=False):
 ROOTS = {
     "/api/": {
         a: f"{B}/api/{a}/"
-        for a in ("core", "dcim", "extras", "ipam", "users", "plugins")
+        for a in ("core", "dcim", "extras", "ipam", "users", "plugins", "wireless")
     },
     "/api/dcim/": {
         n: ""
@@ -52,8 +52,16 @@ ROOTS = {
         )
     },
     "/api/extras/": {
-        n: "" for n in ("tags", "webhooks", "journal-entries", "image-attachments")
+        n: ""
+        for n in (
+            "tags",
+            "webhooks",
+            "journal-entries",
+            "image-attachments",
+            "scripts/upload",
+        )
     },
+    "/api/wireless/": {"wireless-lans": ""},
     "/api/ipam/": {"ip-addresses": ""},
     "/api/users/": {n: "" for n in ("users", "tokens", "owners", "owner-groups")},
     "/api/status/": {"netbox-version": "4.7.3"},
@@ -119,6 +127,12 @@ OPTIONS = {
     },
     "users/owners": {"name": field(), "group": field("nested object", True)},
     "users/owner-groups": {"name": field()},
+    "wireless/wireless-lans": {
+        "ssid": field(),
+        "auth_type": field("choice"),
+        "auth_cipher": field("choice"),
+        "auth_psk": field(),
+    },
 }
 ROWS = {
     "core/object-types": [
@@ -245,6 +259,15 @@ ROWS = {
         {"id": 15, "name": "Ops", "group": nested("users/owner-groups", 14)}
     ],
     "users/users": [{"id": 1, "username": "admin"}],
+    "wireless/wireless-lans": [
+        {
+            "id": 16,
+            "ssid": "Office",
+            "auth_type": choice("wpa-personal"),
+            "auth_cipher": choice("aes"),
+            "auth_psk": "wifi-password",
+        }
+    ],
 }
 MEDIA = {
     "/media/devicetype-images/box.png": b"PNG",
@@ -356,7 +379,16 @@ def test_secrets_are_left_out_and_images_embedded():
     assert set(data["omitted"]) == {
         "extras/webhooks.secret",
         "extras/webhooks.additional_headers",
+        "wireless/wireless-lans.auth_psk",
     }
+    assert data["objects"]["wireless/wireless-lans"][0] == {
+        "id": 16,
+        "ssid": "Office",
+        "auth_type": "wpa-personal",
+        "auth_cipher": "aes",
+    }
+    assert "wifi-password" not in json.dumps(data)
+    assert "extras/scripts/upload" not in data["objects"]
     assert "s3cret" not in json.dumps(data)
     files = {(f["endpoint"], f["field"]): f for f in data["files"]}
     image = files[("dcim/device-types", "front_image")]
