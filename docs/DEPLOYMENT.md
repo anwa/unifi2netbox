@@ -149,6 +149,17 @@ workflows passed for the tag; the Packages workflow built
 by the user on 2026-11-18). Not verified: installer upgrade/uninstall. The
 Windows build is not code-signed.
 
+Release v1.5.0 (tag v1.5.0 on merge commit 12dfd7a, milestone M15 NetBox
+backup and restore) was built on 2026-11-20 the same way from a clean
+detached worktree at the tag: bundle check and native smoke test passed
+(1 passed, 1 skipped), the exe reports `1.5.0`, the bundle contains the new
+manual chapter, the directory is about 135 MB and the installer
+`unifi2netbox-1.5.0-setup.exe` is 45.1 MB (SHA-256
+`9E865F91EFEE7506335771CA5C8969B711B6B406892464CBB09F53F2B78F17AF`), also
+copied to the local `dist\installer\`. Not verified: installer
+upgrade/uninstall, and backup or restore inside the packaged app. The
+Windows build is not code-signed.
+
 ```powershell
 python -m pip install -r requirements-build.txt
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name unifi2netbox --icon src/unifi2netbox/resources/unifi2netbox.ico --paths src --recursive-copy-metadata unifi2netbox --add-data "LICENSE:." --add-data "docs/THIRD_PARTY_NOTICES.md:." --add-data "manual:manual" --add-data "src/unifi2netbox/resources:unifi2netbox/resources" src/unifi2netbox/__main__.py
