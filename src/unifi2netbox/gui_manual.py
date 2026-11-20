@@ -3,29 +3,72 @@
 Pages are the Markdown files of the ``manual`` folder (see ``manual.py``).
 ``QTextBrowser`` renders them with their images; links between pages move
 the selection in the tree, external links open in the browser.
+
+The search field (Ctrl+F) searches all pages; the results replace the tree
+while a query is entered. Opening a result marks every occurrence of the
+words on the page and jumps to the first; F3 and Shift+F3 move between them,
+Escape ends the search.
 """
 
 from __future__ import annotations
 
+import re
+from html import escape
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QImage, QTextDocument
+from PySide6.QtGui import (
+    QColor,
+    QImage,
+    QKeySequence,
+    QShortcut,
+    QTextCharFormat,
+    QTextCursor,
+    QTextDocument,
+)
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QTextBrowser,
+    QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from unifi2netbox.manual import ManualEntry, build_toc, manual_root
+from unifi2netbox import theme
+from unifi2netbox.manual import (
+    ManualEntry,
+    build_toc,
+    manual_root,
+    search_manual,
+    search_terms,
+)
 
 PATH_ROLE = Qt.ItemDataRole.UserRole + 1
+
+
+def _marked(text: str, terms) -> str:
+    """HTML of ``text`` with the search words in bold."""
+    html = escape(text)
+    for term in sorted(terms, key=len, reverse=True):
+        html = re.sub(
+            re.escape(escape(term)),
+            lambda m: f"<b>{m.group(0)}</b>",
+            html,
+            flags=re.IGNORECASE,
+        )
+    return html
+
+
 _IMAGE_MARGIN = 48
 
 
@@ -101,6 +144,12 @@ class ManualWindow(QDialog):
             button.setProperty("variant", "ghost")
             bar.addWidget(button)
         bar.addStretch()
+        self.search = QLineEdit()
+        self.search.setObjectName("manualSearch")
+        self.search.setPlaceholderText("Search the manual (Ctrl+F)")
+        self.search.setClearButtonEnabled(True)
+        self.search.setMinimumWidth(260)
+        bar.addWidget(self.search)
         layout.addLayout(bar)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -108,11 +157,25 @@ class ManualWindow(QDialog):
         self.tree.setObjectName("manualTree")
         self.tree.setHeaderHidden(True)
         self.tree.setMinimumWidth(220)
+        self.results = QListWidget()
+        self.results.setObjectName("manualResults")
+        self.results.setWordWrap(True)
+        self.results_label = QLabel("")
+        self.results_label.setObjectName("manualResultCount")
+        self.results_label.setProperty("role", "secondary")
+        results_page = QWidget()
+        results_layout = QVBoxLayout(results_page)
+        results_layout.setContentsMargins(0, 0, 0, 0)
+        results_layout.addWidget(self.results_label)
+        results_layout.addWidget(self.results, 1)
+        self.left = QStackedWidget()
+        self.left.addWidget(self.tree)
+        self.left.addWidget(results_page)
         self.browser = ManualBrowser()
         self.browser.setObjectName("manualPage")
         self.browser.setOpenExternalLinks(True)
         self.browser.setOpenLinks(True)
-        splitter.addWidget(self.tree)
+        splitter.addWidget(self.left)
         splitter.addWidget(self.browser)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([280, 820])
@@ -125,6 +188,26 @@ class ManualWindow(QDialog):
         self.browser.forwardAvailable.connect(self.forward_button.setEnabled)
         self.browser.sourceChanged.connect(self._sync_tree)
         self.tree.currentItemChanged.connect(self._open_item)
+        self.terms: tuple[str, ...] = ()
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(200)
+        self._search_timer.timeout.connect(self.run_search)
+        self.search.textChanged.connect(lambda _t: self._search_timer.start())
+        self.search.returnPressed.connect(self.open_first_result)
+        self.results.itemActivated.connect(self._open_result)
+        self.results.itemClicked.connect(self._open_result)
+        self.browser.sourceChanged.connect(lambda _u: self._highlight())
+        QShortcut(QKeySequence.StandardKey.Find, self, activated=self.focus_search)
+        QShortcut(QKeySequence.StandardKey.FindNext, self, activated=self.find_next)
+        QShortcut(
+            QKeySequence.StandardKey.FindPrevious,
+            self,
+            activated=lambda: self.find_next(backward=True),
+        )
+        QShortcut(
+            QKeySequence(Qt.Key.Key_Escape), self.search, activated=self.end_search
+        )
 
         if self.root is None:
             self.tree.setEnabled(False)
@@ -134,6 +217,124 @@ class ManualWindow(QDialog):
         self._add(build_toc(self.root), None)
         self.tree.expandAll()
         self.show_page()
+
+    # -- search ------------------------------------------------------------------
+
+    def focus_search(self) -> None:
+        self.search.setFocus()
+        self.search.selectAll()
+
+    def end_search(self) -> None:
+        self.search.clear()
+        self.run_search()
+        self.browser.setFocus()
+
+    def run_search(self) -> None:
+        """Show the pages matching the search field instead of the tree."""
+        self._search_timer.stop()
+        query = self.search.text()
+        self.terms = search_terms(query)
+        if not self.terms or self.root is None:
+            self.left.setCurrentIndex(0)
+            self._highlight()
+            return
+        hits = search_manual(self.root, query)
+        self.results.clear()
+        colors = theme.colors()
+        for hit in hits:
+            item = QListWidgetItem()
+            item.setData(PATH_ROLE, str(hit.path))
+            plain = f"{hit.title}\n{hit.chapter}\n{hit.snippet}"
+            # The label draws the row; the item keeps the text for tooltips
+            # and screen readers (no second, overlapping text).
+            item.setToolTip(str(hit.path.relative_to(self.root)))
+            item.setData(Qt.ItemDataRole.AccessibleTextRole, plain)
+            chapter = (
+                f" <span style='color:{colors.text_secondary}'>"
+                f"\u00b7 {escape(hit.chapter)}</span>"
+                if hit.chapter
+                else ""
+            )
+            label = QLabel(
+                f"<b>{escape(hit.title)}</b>{chapter}<br>"
+                f"<span style='font-size:small'>{_marked(hit.snippet, self.terms)}"
+                "</span>"
+            )
+            label.setWordWrap(True)
+            label.setTextFormat(Qt.TextFormat.RichText)
+            label.setContentsMargins(6, 4, 6, 4)
+            self.results.addItem(item)
+            self.results.setItemWidget(item, label)
+            item.setSizeHint(label.sizeHint())
+        count = len(hits)
+        self.results_label.setText(
+            f"{count} page{'s' if count != 1 else ''} found"
+            if count
+            else "Nothing found."
+        )
+        self.left.setCurrentIndex(1)
+        self._highlight()
+
+    def open_first_result(self) -> None:
+        self.run_search()
+        if self.results.count():
+            self._open_result(self.results.item(0))
+
+    def _open_result(self, item: QListWidgetItem | None) -> None:
+        if item is None:
+            return
+        self.results.setCurrentItem(item)
+        path = Path(item.data(PATH_ROLE)).resolve()
+        if path != self.current_page():
+            self.browser.setSource(QUrl.fromLocalFile(str(path)))
+        else:
+            self._highlight()
+
+    def _highlight(self) -> None:
+        """Mark every occurrence of the search words; jump to the first."""
+        selections = []
+        fmt = QTextCharFormat()
+        mark = QColor(theme.colors().warning)
+        mark.setAlpha(110)
+        fmt.setBackground(mark)
+        document = self.browser.document()
+        for term in self.terms:
+            cursor = QTextCursor(document)
+            while True:
+                cursor = document.find(term, cursor)
+                if cursor.isNull():
+                    break
+                selection = QTextEdit.ExtraSelection()
+                selection.cursor = cursor
+                selection.format = fmt
+                selections.append(selection)
+        self.browser.setExtraSelections(selections)
+        if selections:
+            first = min(selections, key=lambda s: s.cursor.selectionStart())
+            cursor = QTextCursor(first.cursor)
+            self.browser.setTextCursor(cursor)
+            self.browser.ensureCursorVisible()
+
+    def match_count(self) -> int:
+        return len(self.browser.extraSelections())
+
+    def find_next(self, backward: bool = False) -> bool:
+        """Move to the next (or previous) occurrence of the first word."""
+        if not self.terms:
+            return False
+        flags = QTextDocument.FindFlag(0)
+        if backward:
+            flags = QTextDocument.FindFlag.FindBackward
+        if self.browser.find(self.terms[0], flags):
+            return True
+        cursor = self.browser.textCursor()  # wrap around
+        cursor.movePosition(
+            QTextCursor.MoveOperation.End
+            if backward
+            else QTextCursor.MoveOperation.Start
+        )
+        self.browser.setTextCursor(cursor)
+        return self.browser.find(self.terms[0], flags)
 
     def _add(self, entry: ManualEntry, parent: QTreeWidgetItem | None):
         item = QTreeWidgetItem([entry.title])

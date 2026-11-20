@@ -851,6 +851,14 @@ preview showed all three in sync, the other 157 objects still pending, and a
 second apply had nothing to write. The run is in the write history; the
 objects stay in NetBox as approved.
 
+On 2026-11-20 the assistant checked the manual search (application 1.5.1
+working tree on `feature/manual-search`), offline: ranking and the
+all-words rule on a small manual, Markdown stripped for excerpts
+(placeholders such as `<host>` kept), the viewer's result list, opening a
+result marks the words and F3 moves on, Escape restores the tree, no
+results; rendered offscreen and reviewed visually. Not checked in the
+packaged app.
+
 On 2026-11-20 the assistant checked M15 slices 1 to 4 (application 1.4.7
 working tree on `feature/netbox-backup`). Offline: the backup against an
 API-shaped fake (endpoint discovery and exclusions, OPTIONS metadata,

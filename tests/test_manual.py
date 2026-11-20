@@ -101,3 +101,56 @@ def test_main_window_opens_the_manual(qtbot, tmp_path):
     assert window.manual_window is not None and window.manual_window.isVisible()
     window.show_manual("03-review/05-cables.md")
     assert window.manual_window.tree.currentItem().text(0) == "Cables"
+
+
+def test_search_finds_pages_with_every_word_best_first(tmp_path):
+    from unifi2netbox.manual import plain_text, search_manual
+
+    (tmp_path / "index.md").write_text("# Overview\n\nSee [Backup](b.md).\n", "utf-8")
+    (tmp_path / "b.md").write_text(
+        "# Backup\n\n![shot](x.png)\n\nThe **backup** file holds the data.\n", "utf-8"
+    )
+    (tmp_path / "c.md").write_text("# Other\n\nA backup is mentioned once.\n", "utf-8")
+    hits = search_manual(tmp_path, "BACKUP")
+    assert [h.title for h in hits] == ["Backup", "Other", "Overview"]
+    assert "backup file holds" in hits[0].snippet
+    assert [h.title for h in search_manual(tmp_path, "backup data")] == ["Backup"]
+    assert search_manual(tmp_path, "nothing-like-this") == []
+    assert search_manual(tmp_path, "   ") == []
+    assert plain_text("See [the page](p.md) and ![x](y.png) `code`") == (
+        "See the page and code"
+    )
+
+
+def test_viewer_search_lists_pages_marks_words_and_moves_between_them(qtbot):
+    window = ManualWindow(root=ROOT)
+    qtbot.addWidget(window)
+    window.search.setText("host name")
+    window.run_search()
+    assert window.left.currentIndex() == 1
+    assert window.results.count() >= 2
+    assert "found" in window.results_label.text()
+
+    from PySide6.QtCore import Qt
+
+    titles = [
+        window.results.item(i).data(Qt.ItemDataRole.AccessibleTextRole).split("\n")[0]
+        for i in range(window.results.count())
+    ]
+    label = window.results.itemWidget(window.results.item(titles.index("Restore")))
+    assert "<b>host</b> <b>name</b>" in label.text()  # words marked
+    restore = titles.index("Restore")
+    window._open_result(window.results.item(restore))
+    assert window.current_page().name == "02-restore.md"
+    assert window.match_count() >= 2  # "host" and "name" marked
+    first = window.browser.textCursor().position()
+    assert window.find_next() and window.browser.textCursor().position() != first
+
+    window.end_search()
+    assert window.left.currentIndex() == 0 and window.match_count() == 0
+
+    window.search.setText("xyzzy-nothing")
+    window.run_search()
+    assert (
+        window.results.count() == 0 and window.results_label.text() == "Nothing found."
+    )
