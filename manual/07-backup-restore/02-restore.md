@@ -42,7 +42,10 @@ Objects are found in the target by what identifies them in NetBox, not by
 their ID: the slug, a device's name and site, a component's device and name,
 an IP address or prefix with its VRF, a cable's connected interfaces, and so
 on. Interfaces and other components that NetBox creates from the device
-type when a device is created are therefore updated, not created twice. An
+type when a device is created are therefore updated with the backup's
+values, not created twice; the ones the backup does not have (removed from
+the device in the source) are deleted again. This only ever applies to
+devices the same restore created. An
 object with nothing to identify it (for example a device without a name) is
 only created when the target endpoint is empty; otherwise it is reported as
 not matchable.

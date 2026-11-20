@@ -39,6 +39,13 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	asks for confirmation (for "empty first": an automatic backup of the
 	target and typing its host name) and restores with progress and cancel;
 	every restore is saved to the write history.
+- M15 restore, found in the live tests on a test NetBox: empty values are
+	left out of creates; components NetBox makes from device type templates
+	during a restore get the backup's values (also in create mode) and the
+	ones the backup does not have are removed; airflow and cooling method
+	that NetBox copies from the device type are cleared again when the
+	backup has none; images are uploaded only for new objects or when
+	missing.
 - Manual: new chapter *Backup and restore* (what is included, backup,
 	restore steps, modes, matching, order and safeguards) with demo
 	screenshots.

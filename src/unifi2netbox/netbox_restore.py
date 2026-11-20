@@ -97,6 +97,9 @@ KEYS: dict[str, tuple[str, ...]] = {
     "wireless/wireless-links": ("interface_a", "interface_b"),
 }
 TEMPLATE_KEY = ("device_type", "module_type", "name")
+# Fields NetBox fills from the parent type when an object is created; an
+# empty value in the backup is set again right after the create.
+INHERITED = {"dcim/devices": ("airflow", "cooling_method")}
 
 
 class RestoreCancelled(RuntimeError):
@@ -112,11 +115,12 @@ class EndpointResult:
     unmatched: int = 0
     failed: int = 0
     deleted: int = 0
+    removed: int = 0  # made by NetBox from templates during this restore
     changes: list = field(default_factory=list)  # (old id, label, fields)
 
     @property
     def writes(self) -> int:
-        return self.create + self.update + self.deleted
+        return self.create + self.update + self.deleted + self.removed
 
 
 @dataclass
@@ -149,6 +153,11 @@ class RestoreReport:
         ]
         if self.total("deleted"):
             parts.insert(0, f"{self.total('deleted')} deleted")
+        if self.total("removed"):
+            parts.append(
+                f"{self.total('removed')} components NetBox made from templates "
+                "but the backup does not have removed"
+            )
         if self.total("unmatched"):
             parts.append(f"{self.total('unmatched')} not matchable")
         if self.total("failed"):
@@ -340,6 +349,7 @@ class _Target:
     rows: list[dict]
     by_key: dict
     by_id: dict
+    files: set = field(default_factory=set)  # (id, file field) present
 
 
 def restore(
@@ -363,6 +373,8 @@ def restore(
     fields = backup.data.get("fields", {})
     ids: dict[tuple[str, int], int] = {}
     placeholder = [0]
+    created: dict[str, set[int]] = {}  # target IDs created by this restore
+    has_file: set[tuple[str, int, str]] = set()  # target files already there
     deferred: list[tuple[str, int, str, object]] = []
 
     def check_cancel():
@@ -401,6 +413,8 @@ def restore(
             report.errors.append(f"{endpoint}: cannot read the target ({error})")
             result.failed += len(backup.endpoints[endpoint])
             continue
+        has_file |= {(endpoint, i, f) for i, f in target.files}
+        matched: set[int] = set()
         creates: list[tuple[dict, dict]] = []
         for row in _rows_parents_first(backup.endpoints[endpoint]):
             old = (endpoint, int(row["id"]))
@@ -444,7 +458,13 @@ def restore(
                     ids[old] = placeholder[0]
                 continue
             ids[old] = match["id"]
-            if mode == CREATE:
+            matched.add(match["id"])
+            # A component NetBox made from a template for a device this
+            # restore created carries template values: it gets the backup's.
+            fresh = endpoint in COMPONENTS and match["values"].get("device") in (
+                created.get("dcim/devices", set())
+            )
+            if mode == CREATE and not fresh:
                 result.equal += 1
                 continue
             changed = [
@@ -470,10 +490,14 @@ def restore(
         if endpoint in FILE_ENDPOINTS:
             _create_files(endpoint, creates, backup, backend, ids, report, dry_run)
             continue
-        _create(endpoint, creates, backend, ids, report, dry_run, placeholder, meta)
+        _create(
+            endpoint, creates, backend, ids, report, dry_run, placeholder, meta, created
+        )
+        if endpoint in COMPONENTS and not dry_run:
+            _remove_template_extras(endpoint, target, matched, created, backend, report)
     if not dry_run:
         _patch_deferred(deferred, backend, ids, report)
-        _upload_files(backup, backend, ids, report)
+        _upload_files(backup, backend, ids, report, created, has_file)
         _verify(order, backup, backend, report)
     else:
         report.deferred = sum(
@@ -497,19 +521,28 @@ def _read_target(endpoint, backend, meta, report, mode, dry_run) -> _Target:
         rows = []  # emptied before the restore
     else:
         rows = backend.list_objects(f"/api/{endpoint}/")
-    by_key, by_id = {}, {}
+    by_key, by_id, files = {}, {}, set()
     for row in rows:
-        item, _secrets, _files = serialize_row(endpoint, row, meta)
+        item, _secrets, wanted = serialize_row(endpoint, row, meta)
+        files |= {(int(row["id"]), name) for name, _url in wanted}
         values = _target_values({k: v for k, v in item.items() if k != "id"})
         entry = {"id": int(row["id"]), "values": values}
         by_id[int(row["id"])] = entry
         key = natural_key(endpoint, values, meta)
         if key is not None:
             by_key.setdefault(key, entry)
-    return _Target(rows, by_key, by_id)
+    return _Target(rows, by_key, by_id, files)
 
 
-def _create(endpoint, creates, backend, ids, report, dry_run, placeholder, meta):
+def _create_payload(payload: Mapping) -> dict:
+    """Empty values are left out of a create, so NetBox sets its defaults
+    (some fields reject an empty string or null)."""
+    return {k: v for k, v in payload.items() if v not in (None, "")}
+
+
+def _create(
+    endpoint, creates, backend, ids, report, dry_run, placeholder, meta, created
+):
     result = report.result(endpoint)
     for start in range(0, len(creates), BATCH):
         batch = creates[start : start + BATCH]
@@ -517,7 +550,9 @@ def _create(endpoint, creates, backend, ids, report, dry_run, placeholder, meta)
             result.create += len(batch)
             continue
         try:
-            new_ids = backend.bulk_create(f"/api/{endpoint}/", [p for _r, p in batch])
+            new_ids = backend.bulk_create(
+                f"/api/{endpoint}/", [_create_payload(p) for _r, p in batch]
+            )
         except AMBIGUOUS_CREATE_ERRORS as error:
             new_ids = _look_up(endpoint, batch, backend, meta, report, error)
         except NETWORK_ERRORS as error:
@@ -526,12 +561,53 @@ def _create(endpoint, creates, backend, ids, report, dry_run, placeholder, meta)
                 f"{endpoint}: {len(batch)} objects not created: {error}"
             )
             continue
-        for (row, _payload), new_id in zip(batch, new_ids, strict=False):
+        clear = []
+        for (row, payload), new_id in zip(batch, new_ids, strict=False):
             if new_id is None:
                 result.failed += 1
                 continue
             ids[(endpoint, int(row["id"]))] = int(new_id)
+            created.setdefault(endpoint, set()).add(int(new_id))
             result.create += 1
+            empty = {
+                name: None
+                for name in INHERITED.get(endpoint, ())
+                if name in payload and payload[name] in (None, "")
+            }
+            if empty:
+                clear.append({"id": int(new_id), **empty})
+        if clear:
+            try:
+                backend.bulk_update(f"/api/{endpoint}/", clear)
+            except NETWORK_ERRORS as error:
+                report.errors.append(
+                    f"{endpoint}: inherited values not cleared: {error}"
+                )
+
+
+def _remove_template_extras(endpoint, target, matched, created, backend, report):
+    """Delete components NetBox made from templates for devices created by
+    this restore that the backup does not have (they were removed in the
+    source). Components of other devices are never touched."""
+    new_devices = created.get("dcim/devices", set())
+    if not new_devices:
+        return
+    extras = []
+    for row in target.rows:
+        device = row.get("device")
+        device_id = device.get("id") if isinstance(device, Mapping) else device
+        if int(row["id"]) not in matched and device_id in new_devices:
+            extras.append(int(row["id"]))
+    if not extras:
+        return
+    result = report.result(endpoint)
+    for start in range(0, len(extras), BATCH):
+        batch = extras[start : start + BATCH]
+        try:
+            backend.bulk_delete(f"/api/{endpoint}/", batch)
+            result.removed += len(batch)
+        except NETWORK_ERRORS as error:
+            report.errors.append(f"{endpoint}: {len(batch)} not removed: {error}")
 
 
 def _look_up(endpoint, batch, backend, meta, report, error):
@@ -596,13 +672,17 @@ def _decode(entry: Mapping) -> Path:
     return path
 
 
-def _upload_files(backup, backend, ids, report):
+def _upload_files(backup, backend, ids, report, created, has_file):
+    """Images for created objects and for existing ones that lack them."""
     for entry in backup.data.get("files", ()):
         endpoint = entry.get("endpoint")
         if endpoint in FILE_ENDPOINTS:
             continue
         new_id = ids.get((endpoint, int(entry.get("id"))))
         if new_id is None:
+            continue
+        exists = (endpoint, new_id, entry["field"]) in has_file
+        if exists and new_id not in created.get(endpoint, set()):
             continue
         try:
             backend.upload_files(

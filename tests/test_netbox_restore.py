@@ -158,3 +158,59 @@ def test_cycles_over_optional_references_keep_required_parents_first():
     # the cycle devices -> ip-addresses -> interfaces -> devices is broken at
     # the optional primary IP: devices, then interfaces, then IPs and cables
     assert pos("dcim/devices") < pos("dcim/interfaces") < pos("dcim/cables")
+
+
+def test_template_components_missing_in_the_source_are_removed_once():
+    source = sample()
+    sw2 = next(i for i, r in source.data["dcim/devices"].items() if r["name"] == "sw2")
+    gone = next(
+        i
+        for i, r in source.data["dcim/interfaces"].items()
+        if r["device"] == sw2 and r["name"] == "eth1"
+    )
+    del source.data["dcim/interfaces"][gone]  # removed from the device by hand
+    backup = backup_of(source)
+    target = MemNetBox()
+    report = restore(backup, target, mode=CREATE, dry_run=False)
+    assert report.result("dcim/interfaces").removed == 1
+    assert "made from templates" in report.summary()
+    assert target.canon() == source.canon()
+
+    # existing devices' components are never removed by this rule
+    target.add(
+        "dcim/interfaces",
+        device=next(
+            i for i, r in target.data["dcim/devices"].items() if r["name"] == "sw1"
+        ),
+        name="extra",
+        type="virtual",
+    )
+    again = restore(backup, target, mode=CREATE, dry_run=False)
+    assert again.result("dcim/interfaces").removed == 0
+    assert any(r["name"] == "extra" for r in target.data["dcim/interfaces"].values())
+
+
+def test_images_are_not_uploaded_again():
+    source = sample()
+    backup = backup_of(source)
+    target = MemNetBox()
+    restore(backup, target, mode=CREATE, dry_run=False)
+    target.writes.clear()
+    report = restore(backup, target, mode=CREATE, dry_run=False)
+    assert report.files == 0 and not [w for w in target.writes if w[0] == "UPLOAD"]
+
+
+def test_create_mode_gives_template_components_the_backup_values():
+    source = sample()
+    sw1 = next(i for i, r in source.data["dcim/devices"].items() if r["name"] == "sw1")
+    eth1 = next(
+        i
+        for i, r in source.data["dcim/interfaces"].items()
+        if r["device"] == sw1 and r["name"] == "eth1"
+    )
+    source.data["dcim/interfaces"][eth1]["type"] = "10gbase-x-sfpp"  # not the template
+    backup = backup_of(source)
+    target = MemNetBox()
+    report = restore(backup, target, mode=CREATE, dry_run=False)
+    assert report.result("dcim/interfaces").update == 1
+    assert target.canon() == source.canon()
