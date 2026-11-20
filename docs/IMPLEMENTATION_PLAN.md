@@ -745,11 +745,11 @@ Slices:
 - [x] 2. Restore planning (dependency order with deferred optional
   references, natural-key matching incl. components created from
   templates, per-object create/update/equal, delete list for empty first).
-- [ ] 3. Restore execution (bulk create with ID mapping, updates, deferred
+- [x] 3. Restore execution (bulk create with ID mapping, updates, deferred
   references, files, automatic backup and bulk delete for empty first,
   dry run, drift check, interrupted creates looked up, read-back, write
   history).
-- [ ] 4. Backup and restore dialogs in the More menu.
+- [x] 4. Backup and restore dialogs in the More menu.
 - [ ] 5. Documentation, screenshots, live checks and approved tests.
 
 - [ ] Obtain explicit merge approval; prepare version 1.5.0.

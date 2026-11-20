@@ -30,6 +30,15 @@ only on explicit user instruction. Documentation-only changes have no release ta
 	images uploaded afterwards (image attachments with their image), and a
 	count read-back. Backend: count, bulk create/update/delete and multipart
 	create.
+- M15 slice 4: **⋯ More > Backup NetBox...** saves the configured NetBox to
+	a JSON or YAML file you choose (images optional, progress, cancel, a
+	summary with left-out secrets). **⋯ More > Restore NetBox...** loads a
+	backup, takes its own target (URL, token, TLS; prefilled, never saved),
+	the mode and the endpoints, checks with a dry run (counts per endpoint;
+	in update mode the objects that would change, each can be unchecked),
+	asks for confirmation (for "empty first": an automatic backup of the
+	target and typing its host name) and restores with progress and cancel;
+	every restore is saved to the write history.
 
 ## v1.4.2
 

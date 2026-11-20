@@ -333,7 +333,11 @@ def serialize_row(endpoint: str, row: Mapping, meta: Mapping, object_types=None)
             for child in item[name]:
                 if isinstance(child, dict):
                     _child_refs(endpoint, name, child)
-    if endpoint == "extras/image-attachments" and row.get("image"):
+    if (
+        endpoint == "extras/image-attachments"
+        and row.get("image")
+        and not any(name == "image" for name, _url in wanted)
+    ):
         wanted.append(("image", str(row["image"])))
     return item, secrets, wanted
 

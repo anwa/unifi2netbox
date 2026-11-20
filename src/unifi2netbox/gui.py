@@ -93,6 +93,7 @@ from unifi2netbox.devicetypes import (
     find_image,
     load_yaml,
 )
+from unifi2netbox.gui_backup import BackupDialog, RestoreDialog
 from unifi2netbox.gui_devicetypes import DeviceTypeSettingsPage
 from unifi2netbox.gui_jobs import TaskRunner
 from unifi2netbox.gui_manual import ManualWindow
@@ -1526,6 +1527,12 @@ class MainWindow(QMainWindow):
         self.export_action.triggered.connect(self.export_unifi_api_dump)
         self.history_action = QAction("Write history...", self)
         self.history_action.triggered.connect(self.show_history)
+        self.backup_action = QAction("Backup NetBox...", self)
+        self.backup_action.setToolTip("Save all NetBox data to a file (read only)")
+        self.backup_action.triggered.connect(self.show_backup)
+        self.restore_action = QAction("Restore NetBox...", self)
+        self.restore_action.setToolTip("Restore a backup into a NetBox")
+        self.restore_action.triggered.connect(self.show_restore)
         self.copy_summary_action = QAction("Copy summary", self)
         self.copy_summary_action.triggered.connect(self.copy_summary)
         self.manual_action = QAction(
@@ -1626,6 +1633,8 @@ class MainWindow(QMainWindow):
         more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(more)
         menu.addAction(self.history_action)
+        menu.addAction(self.backup_action)
+        menu.addAction(self.restore_action)
         menu.addAction(self.export_action)
         menu.addAction(self.copy_summary_action)
         menu.addAction(self.types_action)
@@ -2842,6 +2851,27 @@ class MainWindow(QMainWindow):
             return
         self.pending_type_key = ""
         self.set_device_type_choice(key, from_document(doc, "local", str(path)))
+
+    def backup_folder(self) -> Path:
+        documents = Path.home() / "Documents"
+        return documents if documents.is_dir() else Path.home()
+
+    def show_backup(self) -> None:
+        if not self.netbox.config.configured:
+            self.statusBar().showMessage("Configure NetBox in Settings first.")
+            return
+        dialog = BackupDialog(
+            self.netbox.config, self.pool, self, folder=self.backup_folder()
+        )
+        dialog.exec()
+        dialog.deleteLater()
+
+    def show_restore(self) -> None:
+        dialog = RestoreDialog(
+            self.netbox.config, self.pool, self, journal_path=self.journal_path
+        )
+        dialog.exec()
+        dialog.deleteLater()
 
     def show_history(self) -> None:
         try:
