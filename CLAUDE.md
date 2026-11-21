@@ -4,18 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Read First
 
-`AGENTS.md` holds the binding project rules (branching, versioning, commit format,
-security, documentation duties). Read it and `docs/IMPLEMENTATION_PLAN.md` before
-starting work. Key points that are easy to miss:
+`AGENTS.md` holds the binding project rules and names the inherited workspace
+rules (language, Git, versioning, Python tool conventions). Read it and
+`docs/IMPLEMENTATION_PLAN.md` before starting work. Key points that are easy
+to miss:
 
-- Communicate with the user in **German**; code, GUI labels, commits and docs are English.
-- Never implement on `main`; each milestone has its own `feature/...` branch
-  (listed in the implementation plan). Merging into `main` needs explicit approval.
-- Every ordinary code-changing commit bumps the patch version in `pyproject.toml`
-  (`version = "x.y.z"`, the only version source; read at runtime via
-  `importlib.metadata`). Doc-only commits do not bump. Never `git add .`.
-- Every approved minor/major release also gets a Windows exe build from the
-  tagged commit plus the native smoke test (`docs/DEPLOYMENT.md`); record it there.
+- Each milestone has its own `feature/...` branch (listed in the implementation
+  plan). A milestone merge into `main` is a release step.
+- Every ordinary code-changing commit bumps the patch version in `pyproject.toml`.
 - Keep README.md, CHANGELOG.md, `docs/TESTING.md` and the milestone checkboxes in
   `docs/IMPLEMENTATION_PLAN.md` current with every behavior change, and the
   user manual in `manual/` for user-visible changes. Regenerate its screenshots

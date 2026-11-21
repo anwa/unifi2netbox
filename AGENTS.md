@@ -1,5 +1,18 @@
 # Project Rules
 
+## Inherited Rules
+
+This repository lives in a rule hierarchy. Apply these files in addition to the rules below, in this order of increasing precedence:
+
+| Level | File |
+|---|---|
+| Global | `../../AGENTS.md` |
+| Tools | `../AGENTS.md` |
+
+They define language, Git authority, branches, commit format, versioning principles, documentation style, evidence and the shared Python tool conventions (venv, checks, offline tests, configuration, GUI threading, release builds). This file contains only what is specific to this repository and takes precedence over the inherited files.
+
+If the inherited files are not present, for example in a fresh clone: write all repository content in English, never commit secrets, and never push, tag or publish without the user's approval.
+
 ## Scope and Architecture
 
 - Read this file and `docs/IMPLEMENTATION_PLAN.md` before starting work.
@@ -47,13 +60,7 @@
 
 ## Security and Configuration
 
-- Read all hosts, tokens and connection settings from configuration, not code.
-  Allow editing through the GUI. Default configuration lives outside the repo.
-- TLS verification defaults on and can be disabled independently per connection.
-  Support private CA certificates and warn about disabled TLS checks/plain HTTP.
 - Initial plaintext local token storage is accepted, not considered encryption.
-  Never log secrets or commit real configuration, cache, raw captures or reports.
-- Do not contact the user's infrastructure from default tests or CI.
 - The developer workstation has direct access to NetBox and UniFi; the external
   developer notebook has none. Live checks run only on the workstation and only
   as explicitly opted-in `integration` tests or manual app runs. Live reads are
@@ -62,38 +69,28 @@
 
 ## Git and Versions
 
-- Each functional milestone gets its own branch; do not implement on `main`.
-- Preserve user changes. Stage only reviewed, intended files. Do not use `git add .`.
-- Direct commits are authorized. Merging into `main` requires explicit approval;
-  starting implementation does not grant merge approval.
-- Use small commits with an English type-prefixed subject (<=72 characters)
-  and a short, meaningful bullet list.
-- Version format: `vx.y.z`; numeric package metadata omits `v`.
-- Every ordinary code-changing commit increments `z`. Start from `0.0.0`.
-  Pure documentation commits do not change versions or create tags.
-- An approved completed milestone merge increments `y` and resets `z` to zero.
-  Version-only release preparation is release metadata, not another patch change.
-  Tag the resulting approved main release; do not tag every development commit.
-- Only the user may authorize a major version increment.
-- Every approved minor or major release also gets a Windows standalone build:
-  after tagging, build `dist/unifi2netbox` from the tagged commit with the
-  pinned recipe in `docs/DEPLOYMENT.md`, run the native smoke test
+- Each functional milestone gets its own `feature/...` branch, named in
+  `docs/IMPLEMENTATION_PLAN.md`.
+- A completed milestone merge into `main` is a release step: it increments `y`,
+  resets `z`, gets a tag and a Windows build. Merge a milestone only when the
+  user confirms that the milestone is complete; starting implementation does
+  not mean the milestone may be merged.
+- Version format: `vx.y.z`; numeric package metadata omits `v`. Start from
+  `0.0.0`. Version-only release preparation is release metadata, not another
+  patch change. Tag the resulting main release; do not tag every development
+  commit.
+- Every minor or major release also gets a Windows standalone build: after
+  tagging, build `dist/unifi2netbox` from the tagged commit with the pinned
+  recipe in `docs/DEPLOYMENT.md`, run the native smoke test
   (`tests/test_package.py`) and record version, commit and result there.
-  Build output stays out of Git.
 
 ## Documentation and Validation
 
-- Write code, GUI labels, commit messages and repository documentation in English.
-  Communicate with the user in German.
+- GUI labels are English.
 - Maintain README.md, CHANGELOG.md and relevant reference docs alongside every
   behavior change. Keep milestone checkboxes and verification evidence current.
 - Preserve the decisions supplied in the original README questionnaire when
   turning it into application documentation.
-- Run focused tests after each substantive change, then milestone-wide checks.
-  Never claim live API, Linux or packaged-app verification without evidence.
-- Before committing, review the staged diff, check for secrets, check version
-  consistency and run the relevant tests. Do not commit failing code as complete.
-- Use `python -m pytest`, `python -m ruff check .` and
-  `python -m ruff format --check .` once the development environment exists.
+- Never claim live API verification without evidence.
 - Stop for a decision if Python/PySide6 compatibility requires relaxing an
-  explicit requirement. Do not bypass dependency version constraints.
+  explicit requirement.
